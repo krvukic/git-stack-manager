@@ -10,6 +10,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { renderAppHtml } from "#app/appHtml";
+import { affectsWorkingCopy, RefreshCoalescer } from "#app/refresh";
 import { Repository } from "#app/repository";
 import { imageMediaType } from "#core/media";
 import { errorMessage } from "#core/values";
@@ -25,6 +26,12 @@ import { ActionResult, Controller } from "#ui/controller";
 import * as vscode from "vscode";
 
 let panel: vscode.WebviewPanel | undefined;
+/**
+ * The refresh subscriptions of the panel currently open, disposed with it rather than with
+ * the extension: each open creates its own, and a set left behind would go on watching for a
+ * panel that no longer exists.
+ */
+let refreshWiring: vscode.Disposable | undefined;
 
 /**
  * Backs the activity bar view with no items. Nothing is ever drawn in it — the view
@@ -128,6 +135,8 @@ function openPanel(context: vscode.ExtensionContext) {
   panel.onDidDispose(
     () => {
       blobProvider.dispose();
+      refreshWiring?.dispose();
+      refreshWiring = undefined;
       panel = undefined;
     },
     null,
@@ -182,15 +191,80 @@ function openPanel(context: vscode.ExtensionContext) {
     panel?.webview.postMessage({ id, ...result });
   });
 
-  // Refresh when git state changes (HEAD moves, refs update, index changes).
-  const watcher = vscode.workspace.createFileSystemWatcher(
+  refreshWiring = wireRefresh(panel, cwd);
+}
+
+/**
+ * Keep the panel's tree current: every VS Code event that can mean the repository moved,
+ * funnelled through one coalescer.
+ *
+ * The ref watcher alone was the whole of this, and it only ever sees git's own writes — so
+ * a commit, a checkout, and a rebase refreshed the tree while a plain file save did not.
+ * That left the uncommitted list showing whatever it had held when the panel was last acted
+ * on, which is the one thing a smartlog must get right.
+ *
+ * The signals are deliberately broader than "a file changed", because no watcher covers
+ * every writer: a formatter run in the integrated terminal, a `git` command in another
+ * window, an editor outside VS Code. Arriving back at the panel is what catches those, and
+ * the coalescer is what keeps the resulting reads bounded — and skips them entirely while
+ * the panel is off screen.
+ */
+function wireRefresh(
+  panel: vscode.WebviewPanel,
+  cwd: string
+): vscode.Disposable {
+  const refresh = new RefreshCoalescer(() => {
+    void panel.webview.postMessage({ type: "refresh" });
+  });
+  const signal = () => refresh.signal();
+  const signalPath = (uri: vscode.Uri) => {
+    if (affectsWorkingCopy(cwd, uri.fsPath)) {
+      refresh.signal();
+    }
+  };
+  // git's own writes: HEAD moves, refs update, the index changes. Narrow by design — a
+  // recursive watcher over the working tree would fire once per file a build writes, and
+  // the events below already cover every edit VS Code makes.
+  const refs = vscode.workspace.createFileSystemWatcher(
     new vscode.RelativePattern(cwd, ".git/{HEAD,index,refs/**}")
   );
-  const poke = () => panel?.webview.postMessage({ type: "refresh" });
-  watcher.onDidChange(poke);
-  watcher.onDidCreate(poke);
-  watcher.onDidDelete(poke);
-  context.subscriptions.push(watcher);
+  return vscode.Disposable.from(
+    refs,
+    refs.onDidChange(signal),
+    refs.onDidCreate(signal),
+    refs.onDidDelete(signal),
+    // A save, not a keystroke: git sees the file on disk, so an unsaved buffer is not a
+    // change yet and reporting it would put a line in the tree that no action could commit.
+    vscode.workspace.onDidSaveTextDocument(document =>
+      signalPath(document.uri)
+    ),
+    vscode.workspace.onDidCreateFiles(event => event.files.forEach(signalPath)),
+    vscode.workspace.onDidDeleteFiles(event => event.files.forEach(signalPath)),
+    vscode.workspace.onDidRenameFiles(event => {
+      for (const { oldUri, newUri } of event.files) {
+        signalPath(oldUri);
+        signalPath(newUri);
+      }
+    }),
+    // A command finishing in a terminal, which is how this extension's own users move a
+    // repository — `just format`, a script, `gh pr checkout`. The path is unknown, so the
+    // signal is unconditional; the coalescer is what stops an `ls` from costing anything.
+    vscode.window.onDidEndTerminalShellExecution(signal),
+    // Focus returning to the window, for everything written while VS Code was not the
+    // program in front: another editor, another terminal, a colleague's script.
+    vscode.window.onDidChangeWindowState(state => {
+      if (state.focused) {
+        refresh.signal();
+      }
+    }),
+    panel.onDidChangeViewState(event =>
+      refresh.observe({
+        visible: event.webviewPanel.visible,
+        active: event.webviewPanel.active,
+      })
+    ),
+    new vscode.Disposable(() => refresh.dispose())
+  );
 }
 
 /**

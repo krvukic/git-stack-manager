@@ -109,17 +109,17 @@ export class Controller {
  */
 const ACTIONS: Record<string, ActionHandler> = {
   /**
-   * Polling and the file watcher also call this; only an explicit *Refresh
-   * repository* sets `log`, so the command panel is not flooded by background
-   * reads. The entry's title repeats the button's own label, so a reader tracing an
-   * entry back to what they pressed is not left matching "Refresh" against two
-   * buttons that both say it.
+   * Polling and the refresh signals also call this; only an explicit *Refresh local
+   * state* sets `log`, so the command panel is not flooded by background reads. The
+   * entry's title repeats the button's own label, so a reader tracing an entry back
+   * to what they pressed is not left matching "Refresh" against two buttons that
+   * both say it.
    */
   async model(controller, payload) {
     if (!readFlag(payload, "log")) {
       return { ok: true, data: await controller.model() };
     }
-    const { value, log } = await controller.logged("Refresh repository", () =>
+    const { value, log } = await controller.logged("Refresh local state", () =>
       controller.repository.read()
     );
     return { ok: true, data: controller.buildFrom(value), log };

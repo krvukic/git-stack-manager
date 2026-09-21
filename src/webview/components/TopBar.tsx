@@ -164,7 +164,7 @@ export function TopBar({
         title="Re-read local git state: branches, commits, working copy. A handful of local git commands, so it is cheap and always current. Pull request status is not part of it — that is Refresh PRs."
         onClick={onRefresh}
       >
-        Refresh repository
+        Refresh local state
       </Button>
       {/* Refresh PRs and its freshness note are one unit: a button plus the outcome of the
           last time it ran. The gap is tighter than the bar's own, so the pair groups visually
@@ -173,7 +173,7 @@ export function TopBar({
         <Button
           id="btn-prs"
           disabled={pullRequestsLoading}
-          title="Re-read pull request status through the gh CLI. One network call, roughly a second, then cached for a minute — this button bypasses that cache. Local git state comes from Refresh repository instead."
+          title="Re-read pull request status through the gh CLI. One network call, roughly a second, then cached for a minute — this button bypasses that cache. Local git state comes from Refresh local state instead."
           onClick={onRefreshPullRequests}
         >
           {pullRequestsLoading ? "Loading PRs…" : "Refresh PRs"}

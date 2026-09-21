@@ -3,6 +3,28 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-09-21
+
+Seeing an edit in the panel without having to do something to it first.
+
+### Fixed
+
+- A file saved while the smartlog sat in another tab now reaches the uncommitted list. The panel
+  watched git's own writes — HEAD, refs, the index — and a save touches none of them, so the list
+  stayed as it had been until some action happened to rebuild it. Saving, adding, deleting, or
+  renaming a file now refreshes the panel, as does a command finishing in a terminal, the window
+  regaining focus, and arriving back at the panel's tab.
+- A burst of changes costs two reads rather than one per file: the first arrives immediately and a
+  second lands on the state the burst ended in. A commit used to re-read three times over, once per
+  git write, and a formatter run over forty files would now have read forty times. A panel off
+  screen is not read for at all.
+
+### Changed
+
+- **Refresh repository** is now **Refresh local state**, in the command palette, in the top bar, and
+  in the command log. The old name read as though it talked to the remote, which is what *Pull*
+  does; the button re-reads the local repository and nothing else.
+
 ## [0.4.0] - 2026-09-18
 
 Throwing one uncommitted change away without reaching for a terminal.

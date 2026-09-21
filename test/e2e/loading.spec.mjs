@@ -34,7 +34,7 @@ test("pull request status is fetched once, and a repository re-read does not re-
   await smartlog.waitForTimeout(500);
   expect(fetches).toBe(1);
 
-  // The load-bearing half. *Refresh repository* re-reads local git state, which adopts a new
+  // The load-bearing half. *Refresh local state* re-reads local git state, which adopts a new
   // model — and a fetch hung off model adoption rather than off the first one fires again
   // here, spending a network round trip on every refresh. Counting only the first load
   // cannot see that: there is one load either way.

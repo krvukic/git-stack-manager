@@ -77,7 +77,7 @@ test("an action that logs while the log is hidden counts the entry instead of re
   // panel measures zero, so the scroll each append performed moved nothing.
   await smartlog.locator("#btn-log").click();
   await expect(smartlog.locator("#btn-log")).toHaveText("Hide log");
-  await expectLogEntry(smartlog, "Refresh repository");
+  await expectLogEntry(smartlog, "Refresh local state");
   const scrolledToBottom = await smartlog
     .locator("#log-body")
     .evaluate(

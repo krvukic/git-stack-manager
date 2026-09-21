@@ -81,7 +81,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
       },
       {
         keys: ["r"],
-        what: "Refresh the repository — re-read branches, commits, working copy",
+        what: "Refresh local state — re-read branches, commits, working copy",
         action: "refresh",
       },
     ],

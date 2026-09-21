@@ -61,8 +61,14 @@ Run `just init-repo` once, then pick a host:
 
 ## Refreshing the state
 
-- **Refresh repository** re-reads local git state, meaning branches, commits, and the working copy,
-  in a handful of local commands. It is cheap and always current.
+- The panel re-reads on its own whenever the repository can have moved: a file saved, added,
+  deleted, or renamed; a git command that moved HEAD, a ref, or the index; a command finishing in a
+  terminal; the window regaining focus; and arriving back at the panel's tab. Reads are collapsed
+  to at most one per quarter second, so a formatter run over forty files costs two rather than
+  forty, and a panel off screen is not read for at all — coming back to it is itself a refresh.
+- **Refresh local state** re-reads local git state, meaning branches, commits, and the working copy,
+  in a handful of local commands. It is cheap and always current, and it is there for the cases no
+  event reports: a repository moved by another program while you were looking at the panel.
 - **Refresh PRs** runs a `gh pr list` that refreshes the cached pull request data, which otherwise
   holds for a minute. It syncs the number, the CI status, and the review decision. The query names
   the branches on screen and searches each one by name and by tip commit, which keeps it inside
@@ -144,7 +150,7 @@ handler reads, so it cannot fall out of step with what the keys do.
 | `Enter`   | Goto the selected commit                                |
 | `a`       | Absorb the working-copy changes                         |
 | `u`       | Undo the last history edit                              |
-| `r`       | Refresh repository                                      |
+| `r`       | Refresh local state                                     |
 | `l`       | Show or hide the command log                            |
 | `?`       | Show or hide the keyboard shortcuts                     |
 | `Escape`  | Close the open diff, then the panel, then the selection |

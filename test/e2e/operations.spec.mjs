@@ -723,7 +723,7 @@ test("every working-copy action is dead while a conflict is unresolved", async (
   );
 });
 
-test("Refresh repository re-reads local git state and logs the commands it ran", async ({
+test("Refresh local state re-reads local git state and logs the commands it ran", async ({
   demoRepository,
   smartlog,
   snapshot,
@@ -737,7 +737,7 @@ test("Refresh repository re-reads local git state and logs the commands it ran",
     "chore: added behind the UI's back",
   ]);
   await smartlog.locator("#btn-refresh").click();
-  await expectLogEntry(smartlog, "Refresh repository");
+  await expectLogEntry(smartlog, "Refresh local state");
   await expect(
     smartlog.getByText("chore: added behind the UI's back")
   ).toBeVisible();
@@ -776,7 +776,7 @@ test("a re-read keeps a half-typed message and the ticks the reader set", async 
   // ticked, which is the other half of the same reconcile.
   await writeFile(join(demoRepository.path, "NEW.md"), "arrived late\n");
   await smartlog.locator("#btn-refresh").click();
-  await expectLogEntry(smartlog, "Refresh repository");
+  await expectLogEntry(smartlog, "Refresh local state");
   await expect(smartlog.locator("#wc .file")).toHaveCount(3);
 
   await expect(smartlog.locator("#commit-subject")).toHaveValue(
