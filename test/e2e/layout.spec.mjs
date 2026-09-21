@@ -1,6 +1,6 @@
 /**
- * Geometry: the sidebar's width, the row heights under it, and the design choices that
- * move both.
+ * Geometry: every measurement a reader can drag, the row heights under them, and the design
+ * choices that move both.
  *
  * Measured rather than photographed, for two reasons. A resize is a number, and a
  * screenshot of a 480px panel and a 500px one differ by nothing a reviewer would trust
@@ -8,14 +8,26 @@
  * the right, so leftward travel must WIDEN it, and an inverted subtract still produces a
  * plausible-looking panel. Every drag here asserts a direction, not just a change.
  *
+ * Each measurement is dragged, then looked for again somewhere it could have been lost:
+ * after a reload, and after selecting another commit. The second is not a duplicate of the
+ * first — the commit panel is keyed on the sha, so a click replaces the element a height or
+ * width was applied to, and a value kept only in the DOM disappears there while surviving
+ * every reload.
+ *
  * The pictures that remain are of layouts a number cannot describe — every subject on one
  * left edge, or a wrapped row that has grown instead of overprinting its neighbour.
  */
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { present } from "../present.mjs";
 import { expect, reopen, test } from "./fixtures/demoRepo.mjs";
 import {
   boxOf,
+  changesWidth,
+  dragChangesEdge,
+  dragGrip,
   dragHandle,
+  heightOf,
   selectCommit,
   sidebarWidth,
 } from "./fixtures/interactions.mjs";
@@ -173,6 +185,183 @@ test("dragging across the tree resizes without selecting commit text", async ({
   await smartlog.mouse.up();
 
   expect(await smartlog.evaluate(() => String(window.getSelection()))).toBe("");
+});
+
+/**
+ * The changes overlay's width: the same gesture on a box that is centred rather than docked.
+ *
+ * Centring is what earns this its own set. Each edge carries the far one with it, so a drag
+ * changes the width by twice its travel, and the two edges answer one arrow key in opposite
+ * directions. An edge wired with the wrong sign still produces a plausible overlay — it just
+ * grows when the reader meant to shrink it — so every gesture here asserts a direction and a
+ * magnitude, and that the box stayed centred afterwards.
+ */
+const CHANGES_DEFAULT_WIDTH = 1064;
+const CHANGES_MIN_WIDTH = 520;
+const CHANGES_MAX_WIDTH = 1304;
+/** How far one arrow press moves the width. The focused edge travels half of it. */
+const CHANGES_KEYBOARD_STEP = 32;
+
+/**
+ * Open a commit's read-only diff, which is what carries the resize edges.
+ *
+ * @param {import("@playwright/test").Page} page
+ * @param {string} [subject]
+ */
+async function openChanges(page, subject = COMMIT_WITH_FILES) {
+  await selectCommit(page, subject);
+  await page.locator("#btn-view-changes").click();
+  await expect(page.locator("#changes.open")).toBeVisible();
+  await expect(page.locator("#changes .dffile").first()).toBeVisible();
+}
+
+/**
+ * Where the middle of the overlay sits, rounded to a pixel.
+ *
+ * @param {import("@playwright/test").Page} page
+ */
+async function changesCentre(page) {
+  const box = await boxOf(page, "#changes");
+  return Math.round(box.x + box.width / 2);
+}
+
+test("dragging either edge resizes the overlay about its centre", async ({
+  smartlog,
+}) => {
+  await openChanges(smartlog);
+  expect(await changesWidth(smartlog)).toBe(CHANGES_DEFAULT_WIDTH);
+  expect(await changesCentre(smartlog)).toBe(700);
+
+  // 100px of travel on the left edge is 200px of width, not 100: the right edge moves the
+  // same distance the other way.
+  expect(await dragChangesEdge(smartlog, "left", -100)).toBe(
+    CHANGES_DEFAULT_WIDTH + 200
+  );
+  expect(await changesCentre(smartlog)).toBe(700);
+
+  // The same leftward travel on the right edge narrows it by the same amount. A shared sign
+  // would show up here as an overlay that only ever grows.
+  expect(await dragChangesEdge(smartlog, "right", -100)).toBe(
+    CHANGES_DEFAULT_WIDTH
+  );
+  expect(await changesCentre(smartlog)).toBe(700);
+});
+
+test("dragging an edge far past a bound stops at the clamp", async ({
+  smartlog,
+}) => {
+  await openChanges(smartlog);
+  // 1200px of width each way from a 1064px start, so both bounds are overshot rather than
+  // merely reached.
+  expect(await dragChangesEdge(smartlog, "left", -600, 8)).toBe(
+    CHANGES_MAX_WIDTH
+  );
+  expect(await dragChangesEdge(smartlog, "left", 600, 8)).toBe(
+    CHANGES_MIN_WIDTH
+  );
+  // The clamp still leaves the tree visible on both sides, which is the point of an inset
+  // overlay rather than a full-screen one.
+  expect(await changesCentre(smartlog)).toBe(700);
+});
+
+test("the overlay width carries across a reload and every later diff", async ({
+  smartlog,
+}) => {
+  await openChanges(smartlog);
+  const dragged = await dragChangesEdge(smartlog, "left", -80);
+  expect(dragged).toBe(CHANGES_DEFAULT_WIDTH + 160);
+
+  // A fresh page and another commit's diff: the width is how wide the reader wants code, so
+  // neither the reload nor the sha may reset it.
+  await reopen(smartlog);
+  await openChanges(smartlog, "feat(pad): add padStart");
+  expect(await changesWidth(smartlog)).toBe(dragged);
+});
+
+test("arrow keys move the focused edge, and Home restores the default width", async ({
+  smartlog,
+}) => {
+  await openChanges(smartlog);
+  await smartlog.locator("#changes-edge-left").focus();
+  await smartlog.keyboard.press("ArrowLeft");
+  expect(await changesWidth(smartlog)).toBe(
+    CHANGES_DEFAULT_WIDTH + CHANGES_KEYBOARD_STEP
+  );
+
+  // ← moves whichever edge holds focus, so on the right edge it narrows.
+  await smartlog.locator("#changes-edge-right").focus();
+  await smartlog.keyboard.press("ArrowLeft");
+  expect(await changesWidth(smartlog)).toBe(CHANGES_DEFAULT_WIDTH);
+  expect(await changesCentre(smartlog)).toBe(700);
+
+  await smartlog.keyboard.press("ArrowRight");
+  await smartlog.keyboard.press("Home");
+  expect(await changesWidth(smartlog)).toBe(CHANGES_DEFAULT_WIDTH);
+
+  // Escape still closes the diff: the edge stops the arrows it handles, not every key.
+  await smartlog.keyboard.press("Escape");
+  await expect(smartlog.locator("#changes.open")).toBeHidden();
+});
+
+/**
+ * A message box's height — the one measurement whose gesture belongs to the browser.
+ *
+ * The grip is a textarea's own, so nothing the app listens to fires: the height arrives as an
+ * inline style the browser writes, and a `ResizeObserver` is what notices. That makes the
+ * restore the interesting half. Each height is dragged once and then looked for in the places
+ * it could be lost — another commit, a reload, and a form that measures zero while closed.
+ */
+const DESCRIPTION_MIN_HEIGHT = 110;
+const COMMIT_BODY_MIN_HEIGHT = 64;
+
+test("a dragged description height outlives the commit it was dragged on", async ({
+  smartlog,
+}) => {
+  await selectCommit(smartlog, COMMIT_WITH_FILES);
+  expect(await heightOf(smartlog, "#msg-body")).toBe(DESCRIPTION_MIN_HEIGHT);
+
+  const dragged = await dragGrip(smartlog, "#msg-body", 90);
+  expect(dragged).toBeGreaterThan(DESCRIPTION_MIN_HEIGHT + 60);
+
+  // The panel is keyed on the sha, so this click replaces the textarea the drag resized. A
+  // height held only on that element goes back to 110 here, which is what the reader reported.
+  // The click also unmounts the observer, whose cleanup writes the pending height — so the
+  // reload below reads a value that is already stored rather than racing the debounce.
+  await selectCommit(smartlog, "feat(pad): add padStart");
+  expect(await heightOf(smartlog, "#msg-body")).toBe(dragged);
+
+  await reopen(smartlog);
+  await selectCommit(smartlog, COMMIT_WITH_FILES);
+  expect(await heightOf(smartlog, "#msg-body")).toBe(dragged);
+});
+
+test("the draft description keeps its height through a closed commit form", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  await demoRepository.git(["checkout", "trim-utils"]);
+  await writeFile(
+    join(demoRepository.path, "src", "trim.js"),
+    "export const collapseWhitespace = s => s.trim();\n"
+  );
+  await reopen(smartlog);
+  await smartlog.locator("#btn-commit").click();
+  // Its own floor, lower than the commit panel's: a draft body is often left empty.
+  expect(await heightOf(smartlog, "#commit-body")).toBe(COMMIT_BODY_MIN_HEIGHT);
+
+  const dragged = await dragGrip(smartlog, "#commit-body", 60);
+  expect(dragged).toBeGreaterThan(COMMIT_BODY_MIN_HEIGHT + 40);
+
+  // Cancel hides the form and leaves it mounted, so the box now measures zero. Storing that
+  // zero would restore a collapsed box on the next visit, and the wait gives the debounce
+  // every chance to do it before the reload proves it did not.
+  await smartlog.locator("#btn-commit-cancel").click();
+  await expect(smartlog.locator("#commit-body")).toBeHidden();
+  await smartlog.waitForTimeout(250);
+
+  await reopen(smartlog);
+  await smartlog.locator("#btn-commit").click();
+  expect(await heightOf(smartlog, "#commit-body")).toBe(dragged);
 });
 
 /**

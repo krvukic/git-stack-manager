@@ -71,6 +71,10 @@ export function TextInput({
  * `resize-y` and a minimum height rather than a fixed one: the grip is a real affordance here
  * — the commit panel's description can be double-clicked to fit its text — and a pinned height
  * would fight it.
+ *
+ * A remembered height arrives as an inline `style.height`, which the grip then writes over.
+ * The two do not fight, because React only rewrites that property when the value it rendered
+ * changes, and `useStoredHeight` deliberately never re-renders one.
  */
 export function TextArea({
   className,

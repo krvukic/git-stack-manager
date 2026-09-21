@@ -36,6 +36,13 @@ export type Shortcut = {
 export type ShortcutGroup = {
   heading: string;
   keys: Shortcut[];
+  /**
+   * Rows the drawer shows in place of `keys`, for keys an element owns while it holds focus.
+   *
+   * They never reach the document handler, so they have no action to dispatch — and they are
+   * still listed, because a reader looking for "how do I resize this" looks in the drawer.
+   */
+  rows?: { keys: string[]; what: string }[];
 };
 
 export const SHORTCUTS: ShortcutGroup[] = [
@@ -102,26 +109,38 @@ export const SHORTCUTS: ShortcutGroup[] = [
     ],
   },
   {
-    /**
-     * Listed but not dispatched here: the separator owns these while it holds focus, so
-     * they never reach the document handler. They are in the table because a reader
-     * looking for "how do I resize the panel" looks in the shortcuts drawer.
-     */
     heading: "Resizing the commit panel",
     keys: [],
+    rows: [
+      {
+        keys: ["Tab"],
+        what: "Focus the divider between the tree and the panel",
+      },
+      {
+        keys: ["←", "→"],
+        what: "Nudge the divider 16 pixels, while it holds focus",
+      },
+      {
+        keys: ["Home"],
+        what: "Restore the panel's default width, while the divider holds focus",
+      },
+    ],
   },
-];
-
-/** Rows the drawer shows for the panel-resize group, which has no dispatched action. */
-export const SPLITTER_KEYS: { keys: string[]; what: string }[] = [
-  { keys: ["Tab"], what: "Focus the divider between the tree and the panel" },
   {
-    keys: ["←", "→"],
-    what: "Nudge the divider 16 pixels, while it holds focus",
-  },
-  {
-    keys: ["Home"],
-    what: "Restore the panel's default width, while the divider holds focus",
+    heading: "Resizing the changes view",
+    keys: [],
+    rows: [
+      { keys: ["Tab"], what: "Focus either edge of the open changes view" },
+      {
+        keys: ["←", "→"],
+        // Twice the travel, because the view is centred: the far edge moves as well.
+        what: "Move the focused edge 16 pixels, changing the width by 32",
+      },
+      {
+        keys: ["Home"],
+        what: "Restore the view's default width, while an edge holds focus",
+      },
+    ],
   },
 ];
 

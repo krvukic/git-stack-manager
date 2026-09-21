@@ -15,7 +15,7 @@ import {
   type Design,
 } from "../model/design.mjs";
 import { legendGroups, type LegendRow } from "../model/legend.mjs";
-import { SHORTCUTS, SPLITTER_KEYS } from "../model/shortcuts.mjs";
+import { SHORTCUTS } from "../model/shortcuts.mjs";
 import { Button } from "./Button";
 import { FieldLabel } from "./Field";
 import { Badge, BranchPills, Pill } from "./Pills";
@@ -386,7 +386,7 @@ export function ShortcutsDrawer({
             cellGap="[&_td]:pr-3"
             key={group.heading}
           >
-            {(group.keys.length ? group.keys : SPLITTER_KEYS).map(shortcut => (
+            {(group.rows ?? group.keys).map(shortcut => (
               <tr key={shortcut.what}>
                 <td className="whitespace-nowrap">
                   {/*

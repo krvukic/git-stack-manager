@@ -10,6 +10,7 @@ import { classes } from "../classes";
 export function Modal({
   id,
   hidden = false,
+  width,
   className,
   children,
 }: {
@@ -20,6 +21,13 @@ export function Modal({
    * mounted and toggles instead of unmounting.
    */
   hidden?: boolean;
+  /**
+   * A width the reader set, for a panel whose edges can be dragged. Centred on the window
+   * instead of inset from both sides, since a width and two insets cannot all three hold.
+   * Left off, the symmetric inset applies — which is what the split chooser wants, having no
+   * edges to drag.
+   */
+  width?: number;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -27,10 +35,12 @@ export function Modal({
     <div
       id={id}
       className={classes(
-        "fixed inset-x-[12%] inset-y-[8%] z-30 flex-col rounded-shell border border-edge bg-bg shadow-[0_8px_32px_rgba(0,0,0,0.5)]",
+        "fixed inset-y-[8%] z-30 flex-col rounded-shell border border-edge bg-bg shadow-[0_8px_32px_rgba(0,0,0,0.5)]",
+        width === undefined ? "inset-x-[12%]" : "left-1/2 -translate-x-1/2",
         hidden ? "hidden" : "open flex",
         className
       )}
+      style={width === undefined ? undefined : { width }}
     >
       {children}
     </div>

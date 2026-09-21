@@ -1,17 +1,11 @@
 /**
  * The divider between the tree and the commit panel.
  *
- * Drag with pointer capture, so the pointer may leave the 7px strip — which it does within
- * the first frame — without the drag ending or needing document-level listeners that
- * outlive it. Capture also delivers the release wherever it happens, including outside the
- * window, so there is no stuck drag to clean up.
- *
- * The move handler reads nothing from layout. The width is (drag origin − current x) added
- * to the width at press, both captured up front, so a move at refresh rate costs one
- * subtraction, one clamp, and one state write; measuring the element per move would force a
- * synchronous layout on every frame.
+ * The drag itself lives in `useWidthDrag`, shared with the changes overlay's edges. The
+ * panel is on the right, so leftward travel widens it one pixel per pixel — a gain of 1,
+ * against the overlay's 2.
  */
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import { classes } from "../classes";
 import {
   clampSidebarWidth,
@@ -20,6 +14,7 @@ import {
   SIDEBAR_MAX_WIDTH,
   SIDEBAR_MIN_WIDTH,
 } from "../model/sidebarWidth.mjs";
+import { useWidthDrag } from "../state/useWidthDrag";
 
 export function Splitter({
   isOpen,
@@ -35,54 +30,18 @@ export function Splitter({
   onResize: (width: number, persist: boolean) => void;
 }) {
   const splitter = useRef<HTMLDivElement>(null);
-  const dragging = useRef(false);
+  const clamp = useCallback(
+    (reached: number) => clampSidebarWidth(reached, window.innerWidth),
+    []
+  );
 
-  const onPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    // Ignore the middle and right buttons: only a primary press is a drag.
-    if (event.button !== 0 || !splitter.current) {
-      return;
-    }
-    const startX = event.clientX;
-    const startWidth = width;
-    const element = splitter.current;
-    element.setPointerCapture(event.pointerId);
-    element.classList.add("dragging");
-    document.body.classList.add("resizing");
-    dragging.current = true;
-    // Suppress the browser's own text-selection drag, which `user-select: none` only
-    // prevents from extending — a press still collapses the caret. That also suppresses the
-    // focus the press would have given, so take it explicitly: arrow-key nudging should
-    // work straight after a drag.
-    event.preventDefault();
-    element.focus();
-
-    // Where the drag has got to, so the release can persist it. Read back from state
-    // instead would give the width from before this drag, since these handlers close over
-    // the render that started it.
-    let reached = startWidth;
-
-    // The panel is on the right, so leftward travel — a smaller clientX — grows it.
-    // Getting this sign backwards is the classic bug, so the suite asserts a measured
-    // width in both directions rather than only that it moved.
-    const onMove = (moveEvent: PointerEvent) => {
-      reached = startWidth + (startX - moveEvent.clientX);
-      onResize(reached, false);
-    };
-    const onEnd = () => {
-      element.removeEventListener("pointermove", onMove);
-      element.removeEventListener("pointerup", onEnd);
-      element.removeEventListener("pointercancel", onEnd);
-      element.classList.remove("dragging");
-      document.body.classList.remove("resizing");
-      dragging.current = false;
-      // Store what the drag reached, not what the pointer travelled past: dragging 400px
-      // beyond the ceiling should not restore as an impossible width later.
-      onResize(clampSidebarWidth(reached, window.innerWidth), true);
-    };
-    element.addEventListener("pointermove", onMove);
-    element.addEventListener("pointerup", onEnd);
-    element.addEventListener("pointercancel", onEnd);
-  };
+  const onPointerDown = useWidthDrag({
+    handle: splitter,
+    gain: 1,
+    widthAtPress: () => width,
+    clamp,
+    onResize,
+  });
 
   /**
    * Arrows and Home on the focused separator, the WAI-ARIA window splitter pattern and the

@@ -3,6 +3,24 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-09-21
+
+Reading a diff and writing a message at the size you chose, not the size the layout picked.
+
+### Added
+
+- The changes overlay resizes from either edge, from 520 pixels wide up to 48 pixels short of each
+  window edge. It stays centred, so each edge carries the far one with it and the width changes by
+  twice the travel; the margin that remains keeps the tree visible on both sides, which is what says
+  a diff is a step in a flow rather than a new place. Tab to an edge and `←` / `→` move it, `Home`
+  restores the default — the same three keys the commit panel's divider answers.
+- The commit panel's **Description** and the working copy's keep the height you drag their
+  bottom-right corner to, and the changes overlay keeps its width. All three hold across a reload
+  and across a restart of the editor, and none of them is per commit: a height is how much message
+  you want to see and a width is how wide you want to read code, so selecting another commit opens
+  at what you last chose. A window too short or too narrow for a stored measurement cuts it back
+  rather than hiding the controls around it.
+
 ## [0.5.0] - 2026-09-21
 
 Reading an uncommitted change before deciding what to do with it.

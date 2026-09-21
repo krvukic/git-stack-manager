@@ -23,6 +23,11 @@ import type { RenderModel, UICommit } from "#ui/renderModel";
 import { useRef, useState } from "react";
 import { gotoTarget, splitMessage, submitTarget } from "../model/commits.mjs";
 import type { FileClick } from "../model/design.mjs";
+import {
+  DESCRIPTION_HEIGHT_KEY,
+  DESCRIPTION_MIN_HEIGHT,
+} from "../model/messageHeight.mjs";
+import { useStoredHeight } from "../state/useStoredHeight";
 import { Button, ButtonRow } from "./Button";
 import { FieldLabel, TextArea, TextInput } from "./Field";
 import { CommitFileRow } from "./FileRow";
@@ -30,8 +35,6 @@ import { BranchPills } from "./Pills";
 
 /** How near the bottom-right corner a double-click counts as hitting the grip. */
 const GRIP_SIZE = 18;
-/** The starting height of the description box, and the floor a fit stops at. */
-const DESCRIPTION_MIN_HEIGHT = 110;
 
 /**
  * Double-click the resize grip to fit the box to its text.
@@ -146,6 +149,14 @@ export function CommitPanel({
   const [subject, setSubject] = useState(original.subject);
   const [body, setBody] = useState(original.body);
   const description = useRef<HTMLTextAreaElement>(null);
+  // Re-read on mount, which is once per selected commit: this panel is keyed on the sha, so
+  // clicking another commit remounts it, and a height that lived only in the element would go
+  // back to the default on every click.
+  const storedHeight = useStoredHeight(
+    description,
+    DESCRIPTION_HEIGHT_KEY,
+    DESCRIPTION_MIN_HEIGHT
+  );
 
   const conflicted = Boolean(model.conflict);
   const openable = files.state === "ready" ? files.files.length : 0;
@@ -192,13 +203,16 @@ export function CommitPanel({
         Description
       </FieldLabel>
       {/* 110px is both the starting height and the floor a fit-to-content shrink stops at, so
-          `min-height` carries it rather than a `height` the resize grip would fight. */}
+          `min-height` carries it rather than a `height` the resize grip would fight — and it
+          keeps flooring the inline height a stored measurement sets. It must stay in step with
+          `DESCRIPTION_MIN_HEIGHT`, which is what a restore is clamped against. */}
       <TextArea
         className="min-h-27.5 text-body"
         id="msg-body"
         ref={description}
+        style={{ height: storedHeight }}
         value={body}
-        title="Double-click the bottom-right corner to fit the box to the message, or drag it to resize."
+        title="Double-click the bottom-right corner to fit the box to the message, or drag it to resize. The height is remembered."
         onChange={event => setBody(event.target.value)}
         onDoubleClick={event => {
           if (description.current) {

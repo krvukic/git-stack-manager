@@ -49,7 +49,8 @@ Run `just init-repo` once, then pick a host:
   height follows the text. Choices persist per repository.
 - The sidebar's **description** box fits itself to the message when you double-click its
   bottom-right corner, and returns to its starting height on a second double-click. Dragging that
-  corner still resizes by hand, and double-clicking anywhere else still selects a word.
+  corner still resizes by hand, and double-clicking anywhere else still selects a word. Whatever
+  height you leave it at is kept, and every commit you select afterwards opens at it.
 
 ## Moving around and catching up
 
@@ -167,6 +168,17 @@ narrow to hold that gives the tree 440 pixels and the panel the rest. The width 
 `localStorage` under `gsm.sidebarWidth`. Tab to the divider and `←` / `→` nudge it 16 pixels at a
 time, `Home` restores the default. Those three keys act only while the divider itself holds focus,
 so `←` / `→` never collide with row navigation.
+
+Drag either edge of the changes overlay to resize it, from 520 pixels wide up to 48 pixels short of
+each window edge, which keeps the tree visible on both sides. The overlay stays centred, so each
+edge carries the far one with it and the width changes by twice the travel. Tab to an edge for the
+same `←` / `→` and `Home`. The width persists under `gsm.changesWidth` and is shared by every diff:
+it is how wide you want to read code, not something about the commit you are reading.
+
+Both description boxes keep the height you drag their bottom-right corner to, under
+`gsm.descriptionHeight` for the commit panel's and `gsm.commitBodyHeight` for the working copy's.
+Selecting another commit keeps it and so does reopening the editor, and a window too short for a
+stored height cuts it back rather than pushing the buttons below the box off screen.
 
 ## Settings
 

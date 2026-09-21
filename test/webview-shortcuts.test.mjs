@@ -11,7 +11,6 @@ import { test } from "node:test";
 import {
   shortcutActionsByKey,
   SHORTCUTS,
-  SPLITTER_KEYS,
 } from "../src/webview/model/shortcuts.mts";
 
 test("every listed shortcut maps to exactly one action", () => {
@@ -50,11 +49,25 @@ test("no key is bound to two actions", () => {
   }
 });
 
-test("every group has a heading, and the splitter keys are listed apart", () => {
+test("every group has a heading, and every row has keys to show", () => {
   for (const group of SHORTCUTS) {
     assert.ok(group.heading.length > 0);
+    for (const row of group.rows ?? group.keys) {
+      assert.ok(row.keys.length > 0, `${row.what} lists no keys`);
+      assert.ok(row.what.length > 0);
+    }
   }
-  // The separator handles these while it holds focus, so they never reach the document
-  // handler — but a reader looking for "how do I resize the panel" looks here.
-  assert.ok(SPLITTER_KEYS.length >= 3);
+});
+
+/**
+ * The two resize groups. Each element handles these keys while it holds focus, so they never
+ * reach the document handler and carry no action — which is exactly why they need listing: a
+ * reader looking for "how do I resize this" looks in the drawer, and the drawer draws `rows`.
+ */
+test("the resize groups are listed with rows and no dispatched action", () => {
+  const displayOnly = SHORTCUTS.filter(group => !group.keys.length);
+  assert.equal(displayOnly.length, 2);
+  for (const group of displayOnly) {
+    assert.ok((group.rows?.length ?? 0) >= 3, `${group.heading} shows no rows`);
+  }
 });

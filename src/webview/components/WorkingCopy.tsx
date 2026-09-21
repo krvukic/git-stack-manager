@@ -14,9 +14,15 @@
  */
 import type { FileChange } from "#git/snapshot";
 import type { RenderModel, UICommit } from "#ui/renderModel";
+import { useRef } from "react";
 import { classes } from "../classes";
 import { canAbsorb } from "../model/actionGuards.mjs";
 import { truncate } from "../model/commits.mjs";
+import {
+  COMMIT_BODY_HEIGHT_KEY,
+  COMMIT_BODY_MIN_HEIGHT,
+} from "../model/messageHeight.mjs";
+import { useStoredHeight } from "../state/useStoredHeight";
 import { AbsorbPreview, type AbsorbPlan } from "./AbsorbPreview";
 import { Button, ButtonRow } from "./Button";
 import { DiscardConfirm } from "./DiscardConfirm";
@@ -82,6 +88,13 @@ export function WorkingCopy({
   onApplyAbsorb,
   onCancelAbsorb,
 }: WorkingCopyProps) {
+  const draftBody = useRef<HTMLTextAreaElement>(null);
+  const draftBodyHeight = useStoredHeight(
+    draftBody,
+    COMMIT_BODY_HEIGHT_KEY,
+    COMMIT_BODY_MIN_HEIGHT
+  );
+
   const uncommitted: FileChange[] = model.uncommitted;
   const count = uncommitted.length;
   const picked = uncommitted.filter(file => pickedPaths.has(file.path)).length;
@@ -228,9 +241,14 @@ export function WorkingCopy({
           }
         />
         <FieldLabel>Description</FieldLabel>
+        {/* `min-h-16` has to stay in step with `COMMIT_BODY_MIN_HEIGHT`: the grip cannot drag
+            the box below it, and a stored height is clamped to the same floor. */}
         <TextArea
           className="my-0.5 mb-1.5 min-h-16 py-1.25 text-body"
           id="commit-body"
+          ref={draftBody}
+          style={{ height: draftBodyHeight }}
+          title="Drag the bottom-right corner to resize. The height is remembered."
           placeholder="Why it is needed (optional)"
           value={commitDraft.body}
           onChange={event =>

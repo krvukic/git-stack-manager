@@ -13,7 +13,7 @@
  * back what the rebuild destroyed — focus, the caret, a half-typed commit message, the
  * disabled state of five buttons. Those repairs are gone, along with the bugs they carried.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ChangesOverlay } from "./components/ChangesOverlay";
 import { CommandLog } from "./components/CommandLog";
 import { CommitPanel } from "./components/CommitPanel";
@@ -34,7 +34,10 @@ import { TopBar } from "./components/TopBar";
 import { Tree } from "./components/Tree";
 import { WorkingCopy } from "./components/WorkingCopy";
 import { findCommit } from "./model/commits.mjs";
-import { clampSidebarWidth } from "./model/sidebarWidth.mjs";
+import {
+  clampSidebarWidth,
+  SIDEBAR_DEFAULT_WIDTH,
+} from "./model/sidebarWidth.mjs";
 import { rpc } from "./rpc";
 import type { HostSettings } from "./settings";
 import { useCommitActions } from "./state/useCommitActions";
@@ -44,6 +47,7 @@ import { useDesign } from "./state/useDesign";
 import { useKeyboard } from "./state/useKeyboard";
 import { useRepositoryActions } from "./state/useRepositoryActions";
 import { useSmartlog } from "./state/useSmartlog";
+import { useStoredWidth } from "./state/useStoredWidth";
 import { useWorkingCopy } from "./state/useWorkingCopy";
 import {
   readStoredLogHidden,
@@ -74,17 +78,17 @@ export function App({ settings }: { settings: HostSettings }) {
   const [menu, setMenu] = useState<MenuState>(null);
   const [logHidden, setLogHidden] = useState(readStoredLogHidden);
 
-  // What was asked for, which is not always what fits. A window too narrow to hold the
-  // chosen width clamps what is applied and remembers the choice, so restoring the window
-  // restores the panel rather than leaving it at whatever the smallest window allowed.
-  const [requestedWidth, setRequestedWidth] = useState(readStoredSidebarWidth);
-  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
-  useEffect(() => {
-    const onResize = () => setViewportWidth(window.innerWidth);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-  const sidebarWidth = clampSidebarWidth(requestedWidth, viewportWidth);
+  // Kept across loads and re-fitted to the window; the changes overlay's width works the same
+  // way, through the same hook.
+  const {
+    width: sidebarWidth,
+    requestedWidth,
+    onResize: onSidebarResize,
+  } = useStoredWidth({
+    initial: () => readStoredSidebarWidth() ?? SIDEBAR_DEFAULT_WIDTH,
+    clamp: clampSidebarWidth,
+    store: storeSidebarWidth,
+  });
 
   /**
    * The selected commit, or null when nothing is selected — *or* when what was selected no
@@ -318,12 +322,7 @@ export function App({ settings }: { settings: HostSettings }) {
           isOpen={Boolean(selectedCommit)}
           width={sidebarWidth}
           requestedWidth={requestedWidth}
-          onResize={(width, persist) => {
-            setRequestedWidth(width);
-            if (persist) {
-              storeSidebarWidth(clampSidebarWidth(width, window.innerWidth));
-            }
-          }}
+          onResize={onSidebarResize}
         />
         {selectedCommit ? (
           <CommitPanel
