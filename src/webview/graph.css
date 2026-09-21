@@ -1,0 +1,253 @@
+/**
+ * The commit graph's geometry.
+ *
+ * Hand-written, and staying that way: most rules here record a bug that shipped once, and a
+ * Tailwind class in JSX has nowhere to put that reasoning. Read the comments as history rather
+ * than as guarantees — an earlier version of this header claimed *every* paragraph was such a
+ * record, and vouching for them collectively is what let four stale ones survive review,
+ * including one that forbade a change the code below it had already made.
+ *
+ * The rest of the UI is Tailwind utilities on the components. This file is the exception,
+ * loaded as a component layer so utilities still win over it where a component needs to
+ * override one.
+ */
+@layer components {
+  .row {
+    position: relative;
+    border-radius: var(--radius-sm);
+    min-height: var(--row-height, 26px);
+    display: flex;
+    align-items: center;
+  }
+  /* Everything on one centre line. A row mixes four font sizes — 13px subject, 11px pill and
+     sha, 10px badge — and `center` puts each one's midpoint on the same horizontal line, so a
+     pill reads as sitting *with* its subject. `baseline` aligns the glyphs' feet instead, which
+     is right for text alone but not for a box whose height is its own padding: it left the four
+     midpoints spread over 1.5px and the whole line 1px from the row's top edge. `line-height: 1`
+     on the text children is what keeps this honest, growing a pill's padding around its glyphs
+     rather than around the leading. */
+  .row .content {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 0 6px;
+    min-width: 0;
+    height: var(--row-height, 26px);
+    /* Indent past this row's own rightmost rail, so a branch pill hugs its own dot rather
+       than clearing the whole gutter. `--lane` comes from the render, which already knows
+       the number; this was nine hand-written `.il0`–`.il8` rules, and that ladder is why
+       `rails.mts` clamps at `MAX_INDENT_LANE` — past the last rule the indent silently
+       stopped growing. */
+    margin-left: calc(var(--lane, 0) * 18px + 20px);
+    /* Whatever does not fit is clipped. `nowrap` alone still let the pills overflow the
+       row and print across its neighbours, because a flex item that cannot shrink simply
+       sticks out; hiding the overflow is what actually keeps a row to its own line. */
+    overflow: hidden;
+  }
+  /* The subject is the one item allowed to give up space, so the pills and sha it shares a
+     row with stay whole and it ellipses instead. */
+  .row .content .subject {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  body.wrap-rows .row {
+    /* Vertical padding keeps a two-line row from touching its neighbours; on a single
+       line the min-height already covers it, so nothing moves in the common case. */
+    align-items: stretch;
+    padding: 2px 0;
+  }
+  /**
+   * Both halves of the one-line rule are lifted here, and both are needed.
+   *
+   * `height: auto` alone does not grow the box: a flex container's cross size comes from its
+   * flex *lines*, and with `flex-wrap: nowrap` there is exactly one line however tall its
+   * items get — so a subject that broke into two lines was laid out at 26px and the second
+   * line clipped by the `overflow: hidden` that keeps a starved row on its own line.
+   *
+   * That clipping was live before this row centred its items, on 25 of 28 rows. `baseline`
+   * had resolved `auto` about 3px taller than `center` does, which was enough for three rows
+   * to fit and for the test asserting "some row grew" to pass on those three.
+   */
+  body.wrap-rows .row .content {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: var(--row-height, 26px);
+    overflow: visible;
+  }
+  /* Wrapping is pointless if the subject still ellipses at one line's worth: let it use
+     the full width and break, which is the whole reason to turn this on. */
+  body.wrap-rows .subject {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+  .rail {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+  }
+  /* A wrapped row is taller than the SVG was drawn for, which would leave its vertical
+     rail stopping partway down and a visible gap before the next row's. The extra height
+     is added as a plain vertical line under the drawn rail — stretching the SVG instead
+     would letterbox its viewBox and float the dot away from the first line's text, since
+     `preserveAspectRatio` centres content in a taller box. */
+  body.wrap-rows .row .railfill {
+    position: absolute;
+    top: var(--row-height, 26px);
+    bottom: 0;
+    width: 2px;
+    background: var(--color-rail);
+    pointer-events: none;
+  }
+  .row.clickable {
+    cursor: pointer;
+  }
+  .row.clickable:hover {
+    background: var(--color-card);
+  }
+  /* Lift above neighbours so the outline (which bleeds 1px into the adjacent row)
+     is not painted over when that neighbour gets its hover background. */
+  .row.selected {
+    background: var(--color-card);
+    outline: 1px solid var(--color-accent);
+    z-index: 1;
+  }
+  .rail line,
+  .rail path {
+    stroke: var(--color-rail);
+    stroke-width: 2;
+    fill: none;
+  }
+  /* An ordinary dot is a bulge in its lane, so it takes the lane's colour rather than a
+     text colour of its own. That also settles legibility for free: `--color-rail` is the
+     one value already known to stand out on any editor background, and a dot painted in
+     `--vscode-descriptionForeground` read dimmer than the line running through it.
+     The base dot keeps the editor background inside its ring, which is what hides the
+     lane behind it — a transparent middle would show the line and stop reading as open. */
+  .rail .node {
+    fill: var(--color-rail);
+    stroke: none;
+  }
+  .rail .node.hollow {
+    fill: var(--color-bg);
+    stroke: var(--color-rail);
+    stroke-width: 2;
+  }
+  /* The two dots that must stand apart from their lane rather than belong to it. Both
+     name a token meant to be read against the editor background: a focus ring, and the
+     explorer's colour for an added file. Trunk used to borrow `--color-pill-fg`, which
+     is guaranteed to contrast with a badge and nothing else — VS Code's Dark Modern and
+     Light Modern both set it to white, so trunk's dot vanished on every light theme. */
+  .rail .node.head {
+    fill: var(--color-accent);
+  }
+  .rail .node.trunkdot {
+    fill: var(--color-add);
+  }
+  .rail .halo {
+    fill: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  }
+  /* Pills as one movable unit. `display: contents` keeps each pill a direct flex item
+     of the row in the default layout, so nothing about the existing spacing changes;
+     the right-hand mode below promotes the group to a real box it can push aside. */
+  .pillgroup {
+    display: contents;
+  }
+  .pillgroup:empty {
+    display: none;
+  }
+  /* Pills after the subject. Two things move together here, and both are the point of the mode.
+     The subjects line up on ONE left edge, and the pills collect into their own column on the
+     right — so the eye reads a list of messages down one side and branch state down the other,
+     instead of hunting for each subject at whatever depth its lane sits.
+
+     The per-row graph indent is what fights this: hugging its own dot is right when a
+     pill sits beside it, and wrong here, because it starts the subjects at as many
+     offsets as there are lanes. */
+  body.pills-right .row .content {
+    /* One shared edge instead of the per-row lane. `--gutter` comes from the render, as
+       the widest rail in the whole graph, so every subject clears the deepest lane rather
+       than only its own. */
+    margin-left: var(--gutter, 20px);
+  }
+  /* The pills follow the sha directly, a normal gap away — not pinned to the right edge in a
+     fixed column, which an earlier version tried. At 1500px that put 700-850px of nothing
+     between a subject and its own pills, and the grouping a reader needs is
+     subject-to-its-own-badges rather than badge-to-badge down the column. */
+  body.pills-right .pillgroup {
+    display: inline-flex;
+    /* `center`, matching `.row .content` above — the group is promoted to a real box
+       here, so it aligns its own children and would otherwise reintroduce the mismatch
+       that rule removes. */
+    align-items: center;
+    gap: 6px;
+    order: 3;
+    flex: none;
+  }
+  /* Nothing takes the slack, so the row ends where its content ends. The subject keeps
+     `min-width: 0` so a long one ellipses instead of pushing its pills off the edge. */
+  body.pills-right .row .content .subject {
+    order: 1;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  body.pills-right .row .content .sha {
+    order: 2;
+  }
+  body.pills-right .row .content .youarehere {
+    order: 4;
+  }
+  /* Goto is the one thing that still belongs at the far right: it is an action, not part
+     of the commit's description, and `margin-left: auto` is what pushes it there. */
+  body.pills-right .row .content .goto-btn {
+    order: 5;
+    margin-left: auto;
+  }
+  /* The base hint describes the subject, so it stays beside it. */
+  body.pills-right .row .content .basehint {
+    order: 2;
+  }
+  .subject {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: var(--text-font, 13px);
+    line-height: 1;
+  }
+  .subject.foreign {
+    color: var(--color-muted);
+  }
+
+  /* `nowrap` on the row stops its *items* wrapping, not the text inside one, so the base
+     hint still broke across two lines and pushed the row over. It is a fixed phrase, so
+     truncating it loses nothing a reader needs. */
+  .basehint {
+    font-size: calc(var(--text-font, 13px) - 2px);
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+  body.wrap-rows .basehint {
+    white-space: normal;
+    overflow: visible;
+  }
+  .ellipsis-row .content {
+    color: var(--color-muted);
+    padding: 1px 6px;
+  }
+  .ellipsis-label {
+    font-size: calc(var(--text-font, 13px) - 2px);
+    line-height: 1;
+  }
+  /* Dragging the panel divider across the tree would otherwise select commit subjects, and
+     the cursor would snap back to a text caret the moment it left the strip. */
+  body.resizing {
+    user-select: none;
+    cursor: col-resize;
+  }
+}

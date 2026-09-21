@@ -1,0 +1,19 @@
+node_modules/
+out/
+*.vsix
+dist/
+.demo-repo/
+
+# The Vite-built webview bundle. Generated from src/webview/ by `just build`, and
+# packaged into the .vsix from there rather than tracked.
+media/dist/
+
+# Playwright output. The recorded snapshots under test/e2e/snapshots ARE the
+# assertions and stay tracked; only per-run artefacts are ignored.
+test-results/
+playwright-report/
+blob-report/
+
+# Local agent configuration — machine-specific, never part of the extension
+.mcp.json
+.claude/

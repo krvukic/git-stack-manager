@@ -1,0 +1,9 @@
+{
+  "terminal.integrated.env.osx": {
+    "NO_AUTO_CD": "1"
+  },
+  "terminal.integrated.env.linux": {
+    "NO_AUTO_CD": "1"
+  },
+  "typescript.tsdk": "node_modules/typescript/lib"
+}

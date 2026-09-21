@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    /** The same set the extension project carries; see the comment there. */
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "allowJs": true,
+    "checkJs": false,
+    /**
+     * `node` alongside the React types, for type checking only.
+     *
+     * The webview imports `RenderModel` and its neighbours from the Node side for their
+     * types. Those modules also import `child_process` and `fs` at the top level, and
+     * TypeScript checks the whole file even when only a type is used from it — so
+     * without the Node types this reports errors in code the bundle never contains.
+     * Nothing follows into the build: every such import is `import type`, which erases.
+     */
+    "types": ["react", "react-dom", "node"],
+    /**
+     * The shared `#git/*` specifiers, pointed at sources rather than at `out/`.
+     *
+     * The only copy of this mapping the webview needs. `package.json`'s `imports` field is the
+     * runtime contract — Node resolves it itself, which is why the shipped `out/` needs no
+     * bundler — and it points at compiled JavaScript. Resolving through that here would work
+     * only after a build, and fail on a clean checkout, so type resolution gets its own copy
+     * aimed at the `.ts` files. Vite needs no third copy: every one of these imports is
+     * `import type` and never reaches the bundler.
+     */
+    "paths": {
+      "#core/*": ["./src/core/*"],
+      "#git/*": ["./src/git/*"],
+      "#history/*": ["./src/history/*"],
+      "#github/*": ["./src/github/*"],
+      "#ui/*": ["./src/ui/*"],
+      "#app/*": ["./src/app/*"]
+    }
+  },
+  "include": ["src/webview/**/*"]
+}

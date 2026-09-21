@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<!--
+  The stylesheet and the script are both built files now, so each is fetched from
+  __CSP_SOURCE__ rather than carrying a nonce. The script keeps its nonce as well:
+  a nonce authorises an external `src` just as it does inline code, and dropping it
+  would mean widening script-src to the whole source instead.
+
+  `img-src data:` is what lets the changes overlay draw an image from a commit. A webview
+  reaches no filesystem and no server, so a blob arrives inline as a `data:` URI — and under
+  `default-src 'none'` every `<img>` was refused, whatever its source.
+-->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src __CSP_SOURCE__; script-src 'nonce-__NONCE__' __CSP_SOURCE__; img-src __CSP_SOURCE__ data:; connect-src __CSP_SOURCE__ http://localhost:* http://127.0.0.1:*;" />
+<title>Git Stack</title>
+<link rel="stylesheet" href="__BASE_URI__/app.css" />
+</head>
+<!--
+  What the host knows and the UI needs rides on the body as data attributes: a setting the
+  user chose, and the extension's own version, which the top bar prints. The script is a
+  built bundle, so the token substitution the inline version used cannot reach it;
+  `src/webview/settings.ts` reads these back.
+
+  The body holds only the mount point. Every element the UI draws is a React component
+  under `src/webview/`, so the markup that used to live here — the top bar, the drawers,
+  the overlay shells — now sits in the component that owns it.
+-->
+<body data-only-my-commits="__ONLY_MY_COMMITS__" data-version="__VERSION__">
+  <div id="root"></div>
+<script nonce="__NONCE__" src="__BASE_URI__/app.js"></script>
+</body>
+</html>

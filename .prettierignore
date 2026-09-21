@@ -1,0 +1,8 @@
+node_modules
+out
+dist
+media/dist
+.demo-repo
+bun.lock
+test/e2e/snapshots
+*.vsix

@@ -1,0 +1,23 @@
+.vscode/**
+src/**
+test/**
+node_modules/**
+tsconfig.json
+tsconfig.webview.json
+vite.config.mts
+# media/dist holds the built webview bundle and IS shipped; its sourcemaps are not.
+**/*.map
+.gitignore
+.vscodeignore
+.mcp.json
+.claude/**
+justfile
+bun.lock
+eslint.config.mjs
+scripts/**
+**/*.d.ts
+.demo-repo/**
+dist/**
+playwright.config.mjs
+test-results/**
+playwright-report/**

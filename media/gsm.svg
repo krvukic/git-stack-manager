@@ -1,0 +1,24 @@
+<!--
+  Activity bar icon: the GSM wordmark, so the sidebar carries the same letters as the
+  marketplace icon in media/icon.png.
+
+  Monochrome by force, not by choice. VS Code renders a contributed activity bar icon as a
+  CSS mask — it generates `mask: url(<this file>)` and paints the result with
+  `activityBar.foreground` — so only the alpha channel survives and every colour is
+  discarded. The marketplace icon keeps its green, blue and tan because an extension icon
+  is an ordinary image; this one cannot. `currentColor` below is therefore arbitrary: any
+  opaque paint masks identically.
+
+  The letters are paths rather than `<text>`. A mask renders in an isolated document, so a
+  font that failed to resolve would substitute glyphs with no way to notice.
+
+  Three glyphs across 24px leaves roughly 6px each, which puts the ceiling on stroke
+  weight: past 2 the S counters and the M vertex fill in and the wordmark reads as a smudge.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6.88 6.91 A3.13 7.00 0 1 0 7.87 12.00 L4.48 12.00" />
+    <path d="M14.88 8.08 C14.88 4.08 9.12 4.08 9.12 9.20 C9.12 12.70 14.88 11.30 14.88 15.36 C14.88 19.92 9.12 19.92 9.12 16.20" />
+    <path d="M16.18 19.00 L16.18 5.00 L19.27 13.68 L22.35 5.00 L22.35 19.00" />
+  </g>
+</svg>

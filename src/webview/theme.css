@@ -1,0 +1,200 @@
+/**
+ * Tailwind, and the theme it draws from.
+ *
+ * Every colour here is a VS Code theme token with a fallback, so the smartlog follows
+ * whatever theme the editor is on rather than shipping a palette of its own. `@theme` maps
+ * them once to Tailwind names, which is what lets a component write `bg-card text-muted`
+ * instead of `bg-[var(--vscode-editorWidget-background)]` — the latter would be strictly
+ * worse than the hand-written CSS it replaced.
+ *
+ * The `--color-*` prefix is what Tailwind keys its colour utilities off, so a token added
+ * here becomes `bg-`, `text-`, and `border-` without further wiring.
+ */
+@import "tailwindcss";
+
+@theme {
+  --color-bg: var(--vscode-editor-background, #1e1f22);
+  --color-fg: var(--vscode-editor-foreground, #d4d4d4);
+  --color-muted: var(--vscode-descriptionForeground, #8b949e);
+  --color-accent: var(--vscode-focusBorder, #3794ff);
+  --color-pill: var(--vscode-badge-background, #2d4f2d);
+  --color-pill-fg: var(--vscode-badge-foreground, #9fe29f);
+  --color-card: var(--vscode-editorWidget-background, #26282d);
+  --color-edge: var(--vscode-editorWidget-border, #3c3f45);
+  --color-button: var(--vscode-button-background, #0e639c);
+  --color-button-fg: var(--vscode-button-foreground, #ffffff);
+  --color-button-2: var(--vscode-button-secondaryBackground, #3a3d41);
+  --color-button-2-fg: var(--vscode-button-secondaryForeground, #ffffff);
+  --color-input: var(--vscode-input-background, #2a2c30);
+  --color-input-fg: var(--vscode-input-foreground, #d4d4d4);
+  --color-input-edge: var(--vscode-input-border, #3c3f45);
+  --color-err: var(--vscode-errorForeground, #f48771);
+  --color-add: var(--vscode-gitDecoration-addedResourceForeground, #81c995);
+  --color-mod: var(--vscode-gitDecoration-modifiedResourceForeground, #e2c08d);
+  --color-del: var(--vscode-gitDecoration-deletedResourceForeground, #f48771);
+  /** A merged pull request. GitHub's purple, which no VS Code token approximates. */
+  --color-merged: #a371f7;
+  --color-merged-fg: #c297ff;
+  /**
+   * The graph's rails, which answer to legibility rather than to the theme.
+   *
+   * Every other colour here defers to a VS Code token. This one cannot: the rails were
+   * drawn in `--vscode-editorWidget-border`, a hairline meant for a 1px divider, and on a
+   * dark theme that is dark grey on near-black — so the lanes and fork curves the view
+   * exists to show read as almost nothing. Full contrast against the editor background is
+   * what lets the eye follow one lane down thirty rows.
+   *
+   * A light theme flips it to black; see the rule in `@layer base` below.
+   */
+  --color-rail: #fff;
+
+  --font-sans: var(
+    --vscode-font-family,
+    -apple-system,
+    "Segoe UI",
+    system-ui,
+    sans-serif
+  );
+
+  /**
+   * The three sizes the design panel scales, as Tailwind names.
+   *
+   * Kept as custom properties the panel writes at runtime rather than as fixed values,
+   * because that is the whole point of the sliders: `text-ui` resolves through
+   * `--text-font`, so moving a slider restyles every row without a re-render.
+   */
+  --text-ui: var(--text-font, 13px);
+  --text-sha: calc(var(--text-font, 13px) - 2px);
+  --text-pill: var(--pill-font, 11px);
+  --text-badge: var(--badge-font, 10px);
+
+  /**
+   * The chrome's own three steps, which the sliders do not scale.
+   *
+   * Fixed values, unlike the four above: the sliders size the *graph*, and a panel heading
+   * that grew with them would push the tree around for a setting about the tree.
+   *
+   * `meta` and `body` are a real distinction rather than drift, and the clearest example is
+   * two adjacent lines: `Drawers.tsx` prints a shortcut's keys at `body` and the sentence
+   * explaining it at `meta`.
+   *
+   * Deliberately no `--text-*--line-height` beside any of them. That pairing is what makes
+   * Tailwind's own `text-xs` shorten a button by a pixel, so the line height stays a separate
+   * channel a caller states — `/auto`, `/none`, `/tip`.
+   */
+  --text-meta: 11px;
+  --text-body: 12px;
+  --text-title: 13px;
+
+  /**
+   * The browser's default `<input>` size, which is not a design value.
+   *
+   * Two thirds of a pixel off `--text-title`, and pinned rather than rounded because these
+   * boxes inherited it until Tailwind's preflight set inputs to `inherit`; normalising it
+   * reflows the text in both.
+   */
+  --text-native-input: 13.3333px;
+
+  /**
+   * The browser's own line-height, as a name.
+   *
+   * Tailwind's `leading-normal` is 1.5, not CSS `normal` — a different thing, and a whole
+   * pixel apart at these sizes. These rules were written without a line-height at all, so
+   * `leading-auto` is how a size utility says "leave it alone": `text-body/auto`.
+   */
+  --leading-auto: normal;
+  /** The three specific line heights the panels ask for, named where they are used. */
+  --leading-tip: 1.4;
+  --leading-diff: 1.45;
+  --leading-key: 1.5;
+
+  /** Wide letter-spacing for the uppercase section labels, on eight of them. */
+  --tracking-caps: 0.04em;
+
+  /**
+   * Three corner sizes, by what the box *is* rather than by how round it looks.
+   *
+   * `sm` is every small control corner — a button, a menu item, a tree row, a segmented
+   * control — because 3px against 5px is invisible on an 18px square, so a second small step
+   * would only invite a coin toss. `graph.css` reads the token directly for the tree rows,
+   * which is why it is spelled out here rather than left implicit at Tailwind's own 0.25rem.
+   *
+   * The split that remains is about depth rather than size: `card` marks something that floats
+   * over the content it belongs to, `shell` marks a modal that covers it.
+   */
+  --radius-sm: 4px;
+  --radius-card: 6px;
+  --radius-shell: 8px;
+  /** The capsule shape. Not a step on the scale — it has to exceed half the pill's height. */
+  --radius-capsule: 10px;
+}
+
+/**
+ * `hover:` without the `@media (hover: hover)` gate Tailwind wraps it in.
+ *
+ * Hover is how the file rows and the goto button are *reached*, not decoration, so a device
+ * that cannot hover must not lose them entirely. Redefining the variant ungates every form
+ * of it at once — `hover:`, `group-hover:`, and the named `group-hover/file:` — which is why
+ * this is one line rather than a parallel variant per group.
+ *
+ * Any reveal-on-hover still needs a focus path for the same reason: `IconButton` pairs
+ * `group-hover/file:visible` with `focus-visible:visible`.
+ */
+@custom-variant hover (&:hover);
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  /**
+   * `line-height: normal`, against Tailwind's preflight.
+   *
+   * Preflight sets `1.5` on `html`, which every element then inherits — and this UI has
+   * rows whose height is pinned in pixels while their contents are not. The command log's
+   * bar is 11px text: at `normal` it measures 28px, at `1.5` it measures 29.5px, and that
+   * half pixel propagates until the page is a pixel taller than every recorded screenshot.
+   * The rules this replaces never set a line-height, so `normal` is what they all assumed.
+   * Anything that needs a specific one sets it: the graph's rows use `line-height: 1` so a
+   * pill's padding grows around its own text rather than around the leading.
+   */
+  html {
+    line-height: normal;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-size: 13px;
+  }
+
+  /**
+   * A light editor theme draws its rails in black; every dark one keeps the white above.
+   *
+   * Nothing detects the mode, and nothing should: VS Code stamps the theme kind on the
+   * webview's body as a class, so the cascade answers the question. Only the light kinds
+   * get a rule. A high-contrast light body can carry `vscode-high-contrast` as well as
+   * `vscode-high-contrast-light`, and with one rule there is no equal-specificity race for
+   * it to lose. The standalone web host sets no class at all and paints from the dark
+   * fallbacks above, so white is already right there.
+   */
+  body.vscode-light,
+  body.vscode-high-contrast-light {
+    --color-rail: #000;
+  }
+
+  /*
+   * React mounts here, so #root is the flex column the top bar and #main are children of.
+   * `min-height: 0` as well as the full height: without it the log panel's percentage
+   * height resolves against an auto-sized parent and the tree stops scrolling.
+   */
+  #root {
+    display: flex;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
+  }
+}

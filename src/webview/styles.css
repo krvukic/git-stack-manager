@@ -1,0 +1,10 @@
+/**
+ * The webview's stylesheet, in load order.
+ *
+ * `theme.css` brings in Tailwind and maps the editor's own theme tokens onto it. `graph.css` is
+ * the commit graph's geometry, which stays hand-written for the reasons its own header gives.
+ *
+ * Everything else is Tailwind utilities on the components, so there is no third file.
+ */
+@import "./theme.css";
+@import "./graph.css";

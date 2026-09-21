@@ -1,0 +1,59 @@
+{
+  /**
+   * The tests, the scripts, and the build configs.
+   *
+   * These are the files no other project claimed: `tsconfig.json` covers `src/` minus the
+   * webview, `tsconfig.webview.json` covers the webview, and everything else was checked only
+   * by the editor's inferred project. So `bun run typecheck` passed while VS Code showed
+   * hundreds of errors, which is the worst arrangement of the two.
+   *
+   * Plain JavaScript, checked. The tests drive the compiled output through `require`, so
+   * they are `.mjs` rather than TypeScript; `checkJs` is what makes a JSDoc annotation
+   * carry weight in them. Types come from the `.d.ts` files `tsc -p .` emits into `out/`,
+   * which is why `just typecheck` builds before it reaches this project.
+   */
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": true,
+    /**
+     * The webview's model tests import `.mts` sources by their real filename, which
+     * Node runs directly through its own type stripping. Nothing is emitted here, so
+     * the specifier never has to be rewritten.
+     */
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "noImplicitAny": true,
+    /**
+     * `strictNullChecks` for the failure messages, not for safety.
+     *
+     * Nearly every error it reported was a test reading a property off a possibly-null
+     * return, where the null already failed the next assertion — so the bug was caught
+     * either way, just as `Cannot read properties of null` naming no field rather than
+     * an assertion naming the value it wanted. Asserting the shape first is what turns
+     * the former into the latter.
+     */
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "noImplicitThis": true,
+    "useUnknownInCatchVariables": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true
+  },
+  "include": [
+    "test/**/*.mjs",
+    "scripts/**/*.mjs",
+    "*.mjs",
+    "*.mts",
+    "*.js"
+  ]
+}

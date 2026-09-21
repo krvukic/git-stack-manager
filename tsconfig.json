@@ -1,0 +1,58 @@
+{
+  "compilerOptions": {
+    "module": "Node16",
+    "target": "ES2022",
+    "lib": [
+      "ES2022"
+    ],
+    "outDir": "out",
+    "rootDir": "src",
+    "strict": true,
+    /**
+     * The checks `strict` leaves out. Each of these was zero errors when it went on, so
+     * they cost nothing to keep and catch the next occurrence rather than this one.
+     * `exactOptionalPropertyTypes` was the exception at two, both in `rebase.ts`, where a
+     * `marker?: string` was assigned `undefined` — the distinction the flag exists for.
+     */
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "exactOptionalPropertyTypes": true,
+    /**
+     * Indexing returns `T | undefined`, which is what the git-output parsers actually get.
+     * A commit with no parents, a hunk header that does not match, a `split()` that yields
+     * fewer fields than the format promised — each one hands back `undefined` at runtime,
+     * and the parsers are where such a value enters the program.
+     */
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    /**
+     * Declarations, for the tests rather than for consumers.
+     *
+     * The tests `require` the compiled output through the same `#git/*` specifiers the
+     * extension uses, so without `.d.ts` files beside it every import lands as `any` and
+     * `tsconfig.tooling.json` reports the whole suite as untyped. `.vscodeignore` keeps
+     * them out of the package.
+     */
+    "declaration": true,
+    "types": [
+      "node",
+      "vscode"
+    ],
+    "moduleResolution": "Node16"
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "out",
+    "test",
+    "src/webview"
+  ]
+}
