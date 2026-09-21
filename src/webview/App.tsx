@@ -255,6 +255,10 @@ export function App({ settings }: { settings: HostSettings }) {
                 discarding={workingCopy.discarding}
                 onPick={smartlog.setPicked}
                 onToggleAll={smartlog.toggleAllPicked}
+                onViewChanges={() => void commitFiles.showWorkingCopyChanges()}
+                onOpenDiff={(file, background) =>
+                  void commitFiles.openWorkingCopyDiff(file, background)
+                }
                 onRequestDiscard={workingCopy.requestDiscard}
                 onConfirmDiscard={() => void workingCopy.confirmDiscard()}
                 onCancelDiscard={workingCopy.cancelDiscard}

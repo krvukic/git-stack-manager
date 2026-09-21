@@ -391,6 +391,18 @@ function blobUri(sha: string, path: string, label: string): vscode.Uri {
 }
 
 /**
+ * A side with no content, for a file the working tree no longer holds. `blobReader` answers with
+ * no bytes when the reference is absent, so leaving the sha and path off the query is the whole
+ * mechanism — the alternative, `Uri.file` of a path that does not exist, makes the diff editor
+ * report a missing file instead of drawing the deletion.
+ */
+function emptyBlobUri(path: string): vscode.Uri {
+  return vscode.Uri.parse(
+    `${DIFF_SCHEME}:/${path}?label=${encodeURIComponent(`${path} (deleted)`)}`
+  );
+}
+
+/**
  * The actions only this host can perform, and the shared controller for the rest.
  *
  * Split out of the message listener so every one of them runs inside the listener's single
@@ -419,7 +431,7 @@ async function runHostAction(
     );
   }
   if (action === "openDiff") {
-    return openDiffEditor({
+    return openDiffEditor(repository, {
       sha: optionalString(payload, "sha"),
       filePath: optionalString(payload, "path"),
       oldPath: optionalString(payload, "oldPath"),
@@ -443,8 +455,9 @@ async function runHostAction(
 }
 
 /**
- * Open one file's diff for a commit: its parent's version on the left, this commit's on
- * the right. A refusal sends the caller to the inline overlay instead.
+ * Open one file's diff: for a commit, its parent's version on the left and the commit's on the
+ * right; with no sha, HEAD's version against the file on disk. A refusal sends the caller to the
+ * inline overlay instead.
  *
  * An image is refused, because the diff editor cannot show one. VS Code draws a `.png`
  * through the *media-preview* extension's custom editor, and a diff editor hosts only text
@@ -453,18 +466,21 @@ async function runHostAction(
  * that is where an image belongs. Every other binary keeps the placeholder: it at least
  * offers to open the file anyway, which is more than the overlay's note does.
  */
-async function openDiffEditor({
-  sha,
-  filePath,
-  oldPath,
-  background,
-}: {
-  sha: string | undefined;
-  filePath: string | undefined;
-  oldPath: string | undefined;
-  background: boolean;
-}): Promise<ActionResult> {
-  if (!sha || !filePath) {
+async function openDiffEditor(
+  repository: Repository,
+  {
+    sha,
+    filePath,
+    oldPath,
+    background,
+  }: {
+    sha: string | undefined;
+    filePath: string | undefined;
+    oldPath: string | undefined;
+    background: boolean;
+  }
+): Promise<ActionResult> {
+  if (!filePath) {
     return { ok: false, error: "No file to diff." };
   }
   if (imageMediaType(filePath)) {
@@ -473,6 +489,13 @@ async function openDiffEditor({
   // A rename's left side is the old path, or the diff would compare against a file that
   // did not exist under this name yet.
   const previousPath = oldPath ?? filePath;
+  if (!sha) {
+    return openWorkingCopyDiff(repository, {
+      filePath,
+      previousPath,
+      background,
+    });
+  }
   const short = sha.slice(0, 8);
   const left = blobUri(`${sha}^`, previousPath, `${previousPath} (parent)`);
   const right = blobUri(sha, filePath, `${filePath} (${short})`);
@@ -481,6 +504,45 @@ async function openDiffEditor({
     left,
     right,
     `${filePath} — ${short} against its parent`,
+    { preview: false, preserveFocus: background }
+  );
+  return { ok: true };
+}
+
+/**
+ * One uncommitted change in the diff editor: HEAD's version on the left, the file itself on the
+ * right.
+ *
+ * The right side is the working file rather than a blob, so it stays editable — a typo noticed
+ * while reading the diff is fixed where it is, which is what Source Control's own change editor
+ * offers. Two shapes need naming: a path git reports as a whole folder of new files is refused,
+ * since the diff editor takes one file, and a file the working tree no longer holds gets an empty
+ * right side so the deletion reads as every line removed.
+ */
+async function openWorkingCopyDiff(
+  repository: Repository,
+  {
+    filePath,
+    previousPath,
+    background,
+  }: { filePath: string; previousPath: string; background: boolean }
+): Promise<ActionResult> {
+  if (filePath.endsWith("/")) {
+    return {
+      ok: false,
+      error: `${filePath} is a folder of new files, and the diff editor takes one file.`,
+    };
+  }
+  const absolutePath = path.join(repository.git.cwd, filePath);
+  const left = blobUri("HEAD", previousPath, `${previousPath} (HEAD)`);
+  const right = fs.existsSync(absolutePath)
+    ? vscode.Uri.file(absolutePath)
+    : emptyBlobUri(filePath);
+  await vscode.commands.executeCommand(
+    "vscode.diff",
+    left,
+    right,
+    `${filePath} — working copy against HEAD`,
     { preview: false, preserveFocus: background }
   );
   return { ok: true };

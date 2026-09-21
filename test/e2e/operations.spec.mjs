@@ -423,10 +423,10 @@ test("discarding one file restores it and leaves the change beside it alone", as
   await reopen(smartlog);
 
   const row = smartlog.locator("#wc .file", { hasText: "src/trim.js" });
-  // Hidden until the pointer is on the row, like the sidebar's openers: an always-visible
-  // delete control on every row of a list a reader scans is one slip away from data loss.
-  await expect(row.locator(".iconbtn.discard")).toBeHidden();
-  await row.hover();
+  // On screen without hovering, as the row's diff opener is. Hidden, it was a control a reader had
+  // to find by sweeping the pointer across rows, which is not how anyone looks for a way to undo
+  // an edit; the confirmation below is what guards the click.
+  await expect(row.locator(".iconbtn.discard")).toBeVisible();
   await row.locator(".iconbtn.discard").click();
   await snapshot("discard-confirm", { locator: smartlog.locator("#wc") });
 
@@ -436,7 +436,6 @@ test("discarding one file restores it and leaves the change beside it alone", as
   await expect(smartlog.locator("#discard-confirm")).toBeEmpty();
   expect(await readFile(trimPath, "utf8")).toBe("// thrown\n");
 
-  await row.hover();
   await row.locator(".iconbtn.discard").click();
   await smartlog.locator("#btn-discard-do").click();
   await expectToast(smartlog, "Discarded src/trim.js");
@@ -459,7 +458,6 @@ test("discarding an untracked file says it deletes the file, and deletes it", as
   await reopen(smartlog);
 
   const row = smartlog.locator("#wc .file", { hasText: "SCRATCH.md" });
-  await row.hover();
   await row.locator(".iconbtn.discard").click();
   // The wording carries the whole difference between the two outcomes, and no commit holds a
   // version of this path to go back to.
@@ -470,6 +468,59 @@ test("discarding an untracked file says it deletes the file, and deletes it", as
   await smartlog.locator("#btn-discard-do").click();
   await expectToast(smartlog, "Deleted SCRATCH.md");
   expect(await demoRepository.git(["status", "--porcelain"])).toBe("");
+});
+
+/**
+ * Reading the uncommitted changes, the half the working-copy list had no answer for: the rows
+ * named the paths and nothing showed what was in them, so the only way to read an edit before
+ * committing it was to go and open the file.
+ *
+ * The browser host has no diff editor, so the row's own opener falls back to the overlay here —
+ * which is what makes both paths assertable in one place.
+ */
+test("the uncommitted chip and each row open the changes overlay", async ({
+  demoRepository,
+  smartlog,
+  snapshot,
+}) => {
+  await demoRepository.git(["checkout", "trim-utils"]);
+  await writeFile(join(demoRepository.path, "src", "trim.js"), "// edited\n");
+  await writeFile(join(demoRepository.path, "FRESH.md"), "alpha\nbeta\n");
+  await reopen(smartlog);
+
+  await smartlog.locator("#btn-wc-changes").click();
+  await expect(smartlog.locator("#changes.open")).toBeVisible();
+  // Not "Changes in <hash>": no commit holds these, and the heading has to say which diff is
+  // on screen.
+  await expect(smartlog.locator("#changes-title")).toContainText(
+    "Uncommitted changes"
+  );
+  // Both halves of the read — git's own diff of a tracked file, and the additions synthesized
+  // for a file git has never seen.
+  await expect(smartlog.locator("#changes .dffile")).toHaveCount(2);
+  await expect(smartlog.locator("#changes")).toContainText("src/trim.js");
+  await expect(smartlog.locator("#changes")).toContainText("FRESH.md");
+  await expect(
+    smartlog.locator("#changes .dffile", { hasText: "FRESH.md" })
+  ).toContainText("@@ -0,0 +1,2 @@");
+  await snapshot("working-copy-changes", {
+    locator: smartlog.locator("#changes"),
+  });
+
+  await smartlog.keyboard.press("Escape");
+  await expect(smartlog.locator("#changes.open")).toBeHidden();
+
+  // One row's own opener, scoped to that file: the title is the path, and the neighbour is not
+  // read at all.
+  const row = smartlog.locator("#wc .file", { hasText: "FRESH.md" });
+  // No hover first. The icon is the only way to read this change, so it stays on screen — the
+  // commit panel's rows, whose plain click opens the same diff, are the ones that may hide it.
+  await expect(row.locator(".iconbtn.diff")).toBeVisible();
+  await row.locator(".iconbtn.diff").click();
+  await expect(smartlog.locator("#changes-title")).toContainText(
+    "FRESH.md — uncommitted"
+  );
+  await expect(smartlog.locator("#changes .dffile")).toHaveCount(1);
 });
 
 test("amending into a commit below HEAD folds the change in and carries the stack", async ({

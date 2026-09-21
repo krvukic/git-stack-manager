@@ -25,6 +25,10 @@ Run `just init-repo` once, then pick a host:
   does the same for the selected file, in VS Code's own diff editor where there is one and in the
   same overlay where there is not. **Open current file** opens the file as it is now. Clicking a
   file name runs one of the last two, chosen in **Design**.
+- **✎ *N* uncommitted changes** opens the same overlay for the changes no commit holds yet, staged
+  ones included, and the diff icon on an uncommitted file's row opens that one change — HEAD's
+  version against the file itself, which stays editable in the diff editor. A file git has never
+  seen reads as every line added, because no `git diff` reports one.
 - **Open all files** opens every file of the selected commit, in the order the list shows them.
   Each tab opens behind the panel, and holding `⌘` — `Ctrl` off a Mac — does the same for a single
   file, whether you click its row or one of its two icons. macOS gives Control-click to the context
@@ -93,7 +97,7 @@ Every one of these is conflict-free and leaves your working copy alone, except w
 - **Amend working changes** into HEAD (`git add -A && git commit --amend --no-edit`).
 - **Absorb** folds each uncommitted change into the commit whose lines it touches, previewing the
   placement first. Anything it cannot place confidently stays put.
-- **Discard** throws one file's uncommitted change away, from the icon on its row — the control
+- **Discard** throws one file's uncommitted change away, from the ✕ on its row — the control
   Source Control puts in the same place. A tracked file goes back to the version in the commit you
   are on; a file no commit holds yet is deleted, and the card says which of the two is about to
   happen. Every other change stays. This one touches files and Undo does not reach it, so it asks

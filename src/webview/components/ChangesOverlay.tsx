@@ -1,6 +1,6 @@
 /**
  * Every change in a commit, as one scrollable read-only view — Sapling's "View Changes in
- * <hash>".
+ * <hash>" — and the same view for the uncommitted changes, which no commit holds.
  *
  * Shared with the per-file diff rather than written twice: `onlyPath` narrows it to one
  * file, which is what the web host falls back to when asked for a diff editor it does not
@@ -20,11 +20,17 @@ import { Modal } from "./Modal";
 export type ChangesState =
   | { state: "loading"; title: string }
   | { state: "error"; title: string; error: string }
-  | { state: "ready"; title: string; sha: string; files: FileDiff[] }
+  | {
+      state: "ready";
+      title: string;
+      /** The commit being read, or null for the uncommitted changes, which no commit holds. */
+      sha: string | null;
+      files: FileDiff[];
+    }
   | null;
 
 /** One file's heading, its counts, and its hunks. */
-function FileDiffView({ sha, file }: { sha: string; file: FileDiff }) {
+function FileDiffView({ sha, file }: { sha: string | null; file: FileDiff }) {
   return (
     <div className="dffile mb-3 rounded-card border border-edge">
       <div className="flex items-center gap-2 border-b border-b-edge bg-card px-2 py-1.25 font-[monospace] text-body">
@@ -61,15 +67,16 @@ function FileDiffView({ sha, file }: { sha: string; file: FileDiff }) {
  *
  * On sight rather than with the diff, because the blobs travel as base64 and a commit that
  * adds a folder of icons would otherwise hold the whole overlay behind a megabyte of them.
- * Once fetched, the observer is dropped — the reference is a sha and a path, so the answer
- * cannot change while the overlay is open.
+ * Once fetched, the observer is dropped: for a commit the reference is a sha and a path, so the
+ * answer cannot change, and for the working copy a picture edited while the overlay is open is
+ * worth less than re-fetching every image on every scroll.
  */
 type PreviewState =
   | { state: "waiting" }
   | { state: "error"; error: string }
   | { state: "ready"; preview: ImagePreview };
 
-function ImageDiffView({ sha, file }: { sha: string; file: FileDiff }) {
+function ImageDiffView({ sha, file }: { sha: string | null; file: FileDiff }) {
   const [state, setState] = useState<PreviewState>({ state: "waiting" });
   const anchor = useRef<HTMLDivElement | null>(null);
 
@@ -86,7 +93,9 @@ function ImageDiffView({ sha, file }: { sha: string; file: FileDiff }) {
       // otherwise fetch the same blobs again.
       observer.disconnect();
       void rpc<ImagePreview>("imagePreview", {
-        sha,
+        // Left off for the working copy, where the after side is the file on disk rather than
+        // any commit's blob.
+        sha: sha ?? undefined,
         path: file.path,
         oldPath: file.oldPath,
       }).then(response => {
@@ -244,7 +253,11 @@ export function ChangesOverlay({
               <FileDiffView key={file.path} sha={changes.sha} file={file} />
             ))
           ) : (
-            <div className="text-muted">No changes in this commit.</div>
+            <div className="text-muted">
+              {changes.sha
+                ? "No changes in this commit."
+                : "No uncommitted changes."}
+            </div>
           )
         ) : null}
       </div>

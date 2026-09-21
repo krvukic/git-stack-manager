@@ -38,6 +38,10 @@ export type WorkingCopyProps = {
   discarding: boolean;
   onPick: (path: string, picked: boolean) => void;
   onToggleAll: () => void;
+  /** Every uncommitted change at once, in the overlay the commit rows open. */
+  onViewChanges: () => void;
+  /** One change in the diff editor, or the overlay when the host has none. */
+  onOpenDiff: (file: FileChange, background: boolean) => void;
   onRequestDiscard: (file: FileChange) => void;
   onConfirmDiscard: () => void;
   onCancelDiscard: () => void;
@@ -64,6 +68,8 @@ export function WorkingCopy({
   discarding,
   onPick,
   onToggleAll,
+  onViewChanges,
+  onOpenDiff,
   onRequestDiscard,
   onConfirmDiscard,
   onCancelDiscard,
@@ -87,11 +93,27 @@ export function WorkingCopy({
   return (
     <div id="wc" className="mb-2">
       <div className="flex flex-wrap items-center gap-2">
-        {/* Dashed rather than solid: these changes are not committed to anything yet, and the
-            border says so before the label is read. */}
-        <span className="chip inline-flex cursor-pointer items-center gap-1.5 rounded-shell border border-dashed border-edge px-2 py-0.75 text-body/auto text-mod">
+        {/*
+          Dashed rather than solid: these changes are not committed to anything yet, and the
+          border says so before the label is read.
+
+          A button, because it opens every uncommitted change in the overlay — the same reading
+          a commit's *View changes* gives, for the changes no commit holds. It kept `cursor-pointer`
+          through several versions without a click behind it, so the pointer was already promising
+          this.
+        */}
+        <button
+          type="button"
+          id="btn-wc-changes"
+          className="chip inline-flex cursor-pointer items-center gap-1.5 rounded-shell border border-dashed border-edge bg-transparent px-2 py-0.75 font-[inherit] text-body/auto text-mod"
+          title="Read every uncommitted change against HEAD"
+          onClick={event => {
+            event.stopPropagation();
+            onViewChanges();
+          }}
+        >
           {`✎ ${count} uncommitted change${count > 1 ? "s" : ""}`}
-        </span>
+        </button>
         <span className="text-meta text-muted" id="wc-selcount">
           {allPicked ? "" : `${picked} of ${count} selected`}
         </span>
@@ -183,6 +205,7 @@ export function WorkingCopy({
             file={file}
             picked={pickedPaths.has(file.path)}
             onPick={isPicked => onPick(file.path, isPicked)}
+            onOpenDiff={background => onOpenDiff(file, background)}
             onDiscard={() => onRequestDiscard(file)}
           />
         ))}

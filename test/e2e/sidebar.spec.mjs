@@ -41,7 +41,8 @@ test("a dirty working copy shows the uncommitted chip and its files", async ({
     "export const collapseWhitespace = (s) => s.replace(/\\s+/g, ' ').trim().normalize();\n"
   );
   await reopen(smartlog);
-  await smartlog.locator("#wc .chip").click();
+  // No click first: the rows are on screen as soon as there is a selection to make, and the
+  // chip now opens the changes overlay, which `operations.spec.mjs` reads.
   await expect(smartlog.locator("#wc .files .file")).toBeVisible();
   await snapshot("uncommitted-changes");
 });

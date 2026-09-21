@@ -174,19 +174,33 @@ const ACTIONS: Record<string, ActionHandler> = {
   },
 
   /**
-   * Both versions of one image in a commit, which `commitDiff` cannot carry.
+   * The same read for changes no commit holds: the working copy against HEAD, staged changes
+   * included. `path` narrows it to one row of the working-copy list, since reading every
+   * untracked file to show one of them is waste the commit reader never has to consider.
+   */
+  async workingCopyDiff(controller, payload) {
+    const diff = await controller.repository.diffForWorkingCopy(
+      optionalString(payload, "path")
+    );
+    return { ok: true, data: diff };
+  },
+
+  /**
+   * Both versions of one image, which neither diff can carry. `sha` names the commit; without
+   * one the subject is the working copy, where the right-hand side is the file on disk.
    *
-   * Separate from `commitDiff` and asked for per file, because a commit that adds forty
+   * Separate from the diff readers and asked for per file, because a commit that adds forty
    * icons would otherwise put forty base64 blobs into one reply the overlay needs before it
    * can draw a single line of text. The overlay asks only for the file a reader has scrolled
    * to, so a preview costs its own read and nothing else does.
    */
   async imagePreview(controller, payload) {
-    const preview = await controller.repository.imagePreview(
-      requireString(payload, "sha"),
-      requireString(payload, "path"),
-      optionalString(payload, "oldPath")
-    );
+    const path = requireString(payload, "path");
+    const oldPath = optionalString(payload, "oldPath");
+    const sha = optionalString(payload, "sha");
+    const preview = sha
+      ? await controller.repository.imagePreview(sha, path, oldPath)
+      : await controller.repository.workingCopyImagePreview(path, oldPath);
     return { ok: true, data: preview };
   },
 

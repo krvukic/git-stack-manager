@@ -3,6 +3,31 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-21
+
+Reading an uncommitted change before deciding what to do with it.
+
+### Added
+
+- The **✎ N uncommitted changes** chip opens every uncommitted change in the changes overlay, the
+  same view a commit's **View changes** gives. Staged changes are included, so what the overlay
+  shows and what the checkboxes commit agree.
+- A diff icon on each uncommitted file's row opens that one change: in VS Code, a diff editor with
+  the version at HEAD on the left and the file itself on the right, which stays editable — a typo
+  noticed while reading is fixed where it is. In the browser, which has no diff editor, the row
+  falls back to the overlay scoped to that file. The icon stays on screen rather than waiting for
+  the pointer, because it is the only way to read the change; a commit's file row, whose plain click
+  opens the same diff, still reveals its icons on hover.
+- A file git has never seen is shown too, as every line added, since no `git diff` reports one. An
+  untracked image is drawn as a picture, and one too large to draw carries its size instead.
+
+### Changed
+
+- The discard icon is a **✕** and stays on screen rather than appearing on hover, turning the
+  deletion colour under the pointer. Hidden, it was a control a reader had to find by sweeping the
+  pointer across rows, which is not how anyone looks for a way to undo an edit; the confirmation
+  dialog is what guards the click.
+
 ## [0.4.1] - 2026-09-21
 
 Seeing an edit in the panel without having to do something to it first.

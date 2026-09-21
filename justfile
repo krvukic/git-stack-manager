@@ -129,9 +129,11 @@ init-e2e:
 test-e2e *args: build
     bunx playwright test {{args}}
 
-# Re-record the end-to-end snapshots. Review the diff, because it is the assertion.
+# Re-record every end-to-end snapshot. Review the diff, because it is the assertion.
+# `=all` rather than the bare flag: see test/e2e/fixtures/snapshot.mjs on why "changed" leaves a
+# small drift in place.
 test-e2e-update: build
-    bunx playwright test --update-snapshots
+    bunx playwright test --update-snapshots=all
 
 # Open the HTML report from the last end-to-end run
 test-e2e-report:

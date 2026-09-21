@@ -9,7 +9,12 @@ import {
   toDataUri,
 } from "#core/media";
 import { uniqueSorted } from "#core/values";
-import { CommitDiff, readCommitDiff } from "#git/diff";
+import {
+  CommitDiff,
+  readCommitDiff,
+  readWorkingCopyDiff,
+  WorkingCopyDiff,
+} from "#git/diff";
 import { readRawData } from "#git/reader";
 import { GitError, GitRunner } from "#git/runner";
 import { FileChange, RawData } from "#git/snapshot";
@@ -76,6 +81,50 @@ function describeFiles(files: FileChange[]): string {
   const named = files.slice(0, 2).map(file => file.path);
   const rest = files.length - named.length;
   return rest ? `${named.join(", ")} and ${rest} more` : named.join(", ");
+}
+
+/**
+ * Two sides of one image as `data:` URIs, from whichever bytes the caller found.
+ *
+ * Refuses rather than returning an empty preview, because every refusal is something the reader
+ * wants said: a format nothing here draws, or bytes too large to send inline. The overlay prints
+ * the refusal where the picture would have gone. A missing side is not a refusal — an addition
+ * has no before, a deletion no after — and travels as null.
+ *
+ * Shared by the commit and working-copy readers, which differ only in where the bytes come from.
+ */
+function buildImagePreview(
+  path: string,
+  before: Buffer | null,
+  after: Buffer | null
+): ImagePreview {
+  const mediaType = imageMediaType(path);
+  if (!mediaType) {
+    throw new GitError(
+      `No preview for ${path} — open it in an editor instead.`,
+      "preview"
+    );
+  }
+  const oversized = [before, after].find(
+    blob => blob !== null && blob.length > PREVIEW_BYTE_LIMIT
+  );
+  if (oversized) {
+    throw new GitError(
+      `${path} is ${Math.round(oversized.length / 1024)} KB — too large to preview. Open it in an editor instead.`,
+      "preview"
+    );
+  }
+  return {
+    mediaType,
+    before: before && {
+      dataUri: toDataUri(mediaType, before),
+      bytes: before.length,
+    },
+    after: after && {
+      dataUri: toDataUri(mediaType, after),
+      bytes: after.length,
+    },
+  };
 }
 
 export class Repository {
@@ -153,50 +202,39 @@ export class Repository {
   /**
    * Both versions of an image in a commit, as `data:` URIs the viewer can draw.
    *
-   * Refuses rather than returning an empty preview, because every refusal is something the
-   * reader wants said: a format nothing here draws, or a blob too large to send inline. The
-   * overlay prints the refusal where the picture would have gone.
-   *
    * A rename's `before` is read under the old path, or the read would look for a file that
    * did not exist under this name yet and the preview would show the addition of something
-   * that merely moved.
+   * that merely moved. `buildImagePreview` owns the two refusals.
    */
   async imagePreview(
     sha: string,
     path: string,
     oldPath?: string
   ): Promise<ImagePreview> {
-    const mediaType = imageMediaType(path);
-    if (!mediaType) {
-      throw new GitError(
-        `No preview for ${path} — open it in an editor instead.`,
-        "preview"
-      );
-    }
     const [before, after] = await Promise.all([
       this.showFileBytes(`${sha}^`, oldPath ?? path),
       this.showFileBytes(sha, path),
     ]);
-    const oversized = [before, after].find(
-      blob => blob !== null && blob.length > PREVIEW_BYTE_LIMIT
-    );
-    if (oversized) {
-      throw new GitError(
-        `${path} is ${Math.round(oversized.length / 1024)} KB — too large to preview. Open it in an editor instead.`,
-        "preview"
-      );
-    }
-    return {
-      mediaType,
-      before: before && {
-        dataUri: toDataUri(mediaType, before),
-        bytes: before.length,
-      },
-      after: after && {
-        dataUri: toDataUri(mediaType, after),
-        bytes: after.length,
-      },
-    };
+    return buildImagePreview(path, before, after);
+  }
+
+  /**
+   * Both versions of an image whose change is not committed: HEAD's on the left, the bytes on
+   * disk on the right.
+   *
+   * The right-hand side is read from the working tree, which is the whole difference from
+   * `imagePreview` — an uncommitted change has no blob for `git show` to name. Either side can
+   * be absent, as above: an untracked image has no version in HEAD, a deleted one has no file.
+   */
+  async workingCopyImagePreview(
+    path: string,
+    oldPath?: string
+  ): Promise<ImagePreview> {
+    const [before, after] = await Promise.all([
+      this.showFileBytes("HEAD", oldPath ?? path),
+      this.git.readWorktreeFile(path),
+    ]);
+    return buildImagePreview(path, before, after);
   }
 
   /**
@@ -208,6 +246,16 @@ export class Repository {
    */
   diffForCommit(sha: string): Promise<CommitDiff> {
     return readCommitDiff(this.git, sha);
+  }
+
+  /**
+   * Every uncommitted change, as parsed hunks, or one row's worth when `path` names one.
+   *
+   * Scoped where `diffForCommit` is not, because the two cost differently: a commit is one
+   * `git show` however many files it holds, while each untracked file here is a read of its own.
+   */
+  diffForWorkingCopy(path?: string): Promise<WorkingCopyDiff> {
+    return readWorkingCopyDiff(this.git, path);
   }
 
   async checkout(ref: string, detach = false): Promise<void> {

@@ -54,10 +54,18 @@
  *
  * ── Re-recording ──
  *
- * `just test-e2e-update` rewrites every failing picture without asking, so the
- * review of the resulting diff is the only thing standing between a UI change and
- * a baseline that asserts a bug. Read each changed PNG and name the cause before
- * committing it. Two traps found the hard way:
+ * `just test-e2e-update` rewrites every picture without asking, so the review of the
+ * resulting diff is the only thing standing between a UI change and a baseline that
+ * asserts a bug. Read each changed PNG and name the cause before committing it.
+ * Three traps found the hard way:
+ *
+ * The recipe passes `--update-snapshots=all`, which photographs afresh rather than
+ * rewriting only what failed. `=changed`, which is what the bare flag means, returns
+ * early on any picture that compares within the tolerance — so a drift small enough
+ * to pass is also a drift the flag will not correct, and the baseline stays wrong
+ * for as long as it keeps passing. That is how the missing button above survived.
+ * Recording all of them takes nine seconds and reproduces byte for byte, so there is
+ * nothing to weigh against it.
  *
  * A failing snapshot aborts its test, so the later snapshots in that same test are
  * never compared and never reported as failures — yet `--update-snapshots` rewrites
@@ -80,10 +88,32 @@ expect.extend({ toHaveScreenshotOdiff });
  * Allowed fraction of differing pixels.
  *
  * Not zero: font rasterisation differs by a pixel or two between machines, and a
- * suite that fails on that gets ignored. At 1400x1000 this still catches a shifted
- * row — roughly 700 pixels, well under one row of text.
+ * suite that fails on that gets ignored. At 1400x1000 this is 140 pixels, about one
+ * short word — a tenth of what a button costs.
+ *
+ * It was 0.0005 and that was too much to notice a change by. Every full-page
+ * baseline photographed a sidebar with no *Open all files* button in it, several
+ * versions after the button shipped, and the suite went on passing: the page is
+ * 1.6 million pixels, so 0.0005 bought a 800-pixel budget, and a button is 1,500
+ * pixels of which the comparison below was discounting most.
  */
-const MAX_DIFF_PIXEL_RATIO = 0.0005;
+const MAX_DIFF_PIXEL_RATIO = 0.0001;
+
+/**
+ * How odiff decides two pixels differ.
+ *
+ * Both of these are stricter than `playwright-odiff`'s defaults, which are
+ * `threshold: 0.2` with `antialiasing: true` — and those defaults are what let the
+ * missing button above go unseen. Antialiasing detection discounts any pixel it can
+ * read as a softened edge, which is most of the pixels in a grey label on a grey
+ * chip, and 0.2 of colour distance covers the rest. Together they made a picture of
+ * the wrong UI compare equal to one of the right UI.
+ *
+ * `threshold: 0.1` is odiff's own default, and the antialiasing pass is off because
+ * the alternative to catching softened edges here is catching nothing. Text is what
+ * these pictures are mostly made of.
+ */
+const ODIFF_STRICT = { threshold: 0.1, antialiasing: false };
 
 /**
  * Take the toast and the tooltip out of frame.
@@ -187,6 +217,7 @@ export function createSnapshotTaker(page) {
     await hideTimedLayers(page);
     const target = locator ?? page;
     await expect(target).toHaveScreenshotOdiff(`${name}.png`, {
+      ...ODIFF_STRICT,
       mask: [...mask, page.locator("#pr-freshness")],
       maxDiffPixelRatio: MAX_DIFF_PIXEL_RATIO,
       // The app has no CSS transitions, so this only guards against one being

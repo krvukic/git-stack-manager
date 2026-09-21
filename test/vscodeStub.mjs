@@ -150,6 +150,7 @@ export function createVscodeStub({ repositoryPath, configuration = {} }) {
   const executed = [];
   /** @type {string[]} */
   const terminalCommands = [];
+  let nextCallId = 1;
 
   const panel = {
     visible: true,
@@ -290,6 +291,33 @@ export function createVscodeStub({ repositoryPath, configuration = {} }) {
     commands,
     executed,
     terminalCommands,
+    /**
+     * Post one action into the host and wait for the reply carrying its id — the same round
+     * trip `webview/rpc.ts` makes. Driving an action any other way is not possible: the
+     * dispatcher is closed over inside the panel's listener.
+     *
+     * @param {string} action
+     * @param {Record<string, unknown>} payload
+     * @returns {Promise<{ ok: boolean, error?: string, data?: unknown }>}
+     */
+    async call(action, payload = {}) {
+      const id = nextCallId++;
+      messageReceived.fire({ id, action, payload });
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const reply = posted.find(
+          message =>
+            typeof message === "object" &&
+            message !== null &&
+            /** @type {{ id?: unknown }} */ (message).id === id
+        );
+        if (reply) {
+          return /** @type {{ ok: boolean }} */ (reply);
+        }
+        // The listener awaits git, so the reply lands a macrotask or several later.
+        await new Promise(resolve => setTimeout(resolve, 5));
+      }
+      throw new Error(`The host never answered ${action}.`);
+    },
     /** @param {string} filePath */
     uriFor: (/** @type {string} */ filePath) => Uri.file(filePath),
     fire: {

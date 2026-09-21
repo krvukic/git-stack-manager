@@ -87,8 +87,11 @@ expected one, so reviewing `test/e2e/snapshots/` *is* the workflow.
 leaves out.
 
 Comparison runs through [odiff](https://github.com/dmtrKovalenko/odiff) via `playwright-odiff`,
-tolerating a 0.0005 pixel ratio. That is roughly 700 pixels at this viewport: enough to absorb a
-rasterisation difference and still catch a shifted row.
+tolerating a 0.0001 pixel ratio — about 140 pixels at this viewport, a short word — and overriding
+the library's `threshold` and antialiasing defaults, which are loose enough to read a picture of the
+wrong UI as equal. `just test-e2e-update` records with `--update-snapshots=all` rather than the bare
+flag, since the bare flag corrects only what failed and leaves a drift small enough to pass in
+place. `test/e2e/fixtures/snapshot.mjs` gives the numbers and what the old ones cost.
 
 The images are recorded on Linux, and their path carries no `{platform}` segment on purpose. A
 per-platform baseline is in practice a per-developer baseline, and the second one goes stale. Text

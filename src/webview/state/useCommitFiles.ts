@@ -1,13 +1,14 @@
 /**
  * What a commit changed, and every way of looking at it: the panel's file list, one file's
- * diff, the file as it is now, and the whole-commit diff overlay.
+ * diff, the file as it is now, and the whole-commit diff overlay. The working copy's own changes
+ * travel the same paths, one read and one opener apart.
  *
  * Reads only — nothing here changes the repository, which is why it is separate from the action
  * hooks. The host decides how a diff opens: VS Code has a diff editor, the web host has none,
  * so a refusal falls back to the overlay scoped to one file. That keeps the button meaningful
  * in both hosts rather than disabled in one.
  */
-import type { CommitDiff } from "#git/diff";
+import type { CommitDiff, WorkingCopyDiff } from "#git/diff";
 import type { FileChange } from "#git/snapshot";
 import { useCallback, useEffect, useState } from "react";
 import type { ChangesState } from "../components/ChangesOverlay";
@@ -82,6 +83,38 @@ export function useCommitFiles(smartlog: Smartlog) {
   );
 
   /**
+   * The same read for the changes no commit holds: the working copy against HEAD, staged changes
+   * included. `onlyPath` scopes the read rather than filtering its answer, unlike `showChanges`
+   * above — an untracked file is read from disk to be shown, so asking for one row must not read
+   * every other one first.
+   */
+  const showWorkingCopyChanges = useCallback(
+    async (onlyPath: string | null = null) => {
+      const title = onlyPath
+        ? `${onlyPath} — uncommitted`
+        : "Uncommitted changes";
+      setChanges({ state: "loading", title });
+      const response = await rpc<WorkingCopyDiff>(
+        "workingCopyDiff",
+        onlyPath ? { path: onlyPath } : {}
+      );
+      if (!response.ok) {
+        setChanges({ state: "error", title, error: response.error });
+        return;
+      }
+      // Null where a commit's read carries a sha, which is what tells an image to fetch its
+      // after side from disk.
+      setChanges({
+        state: "ready",
+        title,
+        sha: null,
+        files: response.data?.files ?? [],
+      });
+    },
+    []
+  );
+
+  /**
    * `background` asks the host for a tab that does not take focus, which is what a
    * modifier-click means; the web host has no tabs and ignores it.
    */
@@ -99,6 +132,26 @@ export function useCommitFiles(smartlog: Smartlog) {
       await showChanges(sha, file.path);
     },
     [showChanges]
+  );
+
+  /**
+   * One uncommitted change in the diff editor: HEAD's version against the file on disk. No sha
+   * in the request is what says so, and the web host — which has no diff editor at all — falls
+   * back to the overlay scoped to this file, exactly as a commit's diff does.
+   */
+  const openWorkingCopyDiff = useCallback(
+    async (file: FileChange, background = false) => {
+      const response = await rpc("openDiff", {
+        path: file.path,
+        oldPath: file.oldPath,
+        background,
+      });
+      if (response.ok) {
+        return;
+      }
+      await showWorkingCopyChanges(file.path);
+    },
+    [showWorkingCopyChanges]
   );
 
   const openCurrentFile = useCallback(
@@ -143,7 +196,9 @@ export function useCommitFiles(smartlog: Smartlog) {
     changes,
     closeChanges,
     showChanges,
+    showWorkingCopyChanges,
     openFileDiff,
+    openWorkingCopyDiff,
     openCurrentFile,
     openAllFiles,
   };

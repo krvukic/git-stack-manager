@@ -78,27 +78,52 @@ export function Button({
 }
 
 /**
+ * What an icon button's hover says about the action behind it. `quiet` is every opener — a diff,
+ * a file, a drawer — and `danger` marks the one that destroys something, so a pointer resting on
+ * *discard* turns the deletion colour rather than the neutral one it shares with the openers.
+ */
+export type IconTone = "quiet" | "danger";
+
+const ICON_TONES: Record<IconTone, string> = {
+  quiet: "text-muted hover:bg-button-2 hover:text-fg",
+  danger: "text-muted hover:bg-del/18 hover:text-del",
+};
+
+export type IconButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  tone?: IconTone;
+  /**
+   * Keep the glyph on screen when the row is not hovered. Off by default: a row carrying three
+   * openers would otherwise be three glyphs of noise per file. An action worth finding without
+   * hovering for it sets this.
+   */
+  alwaysVisible?: boolean;
+};
+
+/**
  * A square button carrying one glyph, for actions that sit inside a row.
  *
- * Hidden until the row is hovered or this is focused. `visibility` rather than `display`, so
- * the row's width does not change when it appears — a path that reflowed under the pointer
- * would be a moving target. Focus is what makes them reachable by keyboard, where there is
- * no hover to rely on.
+ * Hidden until the row is hovered or this is focused, unless `alwaysVisible` says otherwise.
+ * `visibility` rather than `display`, so the row's width does not change when it appears — a path
+ * that reflowed under the pointer would be a moving target. Focus is what makes them reachable by
+ * keyboard, where there is no hover to rely on.
  */
 export function IconButton({
+  tone = "quiet",
+  alwaysVisible = false,
   className,
   ...rest
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+}: IconButtonProps) {
   return (
     <button
       className={classes(
         // `iconbtn` carries no styling — the utilities below do that — but the end-to-end
         // suite selects these by it, and a class the tests name is part of the contract.
         "iconbtn",
-        "invisible h-4.5 w-5 flex-none cursor-pointer rounded-sm bg-transparent p-0",
-        "text-meta/none text-muted",
-        "group-hover/file:visible focus-visible:visible",
-        "hover:bg-button-2 hover:text-fg",
+        "h-4.5 w-5 flex-none cursor-pointer rounded-sm bg-transparent p-0",
+        "text-meta/none",
+        !alwaysVisible &&
+          "invisible group-hover/file:visible focus-visible:visible",
+        ICON_TONES[tone],
         "focus-visible:outline focus-visible:outline-accent",
         className
       )}

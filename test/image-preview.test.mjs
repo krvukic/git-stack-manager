@@ -1,5 +1,5 @@
 /**
- * Reading an image out of a commit, for the overlay to draw.
+ * Reading an image out of a commit — or out of the working copy — for the overlay to draw.
  *
  * `git diff` says only "Binary files … differ" about a PNG, so the preview reads the blobs
  * instead — which puts every case the diff never had to answer here: a side that does not
@@ -9,6 +9,8 @@
  */
 import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
+import { rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import { PREVIEW_BYTE_LIMIT } from "#core/media";
 import {
@@ -130,6 +132,55 @@ test("a format the viewer cannot draw is refused by name", async t => {
     () => repository.imagePreview(shaOf(repo, "HEAD"), "blob.bin"),
     /blob\.bin/
   );
+});
+
+/**
+ * The working copy's version of the same read. Its after side is the file on disk rather than any
+ * commit's blob, which is the whole difference — and the case that breaks if the two are confused
+ * is this one: the bytes on screen must be the edit, not the version HEAD still holds.
+ */
+test("an edited image reads HEAD's version before and the file on disk after", async t => {
+  const { repo, repository } = buildFixture(t, "gsm-preview-wc-mod-");
+  commitFile(repo, "art/logo.png", TEAL_PNG, "add the logo");
+  writeFileSync(join(repo, "art/logo.png"), AMBER_PNG);
+
+  const preview = await repository.workingCopyImagePreview("art/logo.png");
+
+  assert.deepEqual(
+    bytesOf(present(preview.before, "HEAD's version").dataUri),
+    TEAL_PNG
+  );
+  assert.deepEqual(
+    bytesOf(present(preview.after, "the file on disk").dataUri),
+    AMBER_PNG
+  );
+});
+
+test("an untracked image has no version at HEAD, and says so with a null side", async t => {
+  const { repo, repository } = buildFixture(t, "gsm-preview-wc-new-");
+  writeFileSync(join(repo, "fresh.png"), TEAL_PNG);
+
+  const preview = await repository.workingCopyImagePreview("fresh.png");
+
+  assert.equal(preview.before, null);
+  assert.deepEqual(
+    bytesOf(present(preview.after, "the file on disk").dataUri),
+    TEAL_PNG
+  );
+});
+
+test("an image deleted from the working copy keeps the version HEAD holds", async t => {
+  const { repo, repository } = buildFixture(t, "gsm-preview-wc-del-");
+  commitFile(repo, "logo.png", TEAL_PNG, "add the logo");
+  rmSync(join(repo, "logo.png"));
+
+  const preview = await repository.workingCopyImagePreview("logo.png");
+
+  assert.deepEqual(
+    bytesOf(present(preview.before, "HEAD's version").dataUri),
+    TEAL_PNG
+  );
+  assert.equal(preview.after, null);
 });
 
 test("an image past the byte limit is refused with its size, not sent to the webview", async t => {

@@ -82,42 +82,50 @@ function FilePath({ path, className }: { path: string; className?: string }) {
   );
 }
 
+/**
+ * A working-copy row: the checkbox that decides whether the change goes into the next commit or
+ * amend, then the two things to do with the change — read it, or throw it away.
+ *
+ * Clicking the row selects nothing and opens nothing. The whole row used to be one target for
+ * ticking, which made a diff icon beside it a click the pointer had to land on precisely; keeping
+ * the toggles on the box and the status letter is what leaves the rest of the row free.
+ *
+ * Both icons stay on screen, unlike a commit's row, where hovering reveals them. A commit's row
+ * opens its own diff on a plain click, so its icons are a shortcut to something already reachable;
+ * here the icon is the only way in, and a control that appears only under the pointer is one a
+ * reader has to sweep the rows to find.
+ */
 export function PickableFileRow({
   file,
   picked,
   onPick,
+  onOpenDiff,
   onDiscard,
 }: {
   file: FileChange;
   picked: boolean;
   onPick: (picked: boolean) => void;
+  onOpenDiff: (background: boolean) => void;
   onDiscard: () => void;
 }) {
   return (
     // `pl-0`: this row starts at its checkbox, unlike a commit's file row, which is indented to
     // line up under the panel's heading.
     <div className={classes(FILE_ROW, "pl-0")}>
-      {/*
-        The row's own click opens the file, so the box stops the event — ticking a change must
-        not also open an editor tab for it.
-      */}
       <input
         type="checkbox"
         className="pick mr-0.5 flex-none cursor-pointer"
         checked={picked}
-        onClick={event => event.stopPropagation()}
         onChange={event => onPick(event.target.checked)}
       />
-      <StatusLetter
-        status={file.status}
-        onClick={event => {
-          event.stopPropagation();
-          onPick(!picked);
-        }}
+      <StatusLetter status={file.status} onClick={() => onPick(!picked)} />
+      <FilePath path={file.path} className="flex-1" />
+      <FileAction
+        kind="diff"
+        alwaysVisible
+        description={`Open diff view — this uncommitted change against HEAD. Hold ${BACKGROUND_KEY} to open it in a background tab.`}
+        onRun={onOpenDiff}
       />
-      {/* The path opens the file, so the label must not swallow the click; only the box and the
-          status letter toggle the selection. */}
-      <FilePath path={file.path} className="flex-1 cursor-pointer" />
       <DiscardAction onDiscard={onDiscard} />
     </div>
   );
@@ -130,12 +138,19 @@ export function PickableFileRow({
  * Its own component rather than a third `kind` on `FileAction`, because the two openers read the
  * modifier and this must not. There is no quieter variant of deleting someone's work, so the
  * click always goes through the confirmation the caller opens.
+ *
+ * Shown without hovering, unlike the openers. Hidden, it was a control a reader had to find by
+ * sweeping the pointer across rows, which is not how anyone looks for a way to undo an edit. The
+ * ✕ and the deletion colour on hover carry the warning the hiding was standing in for, and the
+ * confirmation dialog is what actually guards the click.
  */
 function DiscardAction({ onDiscard }: { onDiscard: () => void }) {
   const description = "Discard this change, restoring the file";
   return (
     <IconButton
       className="discard"
+      tone="danger"
+      alwaysVisible
       aria-label={description}
       data-tip={description}
       onClick={(event: React.MouseEvent) => {
@@ -143,8 +158,7 @@ function DiscardAction({ onDiscard }: { onDiscard: () => void }) {
         onDiscard();
       }}
     >
-      {/* A turning arrow, which is what every editor's revert control draws. */}
-      ⟲
+      ✕
     </IconButton>
   );
 }
@@ -202,7 +216,7 @@ export function CommitFileRow({
 }
 
 /**
- * One of a row's hover actions.
+ * One of a row's actions, revealed on hover unless the caller keeps it on screen.
  *
  * Glyphs rather than words because the row is a file path first: a pair of labelled buttons per
  * row would take more width than the paths they belong to. Each still carries its own
@@ -211,15 +225,18 @@ export function CommitFileRow({
 function FileAction({
   kind,
   description,
+  alwaysVisible = false,
   onRun,
 }: {
   kind: "diff" | "file";
   description: string;
+  alwaysVisible?: boolean;
   onRun: (background: boolean) => void;
 }) {
   return (
     <IconButton
       className={kind}
+      alwaysVisible={alwaysVisible}
       aria-label={description}
       data-tip={description}
       onClick={(event: React.MouseEvent) => {

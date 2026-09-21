@@ -1,5 +1,6 @@
 /**
- * diff — read a commit's changes as parsed hunks, for anything that displays them.
+ * diff — read changes as parsed hunks, for anything that displays them. A commit's, or the
+ * working copy's.
  *
  * One reader serves three callers with different needs, which is why it lives here
  * rather than inside any of them: the sidebar's per-file diff, the whole-commit changes
@@ -67,6 +68,14 @@ export type CommitDiff = {
 };
 
 /**
+ * The same file list for changes no commit holds yet. No sha, which is the only difference
+ * the viewer sees: an image here has to be read from disk rather than from a blob.
+ */
+export type WorkingCopyDiff = {
+  files: FileDiff[];
+};
+
+/**
  * Read the diff between `sha` and its first parent.
  *
  * `--find-renames` so a moved file reads as a rename rather than a delete plus an add,
@@ -107,6 +116,139 @@ export async function readCommitDiff(
  * diffed against it without writing an object first.
  */
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+/**
+ * Read every uncommitted change: the working copy against HEAD, staged changes included.
+ *
+ * Two reads, because no single `git diff` covers what the working-copy list shows. `diff HEAD`
+ * reports tracked files — the same set the commit form ticks — and says nothing about a file git
+ * has never seen, so an untracked file's diff is built here from its bytes. That is what
+ * `git diff --no-index` against `/dev/null` would print: with no old side there is nothing to
+ * compare, every line is an addition, and the line walk below is the whole of it. A process per
+ * untracked file would buy nothing and cost forty of them the first time a build directory
+ * escapes the ignore rules.
+ *
+ * `pathspec` scopes both reads to one row of that list. A row can name a directory — `git status`
+ * collapses a folder of new files into `dir/` — which a pathspec handles and a filename would not.
+ */
+export async function readWorkingCopyDiff(
+  git: GitRunner,
+  pathspec?: string
+): Promise<WorkingCopyDiff> {
+  const scope = pathspec ? ["--", pathspec] : [];
+  // A repository with no commit yet has no HEAD to name, and the empty tree stands in for it:
+  // every tracked file then reads as an addition, which is what it is.
+  const hasHead = await git.succeeds([
+    "rev-parse",
+    "--verify",
+    "--quiet",
+    "HEAD",
+  ]);
+  const tracked = await git.run([
+    "diff",
+    "--find-renames",
+    "--unified=3",
+    "--no-color",
+    "--no-ext-diff",
+    hasHead ? "HEAD" : EMPTY_TREE,
+    ...scope,
+  ]);
+  // Tracked first, then untracked, which is the order the working-copy list draws its own rows in.
+  return {
+    files: [
+      ...parseUnifiedDiff(tracked),
+      ...(await untrackedDiffs(git, scope)),
+    ],
+  };
+}
+
+/** Git's own rule for calling a blob binary: a NUL byte in the first 8000 of them. */
+const BINARY_SNIFF_BYTES = 8000;
+
+/**
+ * How much of a new file the viewer is given.
+ *
+ * Untracked is where the large files are — a log, a core dump, a bundle an ignore rule has not
+ * caught — and every line drawn costs the webview a row of its own. A tracked file has no such
+ * limit, because git's own diff of one reports the lines that changed rather than all of them.
+ */
+export const UNTRACKED_DIFF_BYTE_LIMIT = 256 * 1024;
+
+async function untrackedDiffs(
+  git: GitRunner,
+  scope: string[]
+): Promise<FileDiff[]> {
+  const listed = await git.run([
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z",
+    ...scope,
+  ]);
+  const files: FileDiff[] = [];
+  // In sequence, so a directory of new files is read one at a time rather than all at once: the
+  // paths arrive sorted and stay that way, and nothing holds every file open together.
+  for (const path of listed.split("\0").filter(Boolean)) {
+    files.push(await untrackedDiff(git, path));
+  }
+  return files;
+}
+
+/** One untracked file as a diff against nothing. */
+async function untrackedDiff(git: GitRunner, path: string): Promise<FileDiff> {
+  const file: FileDiff = {
+    path,
+    // `?`, the letter git's status gives it and the one the row above shows, rather than the
+    // "new file" a `--no-index` diff reports: nothing has added this file to anything yet.
+    status: "?",
+    hunks: [],
+    previewMediaType: null,
+    note: null,
+    added: 0,
+    removed: 0,
+  };
+  const bytes = await git.readWorktreeFile(path);
+  if (!bytes) {
+    file.note = "Gone — the file was listed and then could not be read.";
+    return file;
+  }
+  if (bytes.subarray(0, BINARY_SNIFF_BYTES).includes(0)) {
+    file.previewMediaType = imageMediaType(path);
+    file.note = "Binary file — no text to show.";
+    return file;
+  }
+  if (bytes.length > UNTRACKED_DIFF_BYTE_LIMIT) {
+    file.note = `New file, ${Math.round(bytes.length / 1024)} KB — too large to show here. Open it instead.`;
+    return file;
+  }
+  const texts = bytes.toString("utf8").split("\n");
+  // A trailing newline ends the last line rather than starting an empty one after it.
+  if (texts.at(-1) === "") {
+    texts.pop();
+  }
+  if (!texts.length) {
+    file.note = "New and empty — no lines to show.";
+    return file;
+  }
+  const lines: DiffLine[] = texts.map((text, index) => ({
+    kind: "add",
+    text,
+    oldNumber: null,
+    newNumber: index + 1,
+  }));
+  file.added = lines.length;
+  file.hunks = [
+    {
+      // The header git writes for a file with no old side, so the viewer's gutters read the
+      // same here as they do for a commit's addition.
+      header: `@@ -0,0 +1,${lines.length} @@`,
+      oldStart: 0,
+      newStart: 1,
+      lines,
+    },
+  ];
+  return file;
+}
 
 /**
  * Parse unified diff text into per-file hunks.
