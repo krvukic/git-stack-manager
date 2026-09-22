@@ -248,7 +248,7 @@ export function ConfigDrawer({
         </Hint>
       </Group>
       <Group>
-        <GroupLabel>Merged pull requests</GroupLabel>
+        <GroupLabel>Auto-remove merged commits</GroupLabel>
         <Segmented
           id="seg-deletemerged"
           attribute="deletemerged"

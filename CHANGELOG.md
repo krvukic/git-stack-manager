@@ -3,6 +3,13 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-09-22
+
+### Changed
+
+- The **Config** setting that deletes merged branches is titled **Auto-remove merged commits**,
+  which names what leaves the tree.
+
 ## [0.7.0] - 2026-09-22
 
 Clearing merged branches out of the tree, without risking work the merge never saw.
