@@ -27,13 +27,28 @@ without saving and restoring it. And `git commit -- <path>` rejects a path git d
 so every selected path is `git add`ed first, which also stages a deletion and so covers modify, add,
 and delete on one code path.
 
+**Choosing lines** (`src/history/partialSelection.ts`) follows Sapling: every changed line starts
+chosen, so a selection records the lines left out, and a file taken whole sends nothing. A pathspec
+commit takes each path whole from the working tree, so a selection with any partly chosen file is
+committed from a scratch index instead (`src/history/chosenChanges.ts`). The index starts as HEAD,
+`git add` stages the chosen paths so clean filters and modes apply, and each partly chosen file is
+replaced with a blob rebuilt from its two blobs. The working tree is never written, so the lines
+left out stay exactly where they were.
+
+A line is named by its side and number, since the text cannot tell two identical lines apart. Those
+numbers belong to one diff, so each file's choice carries a fingerprint of the diff it was made on.
+The host refuses a stale fingerprint with nothing changed. The webview asks for fingerprints after
+every refresh and puts a file whose diff moved back to whole, since committing the old numbers
+would leave out a different line.
+
 Amending into HEAD is git's own `commit --amend`. Anything below HEAD cannot be, since `--amend`
-rewrites HEAD's parentage and would orphan the descendants. The content is therefore grafted onto
-the target's tree, and `rebuildStack` recreates the commits above it. Every descendant needs the
-graft too, not just the target: `rebuildStack` reuses a commit's original tree unless given a new
-one, and that tree still holds the pre-amend content, so grafting only the target leaves the next
-commit up reverting it. A descendant that changes the same path keeps its own version, since the
-user edited that content later.
+rewrites HEAD's parentage and would orphan the descendants. `amendIntoAncestor` therefore gives
+each commit from the target up its own copy of every changed file, and `rebuildStack` recreates
+them. A file no later commit touched takes the new content everywhere. A text file a later commit
+edited goes line by line through `amendPlacement`, which puts the change in the target and leaves
+each later commit exactly its own lines. A change that would rewrite a later commit's line is
+refused, naming that commit. Grafting the whole working file into the target, as amend did before,
+put the later commit's edit in the target and let the later commit revert it.
 
 The target has to be an ancestor of HEAD. Working-copy content only makes sense in a commit the
 working copy descends from: grafting sideways into another branch put the change in two places at

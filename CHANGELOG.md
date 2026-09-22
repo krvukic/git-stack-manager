@@ -3,6 +3,30 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-22
+
+Committing part of a file, and amending it into any commit under the one you are on.
+
+### Added
+
+- The **±** on an uncommitted file's row opens its change with a box beside every changed line, as
+  Sapling's selection does. Every line starts chosen; untick what stays behind, shift-click to set
+  a range, or use a hunk's or the file's box for all of its lines. The overlay's footer commits the
+  chosen lines, or amends them into HEAD or any commit under it, picked from a list that starts at
+  the commit selected in the tree. The choice holds after the overlay closes, so the sidebar's
+  **Commit…** and **Amend into** send the same lines, and the row reads "3 of 4 lines". The lines
+  left out stay uncommitted, and the working tree is never written.
+- A file edited on disk after its lines were chosen goes back to whole, with a toast naming it,
+  because the numbers the choice names now point at other lines. The host also refuses a choice
+  made against a diff that no longer describes the file, and changes nothing.
+
+### Fixed
+
+- Amending into a commit below one that edited the same file put the whole working file in the
+  target, let the later commit revert it, and checked HEAD out over the working file, so the edit
+  was lost. Each later commit now keeps exactly its own lines, and a change to one of them is
+  refused, naming the commit it belongs in.
+
 ## [0.7.1] - 2026-09-22
 
 ### Changed

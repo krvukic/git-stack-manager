@@ -95,10 +95,20 @@ Every one of these is conflict-free and leaves your working copy alone, except w
 
 - **Commit** the changes you tick in the working-copy row, with the message written inline. The rest
   stay uncommitted, so one dirty tree can become several commits.
+- **Choose lines** of a file from the **±** on its row, which opens its change in the overlay with
+  a box beside every changed line, as Sapling's selection does. Every line starts chosen: untick
+  what stays behind, shift-click to set a range, and use a hunk's or the file's box for all of its
+  lines at once. The overlay's footer commits the chosen lines, or amends them into HEAD or any
+  commit under it. The choice holds after the overlay closes, so the sidebar's buttons send the
+  same lines, and the row reads "3 of 4 lines". A file edited on disk after its lines were chosen
+  goes back to whole, because the numbers the choice names now point at other lines. Deletions,
+  renames, copies, symbolic links, submodules, and folded directories always go in whole.
 - **Amend into** folds the ticked changes into a commit that already exists, keeping its message.
   Anything below HEAD is rewritten with its descendants re-parented, so branches in a stack follow.
-  The target must be a commit HEAD descends from. A commit on another branch is refused rather than
-  left holding a change the working copy still shows.
+  A later commit that edited the same file keeps its own lines, and a change to one of those lines
+  is refused, naming the commit it belongs in. The target must be a commit HEAD descends from. A
+  commit on another branch is refused rather than left holding a change the working copy still
+  shows.
 - **Amend** a commit's message from the sidebar, at any depth in the stack.
 - **Amend working changes** into HEAD (`git add -A && git commit --amend --no-edit`).
 - **Absorb** folds each uncommitted change into the commit whose lines it touches, previewing the
@@ -211,6 +221,8 @@ stored height cuts it back rather than pushing the buttons below the box off scr
   a hunk by hand.
 - Split works per hunk rather than per line. A hunk mixing changes you want apart has to be split by
   editing first.
+- Choosing lines takes or leaves each changed line as it is. Sapling's free-form mode, which edits
+  the text that goes in, is not supported.
 - Local work committed straight onto `main` is not shown. The workflow assumes branch-per-commit.
 - Web mode binds to 127.0.0.1 with no auth token. Anything that can reach loopback on that port can
   rewrite history in the served repository, so treat a port-forward as granting write access.
