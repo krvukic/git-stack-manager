@@ -17,6 +17,7 @@ import {
   ActionPayload,
   optionalString,
   readFlag,
+  readLineSelections,
   readStringList,
   requireString,
   toActionPayload,
@@ -186,6 +187,17 @@ const ACTIONS: Record<string, ActionHandler> = {
   },
 
   /**
+   * The current fingerprint of each partly chosen file, which the webview compares with the one
+   * its lines were chosen from after every refresh. A read, like the diff it is taken from.
+   */
+  async workingCopyFingerprints(controller, payload) {
+    const fingerprints = await controller.repository.workingCopyFingerprints(
+      readStringList(payload, "paths")
+    );
+    return { ok: true, data: fingerprints };
+  },
+
+  /**
    * Both versions of one image, which neither diff can carry. `sha` names the commit; without
    * one the subject is the working copy, where the right-hand side is the file on disk.
    *
@@ -271,11 +283,13 @@ const ACTIONS: Record<string, ActionHandler> = {
     return { ok: true, data: model, log };
   },
 
+  /** `lines` names what was left out of each partly chosen file; absent, every path goes whole. */
   async commit(controller, payload) {
     const paths = readStringList(payload, "paths");
     const message = requireString(payload, "message");
+    const lines = readLineSelections(payload, "lines");
     const { value, log, model } = await controller.edit("Commit", () =>
-      controller.repository.commit(paths, message)
+      controller.repository.commit(paths, message, lines)
     );
     return {
       ok: true,
@@ -292,9 +306,10 @@ const ACTIONS: Record<string, ActionHandler> = {
   async amendIntoCommit(controller, payload) {
     const paths = readStringList(payload, "paths");
     const target = optionalString(payload, "sha");
+    const lines = readLineSelections(payload, "lines");
     const { value, log, model } = await controller.edit(
       "Amend into commit",
-      () => controller.repository.amendInto(paths, target)
+      () => controller.repository.amendInto(paths, target, lines)
     );
     return {
       ok: true,

@@ -31,6 +31,7 @@ import {
 } from "#history/absorbPlacement";
 import {
   fileMode,
+  readObjects,
   stageBlob,
   withScratchIndex,
   writeBlob,
@@ -285,11 +286,9 @@ async function readFileHistory(
   const specs = [baseSha, ...stack.map(commit => commit.sha)].map(
     sha => `${sha}:${path}`
   );
-  const output = await git.runBinary(
-    ["cat-file", "--batch"],
-    specs.map(spec => `${spec}\n`).join("")
+  const blobs = (await readObjects(git, specs)).map(
+    blob => blob?.toString("utf8") ?? null
   );
-  const blobs = parseBatch(output, specs.length);
   if (blobs.some(blob => blob !== null && isBinary(blob))) {
     return null;
   }
@@ -308,32 +307,6 @@ async function readWorkingCopy(
     return null;
   }
   return splitLines(onDisk.toString("utf8"));
-}
-
-/** Split `cat-file --batch` output into one buffer per requested object. */
-function parseBatch(output: Buffer, expected: number): Array<string | null> {
-  const results: Array<string | null> = [];
-  let offset = 0;
-  while (results.length < expected && offset < output.length) {
-    const newline = output.indexOf("\n", offset);
-    if (newline < 0) {
-      break;
-    }
-    const header = output.toString("utf8", offset, newline);
-    offset = newline + 1;
-    // A missing path yields "<spec> missing" and no payload.
-    if (/missing$/.test(header)) {
-      results.push(null);
-      continue;
-    }
-    const size = parseInt(header.split(" ").at(-1) ?? "0", 10);
-    results.push(output.toString("utf8", offset, offset + size));
-    offset += size + 1; // payload plus trailing newline
-  }
-  while (results.length < expected) {
-    results.push(null);
-  }
-  return results;
 }
 
 /** Git's own heuristic: a NUL in the first 8000 bytes means binary. */

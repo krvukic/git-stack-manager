@@ -21,11 +21,25 @@
  * and then folded down through `rebuildStack`, which re-parents the commits above
  * it. `absorb` places hunks by line ownership; this places whole files where the
  * user pointed.
+ *
+ * A file whose lines were only partly chosen cannot go through a pathspec commit,
+ * which takes each path whole from the working tree. When any such file is in the
+ * selection, the commit is made from a scratch index instead; `chosenChanges`
+ * describes how.
  */
 import { GitError, GitRunner } from "#git/runner";
 import { RawData } from "#git/snapshot";
+import { stageChosenChanges } from "#history/chosenChanges";
 import { withScratchIndex } from "#history/objects";
+import { LineSelection } from "#history/partialSelection";
 import { rebuildStack } from "#history/rewrite";
+
+/** The chosen changes: whole paths, and the lines left out of the partly chosen ones. */
+export type ChosenChanges = {
+  paths: string[];
+  /** One entry per partly chosen file, each also in `paths`. */
+  lines?: LineSelection[];
+};
 
 export type CommitResult = {
   newSha: string;
@@ -49,19 +63,58 @@ export type AmendResult = {
 export async function commitPaths(
   git: GitRunner,
   snapshot: RawData,
-  paths: string[],
-  message: string
+  { paths, lines = [], message }: ChosenChanges & { message: string }
 ): Promise<CommitResult> {
   const selected = requireSelection(snapshot, paths, "commit");
   requireMessage(message, "commit");
+  const partial = requireLines(selected, lines, "commit");
 
-  await stage(git, selected);
-  // `--only` makes the pathspec authoritative even when other paths are staged:
-  // without it git commits the whole index whenever a merge is in progress.
-  await git.run(["commit", "--only", "--file=-", "--", ...selected], {
-    input: message,
-  });
+  if (partial.length) {
+    await commitFromScratchIndex(
+      git,
+      { paths: selected, lines: partial },
+      ["commit", "--file=-"],
+      message
+    );
+  } else {
+    await stage(git, selected);
+    // `--only` makes the pathspec authoritative even when other paths are staged:
+    // without it git commits the whole index whenever a merge is in progress.
+    await git.run(["commit", "--only", "--file=-", "--", ...selected], {
+      input: message,
+    });
+  }
   return { newSha: await git.run(["rev-parse", "HEAD"]), committed: selected };
+}
+
+/**
+ * Commit the chosen changes from a scratch index, then line the real index up with the result.
+ *
+ * `commitArguments` is either a new commit or an amend of HEAD; both read the scratch index
+ * through `GIT_INDEX_FILE`, and both keep git's hooks and reflog. The reset afterwards is what
+ * `--only` would have done to the real index: each committed path now matches the new HEAD, so a
+ * partly committed file shows its remainder as an unstaged change, and every other path keeps
+ * whatever was staged.
+ */
+async function commitFromScratchIndex(
+  git: GitRunner,
+  chosen: { paths: string[]; lines: LineSelection[] },
+  commitArguments: string[],
+  message = ""
+): Promise<void> {
+  // A merge in progress would make this a merge commit whose tree holds none of the merge.
+  // A pathspec commit refuses the same case with "cannot do a partial commit during a merge".
+  if (await git.succeeds(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"])) {
+    throw new GitError(
+      "Finish or abort the merge before committing part of a file.",
+      "commit"
+    );
+  }
+  await withScratchIndex(git, "gsm-commit-index", async environment => {
+    await stageChosenChanges(git, environment, chosen);
+    await git.run(commitArguments, { env: environment, input: message });
+  });
+  await git.run(["reset", "-q", "--", ...chosen.paths]);
 }
 
 /**
@@ -81,10 +134,10 @@ export async function commitPaths(
 export async function amendPathsInto(
   git: GitRunner,
   snapshot: RawData,
-  paths: string[],
-  targetSha?: string
+  { paths, lines = [], targetSha }: ChosenChanges & { targetSha?: string }
 ): Promise<AmendResult> {
   const selected = requireSelection(snapshot, paths, "amend");
+  const partial = requireLines(selected, lines, "amend");
   const target = targetSha ?? snapshot.headSha;
   if (target !== snapshot.headSha) {
     if (!snapshot.commits.some(commit => commit.sha === target)) {
@@ -103,6 +156,24 @@ export async function amendPathsInto(
     }
   }
 
+  if (target === snapshot.headSha && partial.length) {
+    await commitFromScratchIndex(git, { paths: selected, lines: partial }, [
+      "commit",
+      "--amend",
+      "--no-edit",
+    ]);
+    return {
+      newSha: await git.run(["rev-parse", "HEAD"]),
+      committed: selected,
+      rewritten: new Map(),
+    };
+  }
+  if (partial.length) {
+    throw new GitError(
+      "Chosen lines can only be amended into HEAD for now.",
+      "amend"
+    );
+  }
   await stage(git, selected);
   if (target === snapshot.headSha) {
     await git.run([
@@ -270,6 +341,35 @@ function requireSelection(
     );
   }
   return selected;
+}
+
+/**
+ * Check each partly chosen file against the selection, keeping those with a line left out.
+ *
+ * A file with nothing left out is taken whole, which the pathspec commit already does. A file with
+ * chosen lines that is not itself selected would have its lines silently dropped, and one listed
+ * twice would leave it unclear which choice applies, so both are refused.
+ */
+function requireLines(
+  selected: string[],
+  lines: LineSelection[],
+  action: string
+): LineSelection[] {
+  const paths = new Set(selected);
+  const seen = new Set<string>();
+  for (const selection of lines) {
+    if (!paths.has(selection.path) || seen.has(selection.path)) {
+      throw new GitError(
+        `Chosen lines do not match the selection: ${selection.path}`,
+        action
+      );
+    }
+    seen.add(selection.path);
+  }
+  return lines.filter(
+    selection =>
+      selection.excludedRemovals.length || selection.excludedAdditions.length
+  );
 }
 
 function requireMessage(message: string, action: string): void {

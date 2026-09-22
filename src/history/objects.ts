@@ -48,9 +48,58 @@ export async function withScratchIndex<T>(
   }
 }
 
-/** Write `content` into the object database and return the blob it became. */
-export function writeBlob(git: GitRunner, content: string): Promise<string> {
+/**
+ * Write `content` into the object database and return the blob it became.
+ *
+ * No clean filter runs: `hash-object --stdin` stores the bytes it is given, which is what a caller
+ * holding content it built itself needs.
+ */
+export function writeBlob(
+  git: GitRunner,
+  content: string | Buffer
+): Promise<string> {
   return git.run(["hash-object", "-w", "--stdin"], { input: content });
+}
+
+/**
+ * Read objects by name — a blob sha or `<commit>:<path>` — in one `cat-file --batch`, as bytes.
+ *
+ * Null for a name that resolves to nothing, such as a path its commit does not have. Bytes rather
+ * than text, because decoding the batch as UTF-8 would corrupt a blob that is not.
+ */
+export async function readObjects(
+  git: GitRunner,
+  names: string[]
+): Promise<Array<Buffer | null>> {
+  if (!names.length) {
+    return [];
+  }
+  const output = await git.runBinary(
+    ["cat-file", "--batch"],
+    names.map(name => `${name}\n`).join("")
+  );
+  const results: Array<Buffer | null> = [];
+  let offset = 0;
+  while (results.length < names.length && offset < output.length) {
+    const newline = output.indexOf("\n", offset);
+    if (newline < 0) {
+      break;
+    }
+    const header = output.toString("utf8", offset, newline);
+    offset = newline + 1;
+    // A name that resolves to nothing yields "<name> missing" and no payload.
+    if (/missing$/.test(header)) {
+      results.push(null);
+      continue;
+    }
+    const size = parseInt(header.split(" ").at(-1) ?? "0", 10);
+    results.push(output.subarray(offset, offset + size));
+    offset += size + 1; // payload plus trailing newline
+  }
+  while (results.length < names.length) {
+    results.push(null);
+  }
+  return results;
 }
 
 /**

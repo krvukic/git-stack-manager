@@ -241,7 +241,8 @@ function withoutCarriageReturn(text: string): string {
   return text.endsWith("\r") ? text.slice(0, -1) : text;
 }
 
-function staleSelection(path: string): Error {
+/** The refusal for a selection made against a diff that no longer describes the file. */
+export function staleSelection(path: string): Error {
   return new Error(
     `${path} changed after its lines were chosen. Choose them again.`
   );

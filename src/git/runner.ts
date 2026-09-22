@@ -20,7 +20,8 @@ export class GitError extends Error {
 }
 
 export type GitOptions = {
-  input?: string;
+  /** Bytes for stdin; a Buffer for content that need not be UTF-8, such as a rebuilt blob. */
+  input?: string | Buffer;
   env?: NodeJS.ProcessEnv;
   /**
    * Keep the command out of the action log. For probes about git itself rather

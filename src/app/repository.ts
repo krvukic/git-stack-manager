@@ -9,12 +9,7 @@ import {
   toDataUri,
 } from "#core/media";
 import { uniqueSorted } from "#core/values";
-import {
-  CommitDiff,
-  readCommitDiff,
-  readWorkingCopyDiff,
-  WorkingCopyDiff,
-} from "#git/diff";
+import { CommitDiff, readCommitDiff, readWorkingCopyDiff } from "#git/diff";
 import { readRawData } from "#git/reader";
 import { GitError, GitRunner } from "#git/runner";
 import { FileChange, RawData } from "#git/snapshot";
@@ -36,6 +31,11 @@ import {
 } from "#history/commit";
 import { discardPaths, DiscardResult } from "#history/discard";
 import { foldIntoParent, FoldResult } from "#history/fold";
+import {
+  describeWorkingFiles,
+  LineSelection,
+  WorkingFileDiff,
+} from "#history/partialSelection";
 import { deleteMergedBranches } from "#history/pruneMerged";
 import {
   abortRebase,
@@ -255,8 +255,35 @@ export class Repository {
    * Scoped where `diffForCommit` is not, because the two cost differently: a commit is one
    * `git show` however many files it holds, while each untracked file here is a read of its own.
    */
-  diffForWorkingCopy(path?: string): Promise<WorkingCopyDiff> {
-    return readWorkingCopyDiff(this.git, path ? [path] : []);
+  async diffForWorkingCopy(
+    path?: string
+  ): Promise<{ files: WorkingFileDiff[] }> {
+    const diff = await readWorkingCopyDiff(this.git, path ? [path] : []);
+    return { files: describeWorkingFiles(diff.files) };
+  }
+
+  /**
+   * The current fingerprint of each path whose lines can be chosen, so the webview can drop a
+   * line selection once its file changes on disk. A path left out of the answer no longer has a
+   * diff whose lines can be chosen.
+   *
+   * Scoped to the paths asked about, which are the few with lines left out, so the poll that
+   * asks costs a diff of those files and not of the whole working copy.
+   */
+  async workingCopyFingerprints(
+    paths: string[]
+  ): Promise<Record<string, string>> {
+    if (!paths.length) {
+      return {};
+    }
+    const diff = await readWorkingCopyDiff(this.git, paths);
+    const fingerprints: Record<string, string> = {};
+    for (const file of describeWorkingFiles(diff.files)) {
+      if (!file.wholeFileReason) {
+        fingerprints[file.path] = file.fingerprint;
+      }
+    }
+    return fingerprints;
   }
 
   async checkout(ref: string, detach = false): Promise<void> {
@@ -398,9 +425,16 @@ export class Repository {
     await this.git.run(["commit", "--amend", "--no-edit"]);
   }
 
-  /** Commit the selected working-copy paths as a new commit on top of HEAD. */
-  async commit(paths: string[], message: string): Promise<CommitResult> {
-    return commitPaths(this.git, await this.read(), paths, message);
+  /**
+   * Commit the selected working-copy paths as a new commit on top of HEAD. `lines` names the
+   * lines left out of the partly chosen files, which stay uncommitted.
+   */
+  async commit(
+    paths: string[],
+    message: string,
+    lines: LineSelection[] = []
+  ): Promise<CommitResult> {
+    return commitPaths(this.git, await this.read(), { paths, lines, message });
   }
 
   /**
@@ -410,8 +444,16 @@ export class Repository {
    * its descendants re-parented, which is why this reads a fresh snapshot: the
    * rewrite needs the current shas of every commit above the target.
    */
-  async amendInto(paths: string[], targetSha?: string): Promise<AmendResult> {
-    return amendPathsInto(this.git, await this.read(), paths, targetSha);
+  async amendInto(
+    paths: string[],
+    targetSha?: string,
+    lines: LineSelection[] = []
+  ): Promise<AmendResult> {
+    return amendPathsInto(this.git, await this.read(), {
+      paths,
+      lines,
+      ...(targetSha === undefined ? {} : { targetSha }),
+    });
   }
 
   /**

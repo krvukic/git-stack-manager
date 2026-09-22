@@ -155,3 +155,32 @@ test("payload readers narrow rather than trusting the input", () => {
   assert.equal(payload.errorMessage(new Error("boom")), "boom");
   assert.equal(payload.errorMessage("plain string"), "plain string");
 });
+
+test("chosen lines are read strictly, since a dropped entry would commit its file whole", () => {
+  const entry = {
+    path: "a.txt",
+    fingerprint: "f",
+    excludedRemovals: [2],
+    excludedAdditions: [],
+  };
+  assert.deepEqual(payload.readLineSelections({ lines: [entry] }, "lines"), [
+    entry,
+  ]);
+  assert.deepEqual(payload.readLineSelections({}, "lines"), []);
+  assert.throws(
+    () => payload.readLineSelections({ lines: "a.txt" }, "lines"),
+    /malformed "lines" value/
+  );
+  for (const broken of [
+    { ...entry, path: "" },
+    { ...entry, fingerprint: undefined },
+    { ...entry, excludedRemovals: [0] },
+    { ...entry, excludedAdditions: [1.5] },
+    { ...entry, excludedAdditions: undefined },
+  ]) {
+    assert.throws(
+      () => payload.readLineSelections({ lines: [broken] }, "lines"),
+      /malformed "lines" entry/
+    );
+  }
+});

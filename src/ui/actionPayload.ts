@@ -11,6 +11,7 @@
  * `errorMessage` is re-exported for the controller suite, which reads it through this module.
  */
 import { asRecord } from "#core/values";
+import { LineSelection } from "#history/partialSelection";
 
 export { errorMessage } from "#core/values";
 
@@ -60,6 +61,49 @@ export function optionalString(
 /** Read a boolean field, defaulting to false so an absent flag means "off". */
 export function readFlag(payload: ActionPayload, field: string): boolean {
   return payload[field] === true;
+}
+
+/**
+ * Read the lines left out of partly chosen files, defaulting to none.
+ *
+ * Strict where `readStringList` is lenient: skipping a malformed entry would commit that file
+ * whole, so a lost exclusion reaches the commit instead of an error.
+ */
+export function readLineSelections(
+  payload: ActionPayload,
+  field: string
+): LineSelection[] {
+  const value = payload[field];
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`Action has a malformed "${field}" value.`);
+  }
+  return value.map(entry => {
+    const record = asRecord(entry);
+    const path = record?.["path"];
+    const fingerprint = record?.["fingerprint"];
+    const excludedRemovals = record?.["excludedRemovals"];
+    const excludedAdditions = record?.["excludedAdditions"];
+    if (
+      typeof path !== "string" ||
+      !path ||
+      typeof fingerprint !== "string" ||
+      !isLineNumberList(excludedRemovals) ||
+      !isLineNumberList(excludedAdditions)
+    ) {
+      throw new Error(`Action has a malformed "${field}" entry.`);
+    }
+    return { path, fingerprint, excludedRemovals, excludedAdditions };
+  });
+}
+
+function isLineNumberList(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.every(number => Number.isInteger(number) && number > 0)
+  );
 }
 
 /** Read an array-of-strings field, ignoring any non-string entries. */
