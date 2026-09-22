@@ -2,11 +2,12 @@
  * Which two sides the host hands VS Code's diff editor.
  *
  * The overlay's own rendering is tested through the readers; what only this host decides is the
- * pair of URIs, and each shape gets one wrong in its own way. A commit reads two blobs. An
- * uncommitted change reads HEAD on the left and the *file itself* on the right, so a typo spotted
- * while reading it is fixed where it is rather than in a read-only copy. A file the working tree
- * no longer holds has no right-hand file to name, and pointing at the absent path made the editor
- * report a missing file where the deletion should have been.
+ * pair of URIs, and each shape gets one wrong in its own way. A commit reads two blobs, except the
+ * checked-out one, whose right side is the file on disk. An uncommitted change reads HEAD on the
+ * left and the *file itself* on the right, so a typo spotted while reading it is fixed where it is
+ * rather than in a read-only copy. A file the working tree no longer holds has no right-hand file
+ * to name, and pointing at the absent path made the editor report a missing file where the
+ * deletion should have been.
  *
  * Driven through the webview's own message channel, because the dispatcher is closed over inside
  * the panel's listener and there is no other way in.
@@ -51,10 +52,11 @@ function diffCall(host) {
   };
 }
 
-test("a commit's file diffs its parent's blob against its own", async t => {
+test("a commit below HEAD diffs its parent's blob against its own", async t => {
   const host = openOnRepository(t, "gsm-host-diff-commit-");
   commitFile(host.repo, "base.txt", "one\nTWO\nthree\n", "change a line");
   const sha = shaOf(host.repo, "HEAD");
+  commitFile(host.repo, "later.txt", "later\n", "a later commit");
 
   const result = await host.call("openDiff", { sha, path: "base.txt" });
 
@@ -67,6 +69,44 @@ test("a commit's file diffs its parent's blob against its own", async t => {
   );
   assert.match(right.fsPath, new RegExp(`sha=${sha}`));
   assert.match(title, /base\.txt — .* against its parent/);
+});
+
+/**
+ * The checked-out commit is what the disk holds, so its diff gets the file itself on the right and
+ * stays editable. An abbreviated sha has to count as HEAD too, which is why the host compares
+ * resolved commits rather than text.
+ */
+test("the checked-out commit diffs its parent against the file on disk", async t => {
+  const host = openOnRepository(t, "gsm-host-diff-head-");
+  commitFile(host.repo, "base.txt", "one\nTWO\nthree\n", "change a line");
+  const sha = shaOf(host.repo, "HEAD");
+
+  const result = await host.call("openDiff", {
+    sha: sha.slice(0, 10),
+    path: "base.txt",
+  });
+
+  assert.equal(result.ok, true);
+  const { left, right, title } = diffCall(host);
+  assert.match(left.fsPath, /sha=.*%5E/);
+  assert.equal(right.scheme, "file");
+  assert.equal(right.fsPath, join(host.repo, "base.txt"));
+  assert.match(title, /base\.txt — working copy against .*'s parent/);
+});
+
+/** No file on disk to edit, so the commit's blob stays the right side. */
+test("the checked-out commit keeps its blob for a file deleted since", async t => {
+  const host = openOnRepository(t, "gsm-host-diff-head-deleted-");
+  commitFile(host.repo, "base.txt", "one\nTWO\nthree\n", "change a line");
+  const sha = shaOf(host.repo, "HEAD");
+  rmSync(join(host.repo, "base.txt"));
+
+  const result = await host.call("openDiff", { sha, path: "base.txt" });
+
+  assert.equal(result.ok, true);
+  const { right } = diffCall(host);
+  assert.equal(right.scheme, "gsm-blob");
+  assert.match(right.fsPath, new RegExp(`sha=${sha}`));
 });
 
 test("an uncommitted change diffs HEAD against the file on disk", async t => {

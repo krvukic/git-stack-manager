@@ -459,6 +459,11 @@ async function runHostAction(
  * right; with no sha, HEAD's version against the file on disk. A refusal sends the caller to the
  * inline overlay instead.
  *
+ * The checked-out commit's right side is the file on disk rather than its blob, so the diff stays
+ * editable, as the working-copy diff does. The disk holds that commit plus whatever is
+ * uncommitted, so an uncommitted edit shows in this diff too: an edit made here lands there
+ * regardless, and a blob would hide it.
+ *
  * An image is refused, because the diff editor cannot show one. VS Code draws a `.png`
  * through the *media-preview* extension's custom editor, and a diff editor hosts only text
  * editors — so a picture on each side came out as the placeholder about a file that "is
@@ -498,15 +503,40 @@ async function openDiffEditor(
   }
   const short = sha.slice(0, 8);
   const left = blobUri(`${sha}^`, previousPath, `${previousPath} (parent)`);
-  const right = blobUri(sha, filePath, `${filePath} (${short})`);
+  const absolutePath = path.join(repository.git.cwd, filePath);
+  // A file deleted since the commit leaves nothing on disk to edit, so the blob stays.
+  const editable =
+    (await isCheckedOut(repository, sha)) && fs.existsSync(absolutePath);
+  const right = editable
+    ? vscode.Uri.file(absolutePath)
+    : blobUri(sha, filePath, `${filePath} (${short})`);
   await vscode.commands.executeCommand(
     "vscode.diff",
     left,
     right,
-    `${filePath} — ${short} against its parent`,
+    editable
+      ? `${filePath} — working copy against ${short}'s parent`
+      : `${filePath} — ${short} against its parent`,
     { preview: false, preserveFocus: background }
   );
   return { ok: true };
+}
+
+/**
+ * Whether `sha` names the commit HEAD points at. One `rev-parse` resolves both, so an abbreviated
+ * sha compares by the commit it names rather than by its text.
+ */
+async function isCheckedOut(
+  repository: Repository,
+  sha: string
+): Promise<boolean> {
+  const resolved = await repository.git.tryRun([
+    "rev-parse",
+    "HEAD",
+    `${sha}^{commit}`,
+  ]);
+  const [head, commit] = resolved?.split("\n") ?? [];
+  return Boolean(head) && head === commit;
 }
 
 /**

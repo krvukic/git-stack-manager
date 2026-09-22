@@ -3,6 +3,14 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-09-22
+
+### Changed
+
+- The diff editor for a file in the checked-out commit shows the file on disk on its right side,
+  so the diff is editable, as an uncommitted file's is. Any uncommitted edit to the file shows in
+  that diff too. Every other commit's diff stays read-only.
+
 ## [0.8.0] - 2026-09-22
 
 Committing part of a file, and amending it into any commit under the one you are on.
