@@ -256,7 +256,7 @@ export class Repository {
    * `git show` however many files it holds, while each untracked file here is a read of its own.
    */
   diffForWorkingCopy(path?: string): Promise<WorkingCopyDiff> {
-    return readWorkingCopyDiff(this.git, path);
+    return readWorkingCopyDiff(this.git, path ? [path] : []);
   }
 
   async checkout(ref: string, detach = false): Promise<void> {

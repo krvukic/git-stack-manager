@@ -33,6 +33,12 @@ export type DiffLine = {
   oldNumber: number | null;
   /** Line number in this commit, for context and added lines. */
   newNumber: number | null;
+  /**
+   * Set on the last line of a side that lacks its final newline — git's "\ No newline at end of
+   * file". Committing part of a file has to know, because whether the result ends in a newline
+   * depends on which of the two last lines it keeps.
+   */
+  endsWithoutNewline?: true;
 };
 
 export type FileDiff = {
@@ -41,6 +47,12 @@ export type FileDiff = {
   oldPath?: string;
   /** M A D R C, matching `FileChange.status`. */
   status: string;
+  /**
+   * The mode of the new side, such as `100755`, or of the old side for a deletion. Null when git
+   * printed none, as for a rename with no change. `120000` is a symbolic link and `160000` a
+   * submodule: both diff as text, and neither has lines that can be chosen.
+   */
+  mode: string | null;
   hunks: DiffHunk[];
   /**
    * The type a viewer can draw this file's blobs as, set when git refused to diff them and
@@ -128,14 +140,14 @@ const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
  * untracked file would buy nothing and cost forty of them the first time a build directory
  * escapes the ignore rules.
  *
- * `pathspec` scopes both reads to one row of that list. A row can name a directory — `git status`
+ * `pathspecs` scope both reads to rows of that list. A row can name a directory — `git status`
  * collapses a folder of new files into `dir/` — which a pathspec handles and a filename would not.
  */
 export async function readWorkingCopyDiff(
   git: GitRunner,
-  pathspec?: string
+  pathspecs: string[] = []
 ): Promise<WorkingCopyDiff> {
-  const scope = pathspec ? ["--", pathspec] : [];
+  const scope = pathspecs.length ? ["--", ...pathspecs] : [];
   // A repository with no commit yet has no HEAD to name, and the empty tree stands in for it:
   // every tracked file then reads as an addition, which is what it is.
   const hasHead = await git.succeeds([
@@ -201,6 +213,7 @@ async function untrackedDiff(git: GitRunner, path: string): Promise<FileDiff> {
     // `?`, the letter git's status gives it and the one the row above shows, rather than the
     // "new file" a `--no-index` diff reports: nothing has added this file to anything yet.
     status: "?",
+    mode: await git.worktreeMode(path),
     hunks: [],
     previewMediaType: null,
     note: null,
@@ -274,6 +287,7 @@ export function parseUnifiedDiff(text: string): FileDiff[] {
         // never absent. Same for the two hunk-header groups below.
         path: fileStart[2] ?? "",
         status: "M",
+        mode: null,
         hunks: [],
         previewMediaType: null,
         note: null,
@@ -295,6 +309,10 @@ export function parseUnifiedDiff(text: string): FileDiff[] {
     if (hunk) {
       // "\ No newline at end of file" annotates the line above rather than being one.
       if (line.startsWith("\\")) {
+        const annotated = hunk.lines.at(-1);
+        if (annotated) {
+          annotated.endsWithoutNewline = true;
+        }
         continue;
       }
       if (line.startsWith("+")) {
@@ -351,6 +369,13 @@ export function parseUnifiedDiff(text: string): FileDiff[] {
 
     // Header lines, in the order git emits them. Each sets the status or the note; the
     // rest carry nothing this needs. Reached only outside a hunk, per the block above.
+    const mode =
+      /^(?:new file mode|deleted file mode|new mode|index \S+) (\d{6})$/.exec(
+        line
+      );
+    if (mode) {
+      file.mode = mode[1] ?? null;
+    }
     if (line.startsWith("new file")) {
       file.status = "A";
     } else if (line.startsWith("deleted file")) {

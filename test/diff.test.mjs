@@ -208,7 +208,37 @@ test("a no-newline marker annotates rather than counting as a line", () => {
   const file = present(files[0], "the parsed file");
   assert.equal(file.added, 1);
   assert.equal(file.removed, 1);
-  assert.equal(present(file.hunks[0], "the single hunk").lines.length, 2);
+  const lines = present(file.hunks[0], "the single hunk").lines;
+  assert.equal(lines.length, 2);
+  // Kept on the line it annotates, since a partial commit rebuilds the file's last line from it.
+  assert.deepEqual(
+    lines.map(line => line.endsWithoutNewline ?? false),
+    [true, true]
+  );
+});
+
+test("a file's mode is read from whichever header git printed it in", () => {
+  const text = [
+    "diff --git a/plain.txt b/plain.txt",
+    "index 1111111..2222222 100644",
+    "diff --git a/run.sh b/run.sh",
+    "old mode 100644",
+    "new mode 100755",
+    "diff --git a/link b/link",
+    "new file mode 120000",
+    "index 0000000..3333333",
+    "diff --git a/gone.txt b/gone.txt",
+    "deleted file mode 100644",
+    "diff --git a/moved.txt b/renamed.txt",
+    "similarity index 100%",
+    "rename from moved.txt",
+    "rename to renamed.txt",
+  ].join("\n");
+
+  const modes = parseUnifiedDiff(text).map(file => file.mode);
+
+  // The rename changed nothing, so git printed no mode for it.
+  assert.deepEqual(modes, ["100644", "100755", "120000", "100644", null]);
 });
 
 test("several files in one commit are each parsed separately", async t => {

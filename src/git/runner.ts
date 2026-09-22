@@ -4,7 +4,7 @@
  */
 import { AsyncLocalStorage } from "async_hooks";
 import { execFile } from "child_process";
-import { readFile } from "fs/promises";
+import { lstat, readFile } from "fs/promises";
 import { join } from "path";
 
 export const FIELD_SEPARATOR = "\x1f";
@@ -142,6 +142,24 @@ export class GitRunner {
   async readWorktreeFile(relativePath: string): Promise<Buffer | null> {
     try {
       return await readFile(join(this.cwd, relativePath));
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * The mode `git add` would record for a working-tree path, or null when it is absent.
+   *
+   * `lstat` rather than `stat`, since a symbolic link is recorded as the link, not as what it
+   * points at.
+   */
+  async worktreeMode(relativePath: string): Promise<string | null> {
+    try {
+      const stats = await lstat(join(this.cwd, relativePath));
+      if (stats.isSymbolicLink()) {
+        return "120000";
+      }
+      return stats.mode & 0o111 ? "100755" : "100644";
     } catch {
       return null;
     }
