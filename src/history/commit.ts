@@ -17,10 +17,10 @@
  * Amending is split in two by where the target sits. HEAD takes git's own
  * `commit --amend`, which is one process and keeps the reflog entry a person
  * would expect. A commit deeper in the stack cannot: `--amend` rewrites HEAD's
- * parentage and would orphan every descendant, so the change is committed on top
- * and then folded down through `rebuildStack`, which re-parents the commits above
- * it. `absorb` places hunks by line ownership; this places whole files where the
- * user pointed.
+ * parentage and would orphan every descendant, so `amendIntoAncestor` rebuilds
+ * the target and every commit above it instead. `absorb` decides by line
+ * ownership where each hunk goes; this puts the change where the user pointed,
+ * and refuses when that would rewrite a later commit's lines.
  *
  * A file whose lines were only partly chosen cannot go through a pathspec commit,
  * which takes each path whole from the working tree. When any such file is in the
@@ -29,10 +29,10 @@
  */
 import { GitError, GitRunner } from "#git/runner";
 import { RawData } from "#git/snapshot";
+import { amendIntoAncestor } from "#history/amendIntoAncestor";
 import { stageChosenChanges } from "#history/chosenChanges";
 import { withScratchIndex } from "#history/objects";
 import { LineSelection } from "#history/partialSelection";
-import { rebuildStack } from "#history/rewrite";
 
 /** The chosen changes: whole paths, and the lines left out of the partly chosen ones. */
 export type ChosenChanges = {
@@ -154,28 +154,22 @@ export async function amendPathsInto(
         "amend"
       );
     }
+    const { newSha, rewritten } = await amendIntoAncestor(
+      git,
+      snapshot,
+      { paths: selected, lines: partial },
+      target
+    );
+    return { newSha, committed: selected, rewritten };
   }
-
-  if (target === snapshot.headSha && partial.length) {
+  if (partial.length) {
     await commitFromScratchIndex(git, { paths: selected, lines: partial }, [
       "commit",
       "--amend",
       "--no-edit",
     ]);
-    return {
-      newSha: await git.run(["rev-parse", "HEAD"]),
-      committed: selected,
-      rewritten: new Map(),
-    };
-  }
-  if (partial.length) {
-    throw new GitError(
-      "Chosen lines can only be amended into HEAD for now.",
-      "amend"
-    );
-  }
-  await stage(git, selected);
-  if (target === snapshot.headSha) {
+  } else {
+    await stage(git, selected);
     await git.run([
       "commit",
       "--amend",
@@ -184,131 +178,12 @@ export async function amendPathsInto(
       "--",
       ...selected,
     ]);
-    return {
-      newSha: await git.run(["rev-parse", "HEAD"]),
-      committed: selected,
-      rewritten: new Map(),
-    };
   }
-  return amendIntoAncestor(git, snapshot, selected, target);
-}
-
-/**
- * Amend into a commit below HEAD.
- *
- * `git add` has already put the new content in the index, which is the only place
- * it is needed: the blob is written and its hash recorded, so grafting it onto the
- * target is an object-database operation with no checkout and no chance of
- * conflict.
- *
- * Every descendant needs the graft too, not just the target. `rebuildStack` reuses
- * a commit's original tree unless given a new one, and that tree still holds the
- * pre-amend content — so grafting only the target leaves the very next commit
- * reverting it, showing up as a spurious `M feature.txt` one row up the stack. The
- * exception is a descendant that changes the path itself: its own version wins,
- * because the user edited that content later and the amend must not roll it back.
- *
- * The order matters for safety. Trees and commits are written first and the refs
- * move in one atomic `update-ref` batch inside `rebuildStack`, so a failure
- * anywhere before that leaves the repository — and the working copy — exactly as
- * it was.
- */
-async function amendIntoAncestor(
-  git: GitRunner,
-  snapshot: RawData,
-  paths: string[],
-  targetSha: string
-): Promise<AmendResult> {
-  const treeBySha = new Map<string, string>();
-  treeBySha.set(targetSha, await graftPaths(git, targetSha, paths));
-  for (const sha of descendantsOf(snapshot, targetSha)) {
-    const ownEdits = await pathsChangedBy(git, sha);
-    const carried = paths.filter(path => !ownEdits.has(path));
-    if (!carried.length) {
-      continue;
-    }
-    treeBySha.set(sha, await graftPaths(git, sha, carried));
-  }
-  const rewritten = await rebuildStack(git, snapshot, { treeBySha });
-  const newSha = rewritten.get(targetSha);
-  if (!newSha) {
-    throw new GitError("Amend produced no new commit for the target.", "amend");
-  }
-
-  // The content lives in the target now, so the working copy has to stop showing
-  // it as a change. Unstaging first is what makes the checkout a no-op for the
-  // index rather than a second staged copy of the same content.
-  await git.run(["reset", "-q", "HEAD", "--", ...paths]);
-  await git.tryRun(["checkout", "HEAD", "--", ...paths]);
-  return { newSha, committed: paths, rewritten };
-}
-
-/** Every local commit reachable *from* a descendant down to `sha`, `sha` excluded. */
-function descendantsOf(snapshot: RawData, sha: string): string[] {
-  const bySha = new Map(snapshot.commits.map(commit => [commit.sha, commit]));
-  const above: string[] = [];
-  // Oldest first, so a commit is considered after the ancestor that puts it in the
-  // set — one pass is enough, no fixpoint needed.
-  for (const commit of [...snapshot.commits].reverse()) {
-    if (
-      commit.parents.some(parent => parent === sha || above.includes(parent))
-    ) {
-      above.push(commit.sha);
-    }
-  }
-  return above.filter(candidate => bySha.has(candidate));
-}
-
-/**
- * The paths `sha` changes relative to its parent.
- *
- * Read per descendant rather than carried on the snapshot: the render never needs
- * this, and an amend touches a handful of commits, so one `show --name-only` each
- * beats widening every refresh.
- */
-async function pathsChangedBy(
-  git: GitRunner,
-  sha: string
-): Promise<Set<string>> {
-  const output = await git.tryRun([
-    "show",
-    "--name-only",
-    "--format=",
-    "-z",
-    sha,
-  ]);
-  return new Set((output ?? "").split("\0").filter(Boolean));
-}
-
-/** Build a tree from `baseSha` carrying the index's content for `paths`. */
-async function graftPaths(
-  git: GitRunner,
-  baseSha: string,
-  paths: string[]
-): Promise<string> {
-  return withScratchIndex(git, "gsm-amend-index", async environment => {
-    await git.run(["read-tree", baseSha], { env: environment });
-    for (const path of paths) {
-      // `ls-files --stage` reports the real index's entry for the path, which is
-      // the content just staged. A path missing from it was deleted, so the graft
-      // removes it from the target too.
-      const entry = await git.tryRun(["ls-files", "--stage", "--", path]);
-      if (!entry) {
-        await git.tryRun(["update-index", "--force-remove", "--", path], {
-          env: environment,
-        });
-        continue;
-      }
-      // `<mode> <sha> <stage>\t<path>`, so the tab always precedes the path and the
-      // fields before it always parse.
-      const [mode, blob] = (entry.split("\t")[0] ?? "").split(/\s+/);
-      await git.run(
-        ["update-index", "--add", "--cacheinfo", `${mode},${blob},${path}`],
-        { env: environment }
-      );
-    }
-    return git.run(["write-tree"], { env: environment });
-  });
+  return {
+    newSha: await git.run(["rev-parse", "HEAD"]),
+    committed: selected,
+    rewritten: new Map(),
+  };
 }
 
 /** Stage each path, so an untracked file and a deletion both become committable. */

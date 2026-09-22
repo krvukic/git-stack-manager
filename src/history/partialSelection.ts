@@ -184,7 +184,7 @@ function joinLines(lines: string[]): string {
     .join("");
 }
 
-/** Every excluded number has to name a line the diff changed, or the selection is for another diff. */
+/** Every excluded number names a line the diff changed, or the selection is for another diff. */
 function requireListed(
   file: FileDiff,
   excludedRemovals: Set<number>,

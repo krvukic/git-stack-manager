@@ -153,6 +153,40 @@ test("amending chosen lines into HEAD keeps its message and parent", async t => 
   assert.equal(unstagedPaths(repo), "top.txt");
 });
 
+test("amending chosen lines into a commit below HEAD leaves the rest unstaged", async t => {
+  const { repo, repository } = trunkRepository(t, "gsm-lines-ancestor-", {
+    file: "numbers.txt",
+    content: NUMBERS,
+  });
+  stackBranches(repo, [
+    { branch: "middle", file: "middle.txt", message: "middle work" },
+    { branch: "top", file: "top.txt", message: "later work" },
+  ]);
+  const middle = shaOf(repo, "middle");
+  writeFileSync(join(repo, "middle.txt"), "middle\nkept\nleft\n");
+  const lines = await leaveOut(repository, "middle.txt", ["left"]);
+
+  const result = await repository.amendInto(["middle.txt"], middle, [lines]);
+
+  assert.equal(shaOf(repo, "middle"), result.newSha);
+  assert.equal(
+    run(repo, "git", ["log", "-1", "--format=%s", result.newSha]),
+    "middle work"
+  );
+  assert.equal(
+    run(repo, "git", ["show", `${result.newSha}:middle.txt`]),
+    "middle\nkept"
+  );
+  assert.equal(run(repo, "git", ["show", "top:middle.txt"]), "middle\nkept");
+  assert.equal(shaOf(repo, "top^"), result.newSha);
+  assert.equal(
+    readFileSync(join(repo, "middle.txt"), "utf8"),
+    "middle\nkept\nleft\n"
+  );
+  assert.equal(stagedPaths(repo), "");
+  assert.equal(unstagedPaths(repo), "middle.txt");
+});
+
 test("a file edited after its lines were chosen is refused with nothing changed", async t => {
   const { repo, repository } = buildFixture(t, "gsm-lines-stale-");
   const before = shaOf(repo, "HEAD");

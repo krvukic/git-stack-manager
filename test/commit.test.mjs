@@ -8,7 +8,7 @@
  * rather than orphaning, which is the failure a plain `git commit --amend` would produce.
  */
 import assert from "node:assert/strict";
-import { rmSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { commitFile, run } from "../scripts/git-fixture.mjs";
@@ -194,27 +194,125 @@ test("a descendant does not revert what was amended below it", async t => {
   assert.deepEqual(filesIn(repo, "top"), ["top.txt"]);
 });
 
-test("a descendant that edits the same path keeps its own newer content", async t => {
-  // The mirror of the case above: when a later commit changes the same file, its
-  // version is the newer one and the amend must not roll it back.
+test("an edit to a line a later commit wrote is refused, with nothing changed", async t => {
+  // This used to graft the whole working file into `feature`, keep the later commit's own
+  // copy, and check HEAD out over the working file: `amended` landed in `feature`, the later
+  // commit reverted it, and the edit was gone from the working copy.
   const { repo, repository } = buildFixture(t, "gsm-amend-later-");
   writeFileSync(join(repo, "feature.txt"), "feature\nlater edit\n");
   run(repo, "git", ["commit", "-qam", "edit feature later"]);
   const snapshot = await repository.read();
   const feature = commitOn(snapshot, "feature");
+  const headBefore = shaOf(repo, "HEAD");
   writeFileSync(join(repo, "feature.txt"), "feature\namended\n");
 
-  await repository.amendInto(["feature.txt"], feature.sha);
+  await assert.rejects(
+    () => repository.amendInto(["feature.txt"], feature.sha),
+    /"edit feature later" changed the same lines\. Amend into "edit feature later" instead/
+  );
+  assert.equal(shaOf(repo, "feature"), feature.sha);
+  assert.equal(shaOf(repo, "HEAD"), headBefore);
+  assert.equal(
+    readFileSync(join(repo, "feature.txt"), "utf8"),
+    "feature\namended\n"
+  );
+  assert.equal(statusOf(repo), "M feature.txt");
+});
+
+test("an edit to the target's lines keeps what a later commit added to the same file", async t => {
+  const { repo, repository } = buildFixture(t, "gsm-amend-compatible-");
+  writeFileSync(join(repo, "feature.txt"), "feature\nlater edit\n");
+  run(repo, "git", ["commit", "-qam", "edit feature later"]);
+  const snapshot = await repository.read();
+  const feature = commitOn(snapshot, "feature");
+  writeFileSync(join(repo, "feature.txt"), "feature, amended\nlater edit\n");
+
+  const result = await repository.amendInto(["feature.txt"], feature.sha);
 
   assert.equal(
-    run(repo, "git", ["show", `${shaOf(repo, "feature")}:feature.txt`]),
-    "feature\namended"
+    run(repo, "git", ["show", `${result.newSha}:feature.txt`]),
+    "feature, amended"
   );
-  // The later commit still wins at the tip — its edit was not silently discarded.
   assert.equal(
     run(repo, "git", ["show", "HEAD:feature.txt"]),
-    "feature\nlater edit"
+    "feature, amended\nlater edit"
   );
+  // The later commit still adds exactly its own line, and nothing is left to commit.
+  assert.deepEqual(
+    run(repo, "git", [
+      "diff",
+      "-U0",
+      "--no-color",
+      "HEAD^",
+      "HEAD",
+      "--",
+      "feature.txt",
+    ])
+      .split("\n")
+      .filter(line => /^[-+][^-+]/.test(line)),
+    ["+later edit"]
+  );
+  assert.equal(statusOf(repo), "");
+});
+
+test("a branch forked above the target takes the amend too", async t => {
+  // `side` forks from `feature` next to `top`. It re-parents onto the amended commit, and it
+  // must carry the change rather than revert it — both when it left the file alone and when
+  // it edited other lines of it.
+  const { repo, repository } = buildFixture(t, "gsm-amend-fork-");
+  run(repo, "git", ["switch", "-qc", "side", "feature"]);
+  writeFileSync(join(repo, "feature.txt"), "feature\nside line\n");
+  run(repo, "git", ["commit", "-qam", "side work"]);
+  run(repo, "git", ["switch", "-q", "top"]);
+  const snapshot = await repository.read();
+  const feature = commitOn(snapshot, "feature");
+  writeFileSync(join(repo, "feature.txt"), "amended feature\n");
+
+  const result = await repository.amendInto(["feature.txt"], feature.sha);
+
+  assert.equal(shaOf(repo, "side^"), result.newSha);
+  assert.equal(
+    run(repo, "git", ["show", "side:feature.txt"]),
+    "amended feature\nside line"
+  );
+  assert.equal(
+    run(repo, "git", ["show", "top:feature.txt"]),
+    "amended feature"
+  );
+  assert.equal(statusOf(repo), "");
+});
+
+test("a branch forked above the target that edited the same line refuses the amend", async t => {
+  const { repo, repository } = buildFixture(t, "gsm-amend-fork-clash-");
+  run(repo, "git", ["switch", "-qc", "side", "feature"]);
+  writeFileSync(join(repo, "feature.txt"), "side feature\n");
+  run(repo, "git", ["commit", "-qam", "side work"]);
+  run(repo, "git", ["switch", "-q", "top"]);
+  const snapshot = await repository.read();
+  const feature = commitOn(snapshot, "feature");
+  const sideBefore = shaOf(repo, "side");
+  writeFileSync(join(repo, "feature.txt"), "amended feature\n");
+
+  await assert.rejects(
+    () => repository.amendInto(["feature.txt"], feature.sha),
+    /"side work", on another branch, changed the same lines/
+  );
+  assert.equal(shaOf(repo, "side"), sideBefore);
+  assert.equal(shaOf(repo, "feature"), feature.sha);
+  assert.equal(statusOf(repo), "M feature.txt");
+});
+
+test("a file a later commit added cannot be amended below it", async t => {
+  const { repo, repository } = buildFixture(t, "gsm-amend-added-later-");
+  const snapshot = await repository.read();
+  const feature = commitOn(snapshot, "feature");
+  writeFileSync(join(repo, "top.txt"), "top\nmore\n");
+
+  await assert.rejects(
+    () => repository.amendInto(["top.txt"], feature.sha),
+    /top\.txt cannot be amended into "add feature": "later work" added it after the target/
+  );
+  assert.equal(statusOf(repo), "M top.txt");
 });
 
 test("amending into a commit on another branch is refused", async t => {
