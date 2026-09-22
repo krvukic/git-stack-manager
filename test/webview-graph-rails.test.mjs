@@ -5,7 +5,7 @@
  * and struck through the subject beside it. The fix moved the bend into the gutter and made
  * the text indent for the widest lane a rail reaches rather than the row's own, so those two
  * tests are the ones that would catch a regression. The rest pin the scaling, since the
- * design panel changes the row height under all of it.
+ * Config drawer changes the row height under all of it.
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -150,7 +150,7 @@ test("only the HEAD row carries a halo", () => {
 });
 
 /**
- * Everything scales with the row, which the design panel changes. A dot drawn for a 26px
+ * Everything scales with the row, which the Config drawer changes. A dot drawn for a 26px
  * row inside a 40px one rides above its own subject, and the lines stop short of the
  * next row.
  */

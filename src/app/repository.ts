@@ -36,6 +36,7 @@ import {
 } from "#history/commit";
 import { discardPaths, DiscardResult } from "#history/discard";
 import { foldIntoParent, FoldResult } from "#history/fold";
+import { deleteMergedBranches } from "#history/pruneMerged";
 import {
   abortRebase,
   continueRebase,
@@ -546,11 +547,29 @@ export class Repository {
         isDraft: outcome.isDraft,
         title: outcome.title,
         url: outcome.url ?? "",
+        // Unread rather than guessed. Only a merged pull request's head is ever compared,
+        // and this record is open by construction.
+        headSha: "",
         reviewDecision: null,
         checks: null,
       });
     }
     return outcome;
+  }
+
+  /**
+   * Delete the branches whose pull request merged at their current tip.
+   *
+   * Reads a fresh snapshot rather than trusting the webview's: the tip each deletion is
+   * checked against has to be the one on disk now, not the one a poll ago.
+   */
+  async deleteMergedBranches(branches: string[]): Promise<string[]> {
+    return deleteMergedBranches(
+      this.git,
+      await this.read(),
+      this.pullRequests.cached(),
+      branches
+    );
   }
 
   /** Work out where the working-copy changes belong, without applying anything. */

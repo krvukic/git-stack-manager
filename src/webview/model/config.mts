@@ -1,5 +1,6 @@
 /**
- * Where the pills sit and how large the text is.
+ * What the Config drawer sets: where the pills sit, how large the text is, and whether
+ * merged branches are deleted.
  *
  * The choice outlives the page — `storage.ts` keeps it — because the tree is rebuilt on
  * every refresh, so a per-session choice would snap back to the default within seconds of
@@ -11,22 +12,26 @@ export type PillSide = "left" | "right";
 /** What clicking a filename does: open it as it is now, or open its diff. */
 export type FileClick = "file" | "diff";
 
-export type Design = {
+export type Config = {
   pillSide: PillSide;
   textFont: number;
   pillFont: number;
   wrapRows: boolean;
   fileClick: FileClick;
+  /** Delete a local branch once its pull request merges at the branch's tip. */
+  deleteMergedBranches: boolean;
 };
 
-export const DESIGN_KEY = "gsm.design";
+/** Named for the drawer's old title, since renaming the key would reset every stored choice. */
+export const CONFIG_KEY = "gsm.design";
 
-export const DESIGN_DEFAULTS: Design = {
+export const CONFIG_DEFAULTS: Config = {
   pillSide: "left",
   textFont: 13,
   pillFont: 11,
   wrapRows: false,
   fileClick: "file",
+  deleteMergedBranches: false,
 };
 
 export const TEXT_FONT_RANGE = { min: 10, max: 20 } as const;
@@ -37,42 +42,45 @@ export function clamp(value: number, low: number, high: number): number {
 }
 
 /**
- * Adopt a stored design field by field, clamping the numbers.
+ * Adopt a stored config field by field, clamping the numbers.
  *
  * A value from a future version — or a hand-edited one — must not be able to render the
  * tree unusable, so nothing is taken on trust: an unrecognised string leaves the
  * default in place, and a size outside the slider's range is pulled back into it.
  */
-export function parseDesign(stored: unknown): Design {
-  const design = { ...DESIGN_DEFAULTS };
+export function parseConfig(stored: unknown): Config {
+  const config = { ...CONFIG_DEFAULTS };
   if (typeof stored !== "object" || stored === null) {
-    return design;
+    return config;
   }
   const fields = stored as Record<string, unknown>;
   if (fields.pillSide === "left" || fields.pillSide === "right") {
-    design.pillSide = fields.pillSide;
+    config.pillSide = fields.pillSide;
   }
   if (typeof fields.wrapRows === "boolean") {
-    design.wrapRows = fields.wrapRows;
+    config.wrapRows = fields.wrapRows;
+  }
+  if (typeof fields.deleteMergedBranches === "boolean") {
+    config.deleteMergedBranches = fields.deleteMergedBranches;
   }
   if (fields.fileClick === "file" || fields.fileClick === "diff") {
-    design.fileClick = fields.fileClick;
+    config.fileClick = fields.fileClick;
   }
   if (Number.isFinite(fields.textFont)) {
-    design.textFont = clamp(
+    config.textFont = clamp(
       fields.textFont as number,
       TEXT_FONT_RANGE.min,
       TEXT_FONT_RANGE.max
     );
   }
   if (Number.isFinite(fields.pillFont)) {
-    design.pillFont = clamp(
+    config.pillFont = clamp(
       fields.pillFont as number,
       PILL_FONT_RANGE.min,
       PILL_FONT_RANGE.max
     );
   }
-  return design;
+  return config;
 }
 
 /** Badges track the pill size, one pixel down, the ratio the fixed sizes had. */

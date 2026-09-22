@@ -384,6 +384,13 @@ export async function stateOf(repository) {
  * contrived one: closing a pull request and pruning the remote branch leaves exactly
  * a local branch with no upstream and a closed pull request still bearing its name.
  */
+/**
+ * Stands for the commit origin holds for the record's branch, which the stand-in `gh` reads
+ * when it answers. A literal sha would pin the demo generator's output, and resolving it per
+ * call lets a test move the branch to what was pushed.
+ */
+const PUSHED_TIP = "<pushed tip>";
+
 const CANNED_PULL_REQUESTS = [
   {
     number: 206,
@@ -541,6 +548,9 @@ const CANNED_PULL_REQUESTS = [
     title: "fix(slugify): strip diacritics so accented input slugifies",
     url: "https://github.com/example/strkit/pull/142",
     headRefName: "fix-slugify-unicode",
+    // The commit that was pushed and merged. The branch was amended after the push, so
+    // its local tip differs and deleting merged branches keeps it.
+    headRefOid: PUSHED_TIP,
     baseRefName: "main",
     reviewDecision: "APPROVED",
     statusCheckRollup: [],
@@ -591,7 +601,12 @@ export function writeStandInGitHub(directory) {
     join(directory, "gh"),
     `#!/usr/bin/env node
 const fs = require("fs");
-const PULL_REQUESTS = ${JSON.stringify(CANNED_PULL_REQUESTS)};
+const { execFileSync } = require("child_process");
+const PULL_REQUESTS = ${JSON.stringify(CANNED_PULL_REQUESTS)}.map((pullRequest) =>
+  pullRequest.headRefOid === ${JSON.stringify(PUSHED_TIP)}
+    ? { ...pullRequest, headRefOid: pushedTip(pullRequest.headRefName) }
+    : pullRequest,
+);
 const args = process.argv.slice(2);
 let stdin = "";
 process.stdin.on("data", (chunk) => (stdin += chunk));
@@ -610,6 +625,16 @@ function answer() {
   // Everything else — \`pr edit\` among them — reports success and says nothing,
   // which is what the callers of those commands read.
   return "[]";
+}
+
+function pushedTip(branch) {
+  try {
+    return execFileSync("git", ["rev-parse", "--verify", "-q", "refs/remotes/origin/" + branch], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return "";
+  }
 }
 
 function option(name) {

@@ -1,5 +1,5 @@
 /**
- * Geometry: every measurement a reader can drag, the row heights under them, and the design
+ * Geometry: every measurement a reader can drag, the row heights under them, and the Config
  * choices that move both.
  *
  * Measured rather than photographed, for two reasons. A resize is a number, and a
@@ -365,7 +365,7 @@ test("the draft description keeps its height through a closed commit form", asyn
 });
 
 /**
- * Design settings and the legend, driven through the real UI.
+ * Config settings and the legend, driven through the real UI.
  *
  * The unit tests already assert the custom properties and the body class. What only a
  * browser can show is that the choices survive a reload and that the layout they produce is
@@ -380,10 +380,10 @@ test("the legend explains the badges the tree is drawing", async ({
   await expect(smartlog.locator("#legend")).toHaveClass(/open/);
   await snapshot("legend", { locator: smartlog.locator("#legend") });
 
-  // Opening the design panel has to close this one: both drop from the same edge.
-  await smartlog.locator("#btn-design").click();
+  // Opening the Config drawer has to close this one: both drop from the same edge.
+  await smartlog.locator("#btn-config").click();
   await expect(smartlog.locator("#legend")).not.toHaveClass(/open/);
-  await expect(smartlog.locator("#design")).toHaveClass(/open/);
+  await expect(smartlog.locator("#config")).toHaveClass(/open/);
 });
 
 test("pills after the subject line every commit message up on one edge", async ({
@@ -404,16 +404,16 @@ test("pills after the subject line every commit message up on one edge", async (
   // many offsets as the graph has lanes. That is the thing this mode removes.
   expect((await subjectLeftEdges()).length).toBeGreaterThan(1);
 
-  await smartlog.locator("#btn-design").click();
+  await smartlog.locator("#btn-config").click();
   await smartlog.locator('#seg-pillside button[data-side="right"]').click();
-  await smartlog.locator("#btn-design-close").click();
+  await smartlog.locator("#btn-config-close").click();
 
   expect(await subjectLeftEdges()).toHaveLength(1);
   await snapshot("pills-after-subject");
 });
 
-test("a design choice survives a reload", async ({ smartlog }) => {
-  await smartlog.locator("#btn-design").click();
+test("a Config choice survives a reload", async ({ smartlog }) => {
+  await smartlog.locator("#btn-config").click();
   await smartlog.locator('#seg-pillside button[data-side="right"]').click();
   await smartlog.locator("#rng-text").fill("17");
   await expect(smartlog.locator("body")).toHaveClass(/pills-right/);
@@ -550,9 +550,9 @@ test("wrapping a starved tree grows the rows instead of overprinting the next on
   snapshot,
 }) => {
   await starveTree(smartlog);
-  await smartlog.locator("#btn-design").click();
+  await smartlog.locator("#btn-config").click();
   await smartlog.locator('#seg-wraprows button[data-wrap="on"]').click();
-  await smartlog.locator("#btn-design-close").click();
+  await smartlog.locator("#btn-config-close").click();
   await smartlog.waitForTimeout(200);
 
   const { rows, overlaps, spilling } = await rowGeometry(smartlog);
@@ -565,7 +565,7 @@ test("wrapping a starved tree grows the rows instead of overprinting the next on
 });
 
 test("the wrap choice survives a reload", async ({ smartlog }) => {
-  await smartlog.locator("#btn-design").click();
+  await smartlog.locator("#btn-config").click();
   await smartlog.locator('#seg-wraprows button[data-wrap="on"]').click();
   await expect(smartlog.locator("body")).toHaveClass(/wrap-rows/);
 

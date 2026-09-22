@@ -6,7 +6,7 @@
  * through a rendered document. `Rails` is what the row component turns into `<line>`,
  * `<path>` and `<circle>`.
  *
- * Everything scales with the row height, which the design panel changes: the rails are
+ * Everything scales with the row height, which the Config drawer changes: the rails are
  * absolutely positioned SVG of exactly that height, so a row that grew for larger type
  * while the SVG stayed at 26px left the dots riding above their own subjects and the
  * lines stopping short of the next row.

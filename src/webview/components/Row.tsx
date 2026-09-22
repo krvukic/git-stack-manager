@@ -4,7 +4,7 @@
  * The four row kinds share the gutter and differ only in what they put beside it, so each
  * is its own small component over a common `RowShell`.
  *
- * Pills live in their own group so the design setting can move the whole set to the far
+ * Pills live in their own group so the Config setting can move the whole set to the far
  * side without reordering anything else. The group is emitted first either way and `order`
  * in the stylesheet does the moving — swapping the elements here would mean two orderings
  * to keep in step.

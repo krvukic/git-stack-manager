@@ -10,9 +10,11 @@ import {
   RawData,
 } from "#git/snapshot";
 import {
+  BranchTip,
   PullRequestRefreshState,
   PullRequestStatus,
 } from "#github/pullRequests";
+import { mergedBranches } from "#history/pruneMerged";
 
 /** A branch pill: its name, how it compares to its remote, and its PR if any. */
 export type UIBranch = {
@@ -84,6 +86,12 @@ export type RenderModel = {
   repoName: string;
   /** Label of the action Undo would reverse, or null when the stack is empty. */
   undoLabel?: string | null;
+  /**
+   * Branches whose pull request merged at their current tip, which the webview deletes when
+   * its setting says to. Computed here so the host's rule is the only one: the webview
+   * decides whether to ask, never which branches qualify.
+   */
+  mergedBranches: BranchTip[];
   /** True when `gh stack` tracks at least one branch here. */
   hasGhStack: boolean;
   /** Why PR badges are absent, when they are. Null when PR status works. */
@@ -140,6 +148,7 @@ export function buildModel(
     pullRequestRefresh,
     undoLabel,
     hasGhStack: rawData.stackMembership.size > 0,
+    mergedBranches: mergedBranches(rawData, pullRequests),
     rows,
   };
 

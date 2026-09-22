@@ -404,6 +404,19 @@ const ACTIONS: Record<string, ActionHandler> = {
     return { ok: true, data: await controller.model(), log };
   },
 
+  /**
+   * Sent by the webview while the setting is on and the model lists a merged branch. Undoable,
+   * like any edit that moves refs: the deleted branch comes back at the commit it held.
+   */
+  async deleteMergedBranches(controller, payload) {
+    const branches = readStringList(payload, "branches");
+    const { value, log, model } = await controller.edit(
+      "Delete merged branches",
+      () => controller.repository.deleteMergedBranches(branches)
+    );
+    return { ok: true, data: { deleted: value, model }, log };
+  },
+
   async undo(controller) {
     const { value, log } = await controller.logged("Undo", () =>
       controller.repository.undo()

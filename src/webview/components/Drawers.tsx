@@ -1,5 +1,5 @@
 /**
- * The design, legend, and shortcuts drawers.
+ * The config, legend, and shortcuts drawers.
  *
  * All three drop from the top bar over the tree rather than taking a column: each is
  * consulted briefly and dismissed, and stealing width would reflow the graph the reader is
@@ -12,8 +12,8 @@ import { trunkBehindBadge } from "../model/badges.mjs";
 import {
   PILL_FONT_RANGE,
   TEXT_FONT_RANGE,
-  type Design,
-} from "../model/design.mjs";
+  type Config,
+} from "../model/config.mjs";
 import { legendGroups, type LegendRow } from "../model/legend.mjs";
 import { SHORTCUTS } from "../model/shortcuts.mjs";
 import { Button } from "./Button";
@@ -34,7 +34,7 @@ function Hint({ children }: { children: React.ReactNode }) {
   return <div className="mt-0.75 text-meta text-muted">{children}</div>;
 }
 
-export const DRAWERS = ["design", "legend", "keys"] as const;
+export const DRAWERS = ["config", "legend", "keys"] as const;
 export type DrawerName = (typeof DRAWERS)[number];
 
 function Drawer({
@@ -196,27 +196,27 @@ function SizeSlider({
   );
 }
 
-export function DesignDrawer({
+export function ConfigDrawer({
   isOpen,
-  design,
+  config,
   onChange,
   onReset,
   onClose,
 }: {
   isOpen: boolean;
-  design: Design;
-  onChange: (changes: Partial<Design>) => void;
+  config: Config;
+  onChange: (changes: Partial<Config>) => void;
   onReset: () => void;
   onClose: () => void;
 }) {
   return (
-    <Drawer name="design" title="Design" isOpen={isOpen} onClose={onClose}>
+    <Drawer name="config" title="Config" isOpen={isOpen} onClose={onClose}>
       <Group>
         <GroupLabel>Branch pills and badges</GroupLabel>
         <Segmented
           id="seg-pillside"
           attribute="side"
-          value={design.pillSide}
+          value={config.pillSide}
           options={[
             { value: "left", label: "Before the subject" },
             { value: "right", label: "After the subject" },
@@ -234,7 +234,7 @@ export function DesignDrawer({
         <Segmented
           id="seg-fileclick"
           attribute="fileclick"
-          value={design.fileClick}
+          value={config.fileClick}
           options={[
             { value: "file", label: "Opens the current file" },
             { value: "diff", label: "Opens its diff" },
@@ -248,11 +248,32 @@ export function DesignDrawer({
         </Hint>
       </Group>
       <Group>
+        <GroupLabel>Merged pull requests</GroupLabel>
+        <Segmented
+          id="seg-deletemerged"
+          attribute="deletemerged"
+          value={config.deleteMergedBranches ? "on" : "off"}
+          options={[
+            { value: "off", label: "Keep the branch" },
+            { value: "on", label: "Delete the local branch" },
+          ]}
+          onChange={choice =>
+            onChange({ deleteMergedBranches: choice === "on" })
+          }
+        />
+        <Hint>
+          Deleting takes the branch and its commits out of the tree. Only a
+          branch still at the commit its pull request merged goes, so one you
+          amended or added to afterwards stays, as does the checked-out branch.
+          Undo brings a deleted branch back.
+        </Hint>
+      </Group>
+      <Group>
         <GroupLabel>Long rows</GroupLabel>
         <Segmented
           id="seg-wraprows"
           attribute="wrap"
-          value={design.wrapRows ? "on" : "off"}
+          value={config.wrapRows ? "on" : "off"}
           options={[
             { value: "off", label: "Keep to one line" },
             { value: "on", label: "Wrap onto more lines" },
@@ -270,7 +291,7 @@ export function DesignDrawer({
         <GroupLabel>Text size</GroupLabel>
         <SizeSlider
           id="text"
-          value={design.textFont}
+          value={config.textFont}
           range={TEXT_FONT_RANGE}
           hint="Commit subjects, hashes, and hints."
           onChange={textFont => onChange({ textFont })}
@@ -280,14 +301,14 @@ export function DesignDrawer({
         <GroupLabel>Branch pill and badge size</GroupLabel>
         <SizeSlider
           id="pill"
-          value={design.pillFont}
+          value={config.pillFont}
           range={PILL_FONT_RANGE}
           hint="Branch names, sync badges, and pull request badges."
           onChange={pillFont => onChange({ pillFont })}
         />
       </Group>
       <Group>
-        <Button id="btn-design-reset" onClick={onReset}>
+        <Button id="btn-config-reset" onClick={onReset}>
           Restore defaults
         </Button>
       </Group>

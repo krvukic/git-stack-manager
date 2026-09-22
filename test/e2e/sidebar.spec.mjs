@@ -213,7 +213,7 @@ test("each file row carries its own actions, revealed on hover", async ({
   await expect(smartlog.locator("#changes .dffile")).toHaveCount(1);
 });
 
-test("clicking a file name opens its diff once the design panel asks for one", async ({
+test("clicking a file name opens its diff once the Config drawer asks for one", async ({
   smartlog,
 }) => {
   await selectCommit(smartlog, COMMIT_WITH_BODY);
@@ -223,11 +223,11 @@ test("clicking a file name opens its diff once the design panel asks for one", a
   await smartlog.locator("#filelist .file .fp").first().click();
   await expect(smartlog.locator("#changes.open")).toBeHidden();
 
-  await smartlog.locator("#btn-design").click();
+  await smartlog.locator("#btn-config").click();
   await smartlog
     .locator('#seg-fileclick button[data-fileclick="diff"]')
     .click();
-  await smartlog.locator("#btn-design-close").click();
+  await smartlog.locator("#btn-config-close").click();
   await selectCommit(smartlog, COMMIT_WITH_BODY);
   await smartlog.locator("#filelist .file .fp").first().click();
   await expect(smartlog.locator("#changes.open")).toBeVisible();

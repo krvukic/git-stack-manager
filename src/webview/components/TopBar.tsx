@@ -213,11 +213,11 @@ export function TopBar({
         Shortcuts
       </Button>
       <Button
-        id="btn-design"
+        id="btn-config"
         title="Choose which side the branch pills sit on, and scale the text and pill sizes. Choices are remembered."
-        onClick={() => onToggleDrawer("design")}
+        onClick={() => onToggleDrawer("config")}
       >
-        Design
+        Config
       </Button>
     </div>
   );

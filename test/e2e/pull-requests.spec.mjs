@@ -10,8 +10,8 @@
  * records why each pull request looks the way it does. Read the two together: the fixture
  * records what GitHub answered, these record what the tree drew.
  */
-import { expect, test } from "./fixtures/demoRepo.mjs";
-import { selectCommit } from "./fixtures/interactions.mjs";
+import { expect, reopen, test } from "./fixtures/demoRepo.mjs";
+import { expectToast, selectCommit } from "./fixtures/interactions.mjs";
 
 /**
  * @typedef {object} PullRequestBadge
@@ -304,4 +304,57 @@ test("Submit offers to update the pull request a branch already has", async ({
     "title",
     /Push case-utils and update pull request #198/
   );
+});
+
+test("deleting merged branches takes only a branch still at the merged commit, and Undo keeps it back", async ({
+  smartlog,
+  demoRepository,
+}) => {
+  const pill = smartlog.locator("#tree .pill", {
+    hasText: /^fix-slugify-unicode$/,
+  });
+  const exists = async () =>
+    (
+      await demoRepository.git([
+        "for-each-ref",
+        "--format=%(refname)",
+        "refs/heads/fix-slugify-unicode",
+      ])
+    ).trim() !== "";
+
+  await smartlog.locator("#btn-config").click();
+  await smartlog
+    .locator('#seg-deletemerged button[data-deletemerged="on"]')
+    .click();
+  await smartlog.locator("#btn-config-close").click();
+
+  // #142 merged the commit that was pushed, and the branch was amended afterwards, so it
+  // holds work the pull request never had.
+  await reopen(smartlog);
+  await expect(pill).toHaveCount(1);
+  expect(await exists()).toBe(true);
+
+  // Dropping the amend leaves the branch at exactly what merged.
+  await demoRepository.git([
+    "branch",
+    "-f",
+    "fix-slugify-unicode",
+    "origin/fix-slugify-unicode",
+  ]);
+  await reopen(smartlog);
+  await expectToast(smartlog, "Deleted merged branch fix-slugify-unicode");
+  await expect(pill).toHaveCount(0);
+  expect(await exists()).toBe(false);
+  await expect(smartlog.locator("#btn-undo")).toHaveAttribute(
+    "title",
+    /Delete merged branches/
+  );
+
+  await smartlog.locator("#btn-undo").click();
+  await expect(pill).toHaveCount(1);
+  // The setting is still on, and a reload starts the page afresh, yet the branch Undo
+  // restored stays.
+  await reopen(smartlog);
+  await expect(pill).toHaveCount(1);
+  expect(await exists()).toBe(true);
 });

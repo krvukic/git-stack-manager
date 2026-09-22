@@ -102,6 +102,7 @@ function statusFromSubmit() {
     isDraft: false,
     title: "feat: part A",
     url: "https://github.com/example/example/pull/7",
+    headSha: "",
     reviewDecision: null,
     checks: null,
   };

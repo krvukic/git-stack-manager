@@ -22,7 +22,7 @@ import type { FileChange } from "#git/snapshot";
 import type { RenderModel, UICommit } from "#ui/renderModel";
 import { useRef, useState } from "react";
 import { gotoTarget, splitMessage, submitTarget } from "../model/commits.mjs";
-import type { FileClick } from "../model/design.mjs";
+import type { FileClick } from "../model/config.mjs";
 import {
   DESCRIPTION_HEIGHT_KEY,
   DESCRIPTION_MIN_HEIGHT,

@@ -1,5 +1,5 @@
 /**
- * Everything the UI reads back at startup: the design settings, and the three measurements a
+ * Everything the UI reads back at startup: the config settings, and the three measurements a
  * reader can drag — the sidebar's width, the changes overlay's width, and a message box's
  * height.
  *
@@ -20,9 +20,9 @@ import {
 import {
   badgeFontFor,
   clamp,
-  DESIGN_DEFAULTS,
-  parseDesign,
-} from "../src/webview/model/design.mts";
+  CONFIG_DEFAULTS,
+  parseConfig,
+} from "../src/webview/model/config.mts";
 import {
   clampMessageHeight,
   COMMIT_BODY_MIN_HEIGHT,
@@ -37,26 +37,28 @@ import {
   TREE_MIN_WIDTH,
 } from "../src/webview/model/sidebarWidth.mts";
 
-test("an absent stored design leaves every default in place", () => {
-  assert.deepEqual(parseDesign({}), DESIGN_DEFAULTS);
-  assert.deepEqual(parseDesign(null), DESIGN_DEFAULTS);
-  assert.deepEqual(parseDesign("nonsense"), DESIGN_DEFAULTS);
+test("an absent stored config leaves every default in place", () => {
+  assert.deepEqual(parseConfig({}), CONFIG_DEFAULTS);
+  assert.deepEqual(parseConfig(null), CONFIG_DEFAULTS);
+  assert.deepEqual(parseConfig("nonsense"), CONFIG_DEFAULTS);
 });
 
-test("a stored design is adopted field by field", () => {
-  const design = parseDesign({
+test("a stored config is adopted field by field", () => {
+  const config = parseConfig({
     pillSide: "right",
     wrapRows: true,
     fileClick: "diff",
     textFont: 16,
     pillFont: 14,
+    deleteMergedBranches: true,
   });
-  assert.deepEqual(design, {
+  assert.deepEqual(config, {
     pillSide: "right",
     wrapRows: true,
     fileClick: "diff",
     textFont: 16,
     pillFont: 14,
+    deleteMergedBranches: true,
   });
 });
 
@@ -65,30 +67,44 @@ test("a stored design is adopted field by field", () => {
  * version — or a hand-edited one — must not be able to render the tree unusable.
  */
 test("an unrecognised choice falls back rather than being adopted", () => {
-  const design = parseDesign({ pillSide: "middle", fileClick: "terminal" });
-  assert.equal(design.pillSide, DESIGN_DEFAULTS.pillSide);
-  assert.equal(design.fileClick, DESIGN_DEFAULTS.fileClick);
+  const config = parseConfig({ pillSide: "middle", fileClick: "terminal" });
+  assert.equal(config.pillSide, CONFIG_DEFAULTS.pillSide);
+  assert.equal(config.fileClick, CONFIG_DEFAULTS.fileClick);
+});
+
+test("only a stored true turns on deleting merged branches", () => {
+  // The one setting that deletes something, so a hand-edited "true" string or a 1 left by
+  // another tool must not count as consent.
+  assert.equal(CONFIG_DEFAULTS.deleteMergedBranches, false);
+  assert.equal(
+    parseConfig({ deleteMergedBranches: "true" }).deleteMergedBranches,
+    false
+  );
+  assert.equal(
+    parseConfig({ deleteMergedBranches: 1 }).deleteMergedBranches,
+    false
+  );
 });
 
 test("a stored size outside the slider's range is pulled back into it", () => {
-  assert.equal(parseDesign({ textFont: 400 }).textFont, 20);
-  assert.equal(parseDesign({ textFont: 1 }).textFont, 10);
-  assert.equal(parseDesign({ pillFont: 0 }).pillFont, 8);
-  assert.equal(parseDesign({ pillFont: 99 }).pillFont, 18);
+  assert.equal(parseConfig({ textFont: 400 }).textFont, 20);
+  assert.equal(parseConfig({ textFont: 1 }).textFont, 10);
+  assert.equal(parseConfig({ pillFont: 0 }).pillFont, 8);
+  assert.equal(parseConfig({ pillFont: 99 }).pillFont, 18);
 });
 
 test("a size that is not a number is ignored, including NaN", () => {
   assert.equal(
-    parseDesign({ textFont: "16" }).textFont,
-    DESIGN_DEFAULTS.textFont
+    parseConfig({ textFont: "16" }).textFont,
+    CONFIG_DEFAULTS.textFont
   );
   assert.equal(
-    parseDesign({ textFont: NaN }).textFont,
-    DESIGN_DEFAULTS.textFont
+    parseConfig({ textFont: NaN }).textFont,
+    CONFIG_DEFAULTS.textFont
   );
   assert.equal(
-    parseDesign({ textFont: Infinity }).textFont,
-    DESIGN_DEFAULTS.textFont
+    parseConfig({ textFont: Infinity }).textFont,
+    CONFIG_DEFAULTS.textFont
   );
 });
 

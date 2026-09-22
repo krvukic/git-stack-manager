@@ -39,6 +39,7 @@ function pullRequest(fields = {}) {
     state: "OPEN",
     isDraft: false,
     checks: null,
+    headSha: "",
     reviewDecision: null,
     ...fields,
   };

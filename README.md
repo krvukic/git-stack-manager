@@ -24,7 +24,7 @@ Run `just init-repo` once, then pick a host:
   view with both line-number gutters, which is Sapling's view of the same name. **Open diff view**
   does the same for the selected file, in VS Code's own diff editor where there is one and in the
   same overlay where there is not. **Open current file** opens the file as it is now. Clicking a
-  file name runs one of the last two, chosen in **Design**.
+  file name runs one of the last two, chosen in **Config**.
 - **✎ *N* uncommitted changes** opens the same overlay for the changes no commit holds yet, staged
   ones included, and the diff icon on an uncommitted file's row opens that one change — HEAD's
   version against the file itself, which stays editable in the diff editor. A file git has never
@@ -40,13 +40,18 @@ Run `just init-repo` once, then pick a host:
   action.
 - **Legend** explains every pill and badge with a live sample of each, drawn by the same code as
   the tree.
-- **Design** sets where the branch pills sit, whether long rows wrap, and how large the text is.
+- **Config** sets where the branch pills sit, whether long rows wrap, and how large the text is.
   Putting the pills *after* the subject lines every commit message up on one left edge, which turns
   the tree into a list you can read down; each row's pills follow its own subject, so they stay next
   to the commit they describe. **Long rows** either keep to one line, truncating what will not fit
   so every row is the same height, or wrap and grow the row to match. Wrapping earns its keep once
   the commit panel has taken most of the width. Text and pill sizes scale independently, and the row
   height follows the text. Choices persist per repository.
+- **Merged pull requests**, also in **Config**, can delete a local branch once its pull request
+  merges, which takes its commits out of the tree. Only a branch still at the commit that merged
+  goes, so one you amended or added to afterwards stays, as does the checked-out branch. Undo
+  brings a deleted branch back for good. A branch merged by a merge commit or a fast-forward is
+  already on trunk, so the tree never drew it and the setting leaves it alone.
 - The sidebar's **description** box fits itself to the message when you double-click its
   bottom-right corner, and returns to its starting height on a second double-click. Dragging that
   corner still resizes by hand, and double-clicking anywhere else still selects a word. Whatever

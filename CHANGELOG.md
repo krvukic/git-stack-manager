@@ -3,6 +3,25 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-22
+
+Clearing merged branches out of the tree, without risking work the merge never saw.
+
+### Added
+
+- **Config** can delete the local branch once its pull request merges, which takes the branch and
+  its commits out of the tree. It is off by default. A branch goes only while its tip is the exact
+  commit GitHub reports as the pull request's head, so one amended or added to after the merge
+  stays, as do the checked-out branch, a branch another worktree holds, and every branch while a
+  rebase is stopped. One `git update-ref` batch deletes them, and it refuses the whole batch if a
+  branch moved since the tree was read. Undo brings a deleted branch back, and it is not deleted
+  again, even after a reload.
+
+### Changed
+
+- The **Design** drawer is now **Config**, since it holds settings as well as looks. Stored choices
+  carry over.
+
 ## [0.6.0] - 2026-09-21
 
 Reading a diff and writing a message at the size you chose, not the size the layout picked.

@@ -57,7 +57,7 @@
   );
 
   /**
-   * The three sizes the design panel scales, as Tailwind names.
+   * The three sizes the Config drawer scales, as Tailwind names.
    *
    * Kept as custom properties the panel writes at runtime rather than as fixed values,
    * because that is the whole point of the sliders: `text-ui` resolves through

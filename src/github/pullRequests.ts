@@ -46,6 +46,12 @@ export type PullRequestStatus = {
   isDraft: boolean;
   title: string;
   url: string;
+  /**
+   * The commit the pull request's head pointed at when GitHub last answered. For a merged
+   * pull request that is the commit that merged, which is how a local branch is proven not
+   * to have moved since. Empty when unknown.
+   */
+  headSha: string;
   /** APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED, or null when none applies. */
   reviewDecision: string | null;
   /** Rolled-up CI result: success | failure | pending, or null when no checks ran. */
@@ -339,6 +345,7 @@ export class PullRequestService {
         isDraft: entry.isDraft === true,
         title: typeof entry.title === "string" ? entry.title : "",
         url: typeof entry.url === "string" ? entry.url : "",
+        headSha,
         reviewDecision:
           typeof entry.reviewDecision === "string"
             ? entry.reviewDecision

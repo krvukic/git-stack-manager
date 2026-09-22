@@ -1,5 +1,5 @@
 /**
- * The design settings, applied to the document.
+ * The Config drawer's choices, applied to the document.
  *
  * The sizes are custom properties on `:root` so the rules that consume them stay in the
  * stylesheet, rather than every row carrying an inline style the render would have to
@@ -17,21 +17,21 @@ import { useCallback, useLayoutEffect, useState } from "react";
 import { rowHeightFor } from "../graph/rails.mjs";
 import {
   badgeFontFor,
-  DESIGN_DEFAULTS,
-  type Design,
-} from "../model/design.mjs";
-import { loadDesign, saveDesign } from "../storage";
+  CONFIG_DEFAULTS,
+  type Config,
+} from "../model/config.mjs";
+import { loadConfig, saveConfig } from "../storage";
 
-export function useDesign() {
-  const [design, setDesign] = useState<Design>(loadDesign);
+export function useConfig() {
+  const [config, setConfig] = useState<Config>(loadConfig);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty("--text-font", `${design.textFont}px`);
-    root.style.setProperty("--pill-font", `${design.pillFont}px`);
+    root.style.setProperty("--text-font", `${config.textFont}px`);
+    root.style.setProperty("--pill-font", `${config.pillFont}px`);
     root.style.setProperty(
       "--badge-font",
-      `${badgeFontFor(design.pillFont)}px`
+      `${badgeFontFor(config.pillFont)}px`
     );
     // The row has to grow with the text, and the rail SVG is drawn to exactly this
     // height — larger type in a 26px row left the dots above their own subjects and the
@@ -39,29 +39,29 @@ export function useDesign() {
     // `rowHeightFor` directly, so both move together.
     root.style.setProperty(
       "--row-height",
-      `${rowHeightFor(design.textFont)}px`
+      `${rowHeightFor(config.textFont)}px`
     );
-    document.body.classList.toggle("pills-right", design.pillSide === "right");
-    document.body.classList.toggle("wrap-rows", design.wrapRows);
-  }, [design]);
+    document.body.classList.toggle("pills-right", config.pillSide === "right");
+    document.body.classList.toggle("wrap-rows", config.wrapRows);
+  }, [config]);
 
-  const update = useCallback((changes: Partial<Design>) => {
-    setDesign(current => {
+  const update = useCallback((changes: Partial<Config>) => {
+    setConfig(current => {
       const next = { ...current, ...changes };
-      saveDesign(next);
+      saveConfig(next);
       return next;
     });
   }, []);
 
   const reset = useCallback(() => {
-    saveDesign(DESIGN_DEFAULTS);
-    setDesign({ ...DESIGN_DEFAULTS });
+    saveConfig(CONFIG_DEFAULTS);
+    setConfig({ ...CONFIG_DEFAULTS });
   }, []);
 
   return {
-    design,
+    config,
     update,
     reset,
-    rowHeight: rowHeightFor(design.textFont),
+    rowHeight: rowHeightFor(config.textFont),
   };
 }

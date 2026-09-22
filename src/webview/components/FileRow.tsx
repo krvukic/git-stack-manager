@@ -8,7 +8,7 @@
 import type { FileChange } from "#git/snapshot";
 import { classes } from "../classes";
 import { backgroundModifierName, opensInBackground } from "../model/clicks.mjs";
-import type { FileClick } from "../model/design.mjs";
+import type { FileClick } from "../model/config.mjs";
 import { IconButton } from "./Button";
 
 /**
@@ -188,8 +188,8 @@ export function CommitFileRow({
     <div
       className={classes(FILE_ROW, "relative")}
       data-path={file.path}
-      // The row itself runs whichever shortcut the design chose, so a plain click keeps working
-      // for anyone who does not go looking for the icons.
+      // The row itself runs whichever shortcut the Config drawer chose, so a plain click keeps
+      // working for anyone who does not go looking for the icons.
       onClick={event => {
         const background = opensInBackground(event, navigator.userAgent);
         if (fileClick === "diff") {

@@ -20,7 +20,7 @@ import { CommitPanel } from "./components/CommitPanel";
 import { ConflictBanner } from "./components/ConflictBanner";
 import { ContextMenu, type MenuState } from "./components/ContextMenu";
 import {
-  DesignDrawer,
+  ConfigDrawer,
   LegendDrawer,
   ShortcutsDrawer,
   type DrawerName,
@@ -43,8 +43,9 @@ import type { HostSettings } from "./settings";
 import { useCommitActions } from "./state/useCommitActions";
 import { useCommitFiles } from "./state/useCommitFiles";
 import { commitMenuItems } from "./state/useCommitMenu";
-import { useDesign } from "./state/useDesign";
+import { useConfig } from "./state/useConfig";
 import { useKeyboard } from "./state/useKeyboard";
+import { useMergedBranchDeletion } from "./state/useMergedBranchDeletion";
 import { useRepositoryActions } from "./state/useRepositoryActions";
 import { useSmartlog } from "./state/useSmartlog";
 import { useStoredWidth } from "./state/useStoredWidth";
@@ -68,11 +69,11 @@ export function App({ settings }: { settings: HostSettings }) {
   const smartlog = useSmartlog();
   const { model, selectedSha, setSelectedSha } = smartlog;
   const {
-    design,
-    update: updateDesign,
-    reset: resetDesign,
+    config,
+    update: updateConfig,
+    reset: resetConfig,
     rowHeight,
-  } = useDesign();
+  } = useConfig();
 
   const [openDrawer, setOpenDrawer] = useState<DrawerName | null>(null);
   const [menu, setMenu] = useState<MenuState>(null);
@@ -108,6 +109,7 @@ export function App({ settings }: { settings: HostSettings }) {
   const commitActions = useCommitActions(smartlog);
   const workingCopy = useWorkingCopy(smartlog, selectedCommit);
   const commitFiles = useCommitFiles(smartlog);
+  useMergedBranchDeletion(smartlog, config.deleteMergedBranches);
 
   const openUrl = useCallback((url: string) => {
     void rpc("openUrl", { url });
@@ -227,12 +229,12 @@ export function App({ settings }: { settings: HostSettings }) {
             onContinue={() => void repository.continueRebase()}
             onAbort={() => void repository.abortRebase()}
           />
-          <DesignDrawer
-            isOpen={openDrawer === "design"}
-            design={design}
-            onChange={updateDesign}
-            onReset={resetDesign}
-            onClose={() => toggleDrawer("design")}
+          <ConfigDrawer
+            isOpen={openDrawer === "config"}
+            config={config}
+            onChange={updateConfig}
+            onReset={resetConfig}
+            onClose={() => toggleDrawer("config")}
           />
           <LegendDrawer
             isOpen={openDrawer === "legend"}
@@ -333,7 +335,7 @@ export function App({ settings }: { settings: HostSettings }) {
             commit={selectedCommit}
             model={model}
             files={commitFiles.files}
-            fileClick={design.fileClick}
+            fileClick={config.fileClick}
             width={sidebarWidth}
             submitting={commitActions.submitting}
             amending={commitActions.amending}

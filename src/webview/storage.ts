@@ -9,21 +9,21 @@
  *
  * The accessors sit together rather than beside the state each one feeds, because the guard is
  * the whole substance of all of them. What each value *means* stays with its own module:
- * `model/design.mts` validates a stored design, and `model/sidebarWidth.mts`,
+ * `model/config.mts` validates a stored config, and `model/sidebarWidth.mts`,
  * `model/changesWidth.mts` and `model/messageHeight.mts` own their bounds.
  *
- * Every measurement is stored on its own key rather than inside the design object. The design
+ * Every measurement is stored on its own key rather than inside the config object. The config
  * is edited in a drawer and written once per choice; these are dragged, so a single write
- * would rewrite the whole design blob on the release of every drag. The keys are also what a
+ * would rewrite the whole config blob on the release of every drag. The keys are also what a
  * reader clearing one stuck value can reach without losing the rest.
  */
 import { CHANGES_WIDTH_KEY } from "./model/changesWidth.mjs";
 import {
-  DESIGN_DEFAULTS,
-  DESIGN_KEY,
-  parseDesign,
-  type Design,
-} from "./model/design.mjs";
+  CONFIG_DEFAULTS,
+  CONFIG_KEY,
+  parseConfig,
+  type Config,
+} from "./model/config.mjs";
 import { SIDEBAR_WIDTH_KEY } from "./model/sidebarWidth.mjs";
 
 export const LOG_HIDDEN_KEY = "gsm.commandLogHidden";
@@ -44,17 +44,17 @@ function writeStored(key: string, value: string): void {
   }
 }
 
-export function loadDesign(): Design {
+export function loadConfig(): Config {
   try {
-    return parseDesign(JSON.parse(readStored(DESIGN_KEY) || "{}"));
+    return parseConfig(JSON.parse(readStored(CONFIG_KEY) || "{}"));
   } catch {
     // Malformed JSON, which a hand-edited value can be: the defaults apply.
-    return { ...DESIGN_DEFAULTS };
+    return { ...CONFIG_DEFAULTS };
   }
 }
 
-export function saveDesign(design: Design): void {
-  writeStored(DESIGN_KEY, JSON.stringify(design));
+export function saveConfig(config: Config): void {
+  writeStored(CONFIG_KEY, JSON.stringify(config));
 }
 
 /**
@@ -100,4 +100,36 @@ export function readStoredLogHidden(): boolean {
 
 export function storeLogHidden(hidden: boolean): void {
   writeStored(LOG_HIDDEN_KEY, String(hidden));
+}
+
+const ASKED_MERGED_BRANCHES_KEY = "gsm.askedMergedBranches";
+
+/**
+ * Enough for every branch a reader merges between two visits, and small enough that the list
+ * never needs pruning by age.
+ */
+const ASKED_MERGED_BRANCHES_LIMIT = 200;
+
+/** Each entry is `name@sha`, so a branch that later moves to another merged commit is new. */
+export function readStoredAskedMergedBranches(): Set<string> {
+  try {
+    const stored: unknown = JSON.parse(
+      readStored(ASKED_MERGED_BRANCHES_KEY) || "[]"
+    );
+    return new Set(
+      Array.isArray(stored)
+        ? stored.filter(entry => typeof entry === "string")
+        : []
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+/** Keeps the newest entries, since a Set iterates in insertion order. */
+export function storeAskedMergedBranches(asked: Set<string>): void {
+  writeStored(
+    ASKED_MERGED_BRANCHES_KEY,
+    JSON.stringify([...asked].slice(-ASKED_MERGED_BRANCHES_LIMIT))
+  );
 }
