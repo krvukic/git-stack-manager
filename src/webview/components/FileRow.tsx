@@ -10,7 +10,7 @@ import { classes } from "../classes";
 import { backgroundModifierName, opensInBackground } from "../model/clicks.mjs";
 import type { FileClick } from "../model/config.mjs";
 import type { CheckState } from "../model/lineChoice.mjs";
-import { IconButton } from "./Button";
+import { IconButton, type IconSize } from "./Button";
 import { Checkbox } from "./Checkbox";
 
 /**
@@ -99,6 +99,9 @@ function FilePath({ path, className }: { path: string; className?: string }) {
  *
  * ± opens the changes overlay even where ⇄ opens the editor's diff, because the editor's diff has
  * no boxes to tick.
+ *
+ * The icons follow the path rather than sitting at the panel's far edge, and are a size up from a
+ * commit row's: on a wide panel the edge was too far from the name to read as the file's controls.
  */
 export function PickableFileRow({
   file,
@@ -134,15 +137,11 @@ export function PickableFileRow({
         status={file.status}
         onClick={() => onPick(state !== "all")}
       />
-      <FilePath path={file.path} className="flex-1" />
-      {chosenLines ? (
-        <span className="linecount flex-none text-meta text-muted">
-          {`${chosenLines.chosen} of ${chosenLines.total} lines`}
-        </span>
-      ) : null}
+      <FilePath path={file.path} />
       {onChooseLines ? (
         <IconButton
           className="chooselines"
+          size="large"
           alwaysVisible
           aria-label="Choose which lines of this change go in"
           data-tip="Choose which lines of this change go in"
@@ -156,11 +155,17 @@ export function PickableFileRow({
       ) : null}
       <FileAction
         kind="diff"
+        size="large"
         alwaysVisible
         description={`Open diff view — this uncommitted change against HEAD. Hold ${BACKGROUND_KEY} to open it in a background tab.`}
         onRun={onOpenDiff}
       />
       <DiscardAction onDiscard={onDiscard} />
+      {chosenLines ? (
+        <span className="linecount ml-auto flex-none text-meta text-muted">
+          {`${chosenLines.chosen} of ${chosenLines.total} lines`}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -184,6 +189,7 @@ function DiscardAction({ onDiscard }: { onDiscard: () => void }) {
     <IconButton
       className="discard"
       tone="danger"
+      size="large"
       alwaysVisible
       aria-label={description}
       data-tip={description}
@@ -259,17 +265,20 @@ export function CommitFileRow({
 function FileAction({
   kind,
   description,
+  size = "small",
   alwaysVisible = false,
   onRun,
 }: {
   kind: "diff" | "file";
   description: string;
+  size?: IconSize;
   alwaysVisible?: boolean;
   onRun: (background: boolean) => void;
 }) {
   return (
     <IconButton
       className={kind}
+      size={size}
       alwaysVisible={alwaysVisible}
       aria-label={description}
       data-tip={description}

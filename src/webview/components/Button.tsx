@@ -89,8 +89,21 @@ const ICON_TONES: Record<IconTone, string> = {
   danger: "text-muted hover:bg-del/18 hover:text-del",
 };
 
+/**
+ * `large` is for a row whose icons are its only controls, where a reader aims at them rather than
+ * sweeping past them. Its own table rather than a class on top, since two height utilities on one
+ * element leave the winner to stylesheet order.
+ */
+export type IconSize = "small" | "large";
+
+const ICON_SIZES: Record<IconSize, string> = {
+  small: "h-4.5 w-5 text-meta/none",
+  large: "h-5 w-5.5 text-title/none",
+};
+
 export type IconButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   tone?: IconTone;
+  size?: IconSize;
   /**
    * Keep the glyph on screen when the row is not hovered. Off by default: a row carrying three
    * openers would otherwise be three glyphs of noise per file. An action worth finding without
@@ -109,6 +122,7 @@ export type IconButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
  */
 export function IconButton({
   tone = "quiet",
+  size = "small",
   alwaysVisible = false,
   className,
   ...rest
@@ -119,8 +133,8 @@ export function IconButton({
         // `iconbtn` carries no styling — the utilities below do that — but the end-to-end
         // suite selects these by it, and a class the tests name is part of the contract.
         "iconbtn",
-        "h-4.5 w-5 flex-none cursor-pointer rounded-sm bg-transparent p-0",
-        "text-meta/none",
+        "flex-none cursor-pointer rounded-sm bg-transparent p-0",
+        ICON_SIZES[size],
         !alwaysVisible &&
           "invisible group-hover/file:visible focus-visible:visible",
         ICON_TONES[tone],
