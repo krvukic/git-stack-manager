@@ -438,6 +438,9 @@ async function runHostAction(
       background: readFlag(payload, "background"),
     });
   }
+  if (action === "openCommitChanges") {
+    return openCommitChanges(repository, requireString(payload, "sha"));
+  }
   if (action === "openTerminal") {
     // An interactive TUI cannot run inside the webview, so give it a terminal.
     const terminal = vscode.window.createTerminal("Git Stack");
@@ -503,23 +506,83 @@ async function openDiffEditor(
   }
   const short = sha.slice(0, 8);
   const left = blobUri(`${sha}^`, previousPath, `${previousPath} (parent)`);
-  const absolutePath = path.join(repository.git.cwd, filePath);
-  // A file deleted since the commit leaves nothing on disk to edit, so the blob stays.
-  const editable =
-    (await isCheckedOut(repository, sha)) && fs.existsSync(absolutePath);
-  const right = editable
-    ? vscode.Uri.file(absolutePath)
-    : blobUri(sha, filePath, `${filePath} (${short})`);
+  const right = commitRightSide(
+    repository,
+    sha,
+    filePath,
+    await isCheckedOut(repository, sha)
+  );
   await vscode.commands.executeCommand(
     "vscode.diff",
     left,
-    right,
-    editable
+    right.uri,
+    right.editable
       ? `${filePath} — working copy against ${short}'s parent`
       : `${filePath} — ${short} against its parent`,
     { preview: false, preserveFocus: background }
   );
   return { ok: true };
+}
+
+/**
+ * Every file of the checked-out commit in VS Code's multi-file diff editor, the view Source
+ * Control's own "View changes" opens. The right sides are the files on disk, so each one is
+ * editable, which the overlay cannot offer.
+ *
+ * Any other commit is refused, and the caller shows the overlay instead: its files exist only
+ * as blobs, and the overlay draws those as well as this editor does. So does an empty commit,
+ * whose overlay says there is nothing to show where this editor would open blank.
+ */
+async function openCommitChanges(
+  repository: Repository,
+  sha: string
+): Promise<ActionResult> {
+  if (!(await isCheckedOut(repository, sha))) {
+    return {
+      ok: false,
+      error: "Only the checked-out commit opens in the multi-diff editor.",
+    };
+  }
+  const files = await repository.filesForCommit(sha);
+  if (!files.length) {
+    return { ok: false, error: "The commit changes no files." };
+  }
+  const short = sha.slice(0, 8);
+  const resources = files.map(file => {
+    const previousPath = file.oldPath ?? file.path;
+    return [
+      vscode.Uri.file(path.join(repository.git.cwd, file.path)),
+      blobUri(`${sha}^`, previousPath, `${previousPath} (parent)`),
+      commitRightSide(repository, sha, file.path, true).uri,
+    ];
+  });
+  await vscode.commands.executeCommand(
+    "vscode.changes",
+    `Changes in ${short} — working copy against its parent`,
+    resources
+  );
+  return { ok: true };
+}
+
+/**
+ * A commit's side of its diff: the file on disk when the commit is checked out, so the diff is
+ * editable, and the commit's blob otherwise. A file deleted since the commit leaves nothing on
+ * disk to edit, so the blob stays.
+ */
+function commitRightSide(
+  repository: Repository,
+  sha: string,
+  filePath: string,
+  checkedOut: boolean
+): { uri: vscode.Uri; editable: boolean } {
+  const absolutePath = path.join(repository.git.cwd, filePath);
+  if (checkedOut && fs.existsSync(absolutePath)) {
+    return { uri: vscode.Uri.file(absolutePath), editable: true };
+  }
+  return {
+    uri: blobUri(sha, filePath, `${filePath} (${sha.slice(0, 8)})`),
+    editable: false,
+  };
 }
 
 /**

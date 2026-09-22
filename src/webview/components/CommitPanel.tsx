@@ -325,7 +325,7 @@ export function CommitPanel({
         <Button
           size="small"
           id="btn-view-changes"
-          title="Show every change in this commit as one scrollable diff, read-only."
+          title="Show every change in this commit as one scrollable diff, editable when the commit is checked out."
           onClick={onViewChanges}
         >
           {`View changes in ${commit.shortSha}`}

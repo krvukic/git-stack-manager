@@ -65,9 +65,21 @@ export function useCommitFiles(smartlog: Smartlog) {
     setChanges(null);
   }, []);
 
+  /**
+   * The checked-out commit's whole diff goes to the host first, whose multi-diff editor keeps
+   * the files editable; a refusal, from the web host or a HEAD that moved, lands in the overlay.
+   * A scoped read is itself the fallback of a refused `openDiff`, so it skips the host.
+   */
   const showChanges = useCallback(
     async (sha: string, onlyPath: string | null = null) => {
       workingCopyScope.current = null;
+      if (
+        !onlyPath &&
+        model?.headSha === sha &&
+        (await rpc("openCommitChanges", { sha })).ok
+      ) {
+        return;
+      }
       const commit = model ? findCommit(model, sha) : null;
       const title = onlyPath
         ? onlyPath

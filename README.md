@@ -23,8 +23,9 @@ Run `just init-repo` once, then pick a host:
 - **View changes in *hash*** shows every file's diff for that commit as one scrollable read-only
   view with both line-number gutters, which is Sapling's view of the same name. **Open diff view**
   does the same for the selected file, in VS Code's own diff editor where there is one and in the
-  same overlay where there is not. For the checked-out commit, the diff editor's right side is the
-  file itself, so it stays editable. **Open current file** opens the file as it is now. Clicking a
+  same overlay where there is not. For the checked-out commit, both open in VS Code's editors with
+  the files themselves on the right, so they stay editable: **View changes** in the multi-file diff
+  editor, **Open diff view** in the diff editor. **Open current file** opens the file as it is now. Clicking a
   file name runs one of the last two, chosen in **Config**.
 - **✎ *N* uncommitted changes** opens the same overlay for the changes no commit holds yet, staged
   ones included, and the diff icon on an uncommitted file's row opens that one change — HEAD's

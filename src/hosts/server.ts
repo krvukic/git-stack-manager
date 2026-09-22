@@ -164,7 +164,7 @@ async function handleRequest(
           ok: false,
           error: `Run this in a terminal: ${requireString(payload, "command")}`,
         };
-      } else if (action === "openDiff") {
+      } else if (action === "openDiff" || action === "openCommitChanges") {
         // No editor here to host a diff. The UI reads this refusal as "show it inline"
         // and falls back to its own overlay, so the button works in both hosts.
         result = { ok: false, error: "No diff editor in web mode." };

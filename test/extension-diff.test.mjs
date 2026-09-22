@@ -3,7 +3,8 @@
  *
  * The overlay's own rendering is tested through the readers; what only this host decides is the
  * pair of URIs, and each shape gets one wrong in its own way. A commit reads two blobs, except the
- * checked-out one, whose right side is the file on disk. An uncommitted change reads HEAD on the
+ * checked-out one, whose right side is the file on disk, in the diff editor and the multi-file
+ * one alike. An uncommitted change reads HEAD on the
  * left and the *file itself* on the right, so a typo spotted while reading it is fixed where it is
  * rather than in a read-only copy. A file the working tree no longer holds has no right-hand file
  * to name, and pointing at the absent path made the editor report a missing file where the
@@ -235,4 +236,82 @@ test("the working-copy diff is readable as an action", async t => {
     diff.files.map(file => file.path),
     ["base.txt", "blob.bin"]
   );
+});
+
+/**
+ * The arguments of the one `vscode.changes` the host executed.
+ *
+ * @param {{ executed: { command: string, args: unknown[] }[] }} host
+ */
+function changesCall(host) {
+  const calls = host.executed.filter(call => call.command === "vscode.changes");
+  assert.equal(calls.length, 1, "one multi-diff editor was opened");
+  const [title, resources] = present(calls[0], "the changes call").args;
+  return {
+    title: /** @type {string} */ (title),
+    resources: /** @type {{ scheme: string, fsPath: string }[][]} */ (
+      resources
+    ),
+  };
+}
+
+/**
+ * The whole checked-out commit in one editor, each file on disk on the right so it stays
+ * editable. A file the commit deleted has nothing on disk, so its blob stands in and the deletion
+ * still reads as every line removed.
+ */
+test("the checked-out commit's changes open with the files on disk on the right", async t => {
+  const host = openOnRepository(t, "gsm-host-changes-head-");
+  commitFile(host.repo, "gone.txt", "gone\n", "a file to delete");
+  writeFileSync(join(host.repo, "base.txt"), "one\nTWO\nthree\n");
+  run(host.repo, "git", ["rm", "-q", "gone.txt"]);
+  run(host.repo, "git", ["commit", "-q", "-am", "edit one, delete one"]);
+  const sha = shaOf(host.repo, "HEAD");
+
+  const result = await host.call("openCommitChanges", { sha });
+
+  assert.equal(result.ok, true);
+  const { title, resources } = changesCall(host);
+  assert.match(title, /working copy against its parent/);
+  const sides = new Map(
+    resources.map(([resource, left, right]) => [
+      present(resource, "the resource").fsPath,
+      { left: present(left, "left"), right: present(right, "right") },
+    ])
+  );
+  const edited = present(sides.get(join(host.repo, "base.txt")), "base.txt");
+  assert.match(edited.left.fsPath, /sha=.*%5E/);
+  assert.equal(edited.right.scheme, "file");
+  assert.equal(edited.right.fsPath, join(host.repo, "base.txt"));
+  const deleted = present(sides.get(join(host.repo, "gone.txt")), "gone.txt");
+  assert.equal(deleted.right.scheme, "gsm-blob");
+});
+
+/** A commit below HEAD has no files on disk to edit, so the overlay keeps it. */
+test("a commit below HEAD is refused, so the overlay shows it", async t => {
+  const host = openOnRepository(t, "gsm-host-changes-below-");
+  commitFile(host.repo, "base.txt", "one\nTWO\nthree\n", "change a line");
+  const sha = shaOf(host.repo, "HEAD");
+  commitFile(host.repo, "later.txt", "later\n", "a later commit");
+
+  const result = await host.call("openCommitChanges", { sha });
+
+  assert.equal(result.ok, false);
+  assert.equal(
+    host.executed.filter(call => call.command === "vscode.changes").length,
+    0
+  );
+});
+
+/** An empty multi-diff editor shows nothing; the overlay says the commit changes no files. */
+test("an empty checked-out commit is refused, so the overlay shows it", async t => {
+  const host = openOnRepository(t, "gsm-host-changes-empty-");
+  run(host.repo, "git", ["commit", "-q", "--allow-empty", "-m", "empty"]);
+
+  const result = await host.call("openCommitChanges", {
+    sha: shaOf(host.repo, "HEAD"),
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(present(result.error, "the refusal"), /no files/);
 });

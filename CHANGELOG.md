@@ -3,6 +3,14 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-09-22
+
+### Changed
+
+- **View changes** on the checked-out commit opens VS Code's multi-file diff editor, with each
+  file on disk on the right, so every file is editable. Other commits, and the web host, keep the
+  read-only overlay.
+
 ## [0.9.0] - 2026-09-22
 
 ### Changed
