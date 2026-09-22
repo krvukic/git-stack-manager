@@ -8,9 +8,10 @@
  * so a refusal falls back to the overlay scoped to one file. That keeps the button meaningful
  * in both hosts rather than disabled in one.
  */
-import type { CommitDiff, WorkingCopyDiff } from "#git/diff";
+import type { CommitDiff } from "#git/diff";
 import type { FileChange } from "#git/snapshot";
-import { useCallback, useEffect, useState } from "react";
+import type { WorkingFileDiff } from "#history/partialSelection";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangesState } from "../components/ChangesOverlay";
 import type { FilesState } from "../components/CommitPanel";
 import { findCommit } from "../model/commits.mjs";
@@ -55,10 +56,18 @@ export function useCommitFiles(smartlog: Smartlog) {
     };
   }, [selectedSha]);
 
-  const closeChanges = useCallback(() => setChanges(null), []);
+  // What the overlay was last opened on when it shows the uncommitted changes, and null
+  // otherwise, so a refresh knows whether there is anything to read again.
+  const workingCopyScope = useRef<{ onlyPath: string | null } | null>(null);
+
+  const closeChanges = useCallback(() => {
+    workingCopyScope.current = null;
+    setChanges(null);
+  }, []);
 
   const showChanges = useCallback(
     async (sha: string, onlyPath: string | null = null) => {
+      workingCopyScope.current = null;
       const commit = model ? findCommit(model, sha) : null;
       const title = onlyPath
         ? onlyPath
@@ -89,15 +98,22 @@ export function useCommitFiles(smartlog: Smartlog) {
    * every other one first.
    */
   const showWorkingCopyChanges = useCallback(
-    async (onlyPath: string | null = null) => {
+    async (onlyPath: string | null = null, quiet = false) => {
+      workingCopyScope.current = { onlyPath };
       const title = onlyPath
         ? `${onlyPath} — uncommitted`
         : "Uncommitted changes";
-      setChanges({ state: "loading", title });
-      const response = await rpc<WorkingCopyDiff>(
+      if (!quiet) {
+        setChanges({ state: "loading", title });
+      }
+      const response = await rpc<{ files: WorkingFileDiff[] }>(
         "workingCopyDiff",
         onlyPath ? { path: onlyPath } : {}
       );
+      // The reader may have closed the overlay, or opened a commit's, while this was in flight.
+      if (workingCopyScope.current?.onlyPath !== onlyPath) {
+        return;
+      }
       if (!response.ok) {
         setChanges({ state: "error", title, error: response.error });
         return;
@@ -113,6 +129,17 @@ export function useCommitFiles(smartlog: Smartlog) {
     },
     []
   );
+
+  /**
+   * Reads the uncommitted changes again when the overlay shows them, without the loading state
+   * in between, so a file whose choice was reset redraws in place rather than scrolling away.
+   */
+  const refreshWorkingCopyChanges = useCallback(() => {
+    const scope = workingCopyScope.current;
+    if (scope) {
+      void showWorkingCopyChanges(scope.onlyPath, true);
+    }
+  }, [showWorkingCopyChanges]);
 
   /**
    * `background` asks the host for a tab that does not take focus, which is what a
@@ -197,6 +224,7 @@ export function useCommitFiles(smartlog: Smartlog) {
     closeChanges,
     showChanges,
     showWorkingCopyChanges,
+    refreshWorkingCopyChanges,
     openFileDiff,
     openWorkingCopyDiff,
     openCurrentFile,

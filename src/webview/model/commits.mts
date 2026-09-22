@@ -36,6 +36,30 @@ export function commitsInOrder(model: RenderModel): UICommit[] {
   return model.rows.flatMap(row => (row.type === "commit" ? [row.commit] : []));
 }
 
+/**
+ * The commits an amend can write to: HEAD, then each first parent below it, down to where the
+ * local commits end. The host refuses anything else — a commit on another branch, or one on
+ * trunk — so a picker listing only these has no choice that fails for a reason it could know.
+ * Empty when HEAD is not a local commit.
+ */
+export function amendTargets(model: RenderModel): UICommit[] {
+  const commits = new Map<string, UICommit>();
+  let current: UICommit | undefined;
+  for (const commit of commitsInOrder(model)) {
+    commits.set(commit.sha, commit);
+    if (commit.isHead) {
+      current = commit;
+    }
+  }
+  const targets: UICommit[] = [];
+  while (current) {
+    targets.push(current);
+    const [parent] = current.parents;
+    current = parent === undefined ? undefined : commits.get(parent);
+  }
+  return targets;
+}
+
 /** Local commits at or above `sha`, matching what a rebase would move. */
 export function countDescendants(model: RenderModel, sha: string): number {
   const childrenOf = new Map<string, string[]>();

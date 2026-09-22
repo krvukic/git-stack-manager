@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  amendTargets,
   commitsInOrder,
   countDescendants,
   findCommit,
@@ -94,6 +95,27 @@ test("descendants follow every branch of a fork", () => {
   });
   assert.equal(countDescendants(forked, "bs"), 4);
   assert.equal(countDescendants(forked, "a1"), 2);
+});
+
+/** The overlay's amend picker, which may only offer commits the working copy sits on. */
+test("amend targets run from HEAD down its first parents", () => {
+  const head = commitRow("a2", ["a1"]);
+  head.commit.isHead = true;
+  const forked = /** @type {RenderModel} */ ({
+    rows: [
+      commitRow("b1", ["a1"]),
+      head,
+      commitRow("a1", ["bs"]),
+      { type: "base", sha: "bs" },
+    ],
+  });
+  const targets = amendTargets(forked).map(commit => commit.sha);
+  assert.equal(targets.length, 2);
+  assert.deepEqual(targets, ["a2", "a1"]);
+});
+
+test("nothing can be amended into when HEAD is not a local commit", () => {
+  assert.equal(amendTargets(MODEL).length, 0);
 });
 
 test("text shorter than the limit is left whole, and a cut is marked", () => {

@@ -238,9 +238,10 @@ export default typescriptEslint.config(
        * allowlist had to come first. Three kinds, and the kind decides whether removing
        * one is safe:
        *
-       * - Selected by the end-to-end suite (`chip`, `dffile`, `dfimage`, `ln`, `log-cmd`,
-       *   `log-entry`, `log-title`, `open`, `pick`, `review`, `seg`). Deleting one breaks
-       *   a test rather than the appearance.
+       * - Selected by the end-to-end suite (`chip`, `chooselines`, `dffile`, `dfimage`,
+       *   `excluded`, `linecount`, `ln`, `log-cmd`, `log-entry`, `log-title`, `open`, `pick`,
+       *   `pickfile`, `pickhunk`, `pickline`, `review`, `seg`, `whole`). Deleting one breaks a
+       *   test rather than the appearance.
        * - Targeted by a descendant selector from a parent's class string (`code`, `mark`,
        *   `st`, and the `graph.css` set). `[&>.mark]:text-add` in `ChangesOverlay` is the
        *   shape — the child is named by the parent, so nothing here is dead.
@@ -258,6 +259,7 @@ export default typescriptEslint.config(
             "^basehint$",
             "^branchrow$",
             "^chip$",
+            "^chooselines$",
             "^code$",
             "^content$",
             "^dffile$",
@@ -266,10 +268,12 @@ export default typescriptEslint.config(
             "^discard$",
             "^ellipsis-label$",
             "^ellipsis-row$",
+            "^excluded$",
             "^files$",
             "^foreign$",
             "^goto-btn$",
             "^halo$",
+            "^linecount$",
             "^ln$",
             "^log-cmd$",
             "^log-entry$",
@@ -278,6 +282,9 @@ export default typescriptEslint.config(
             "^node$",
             "^open$",
             "^pick$",
+            "^pickfile$",
+            "^pickhunk$",
+            "^pickline$",
             "^pillgroup$",
             "^rail$",
             "^railfill$",
@@ -287,6 +294,7 @@ export default typescriptEslint.config(
             "^sha$",
             "^st$",
             "^subject$",
+            "^whole$",
           ],
         },
       ],

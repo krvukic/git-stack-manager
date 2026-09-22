@@ -14,7 +14,10 @@
  * disabled state of five buttons. Those repairs are gone, along with the bugs they carried.
  */
 import { useCallback, useMemo, useState } from "react";
-import { ChangesOverlay } from "./components/ChangesOverlay";
+import {
+  ChangesOverlay,
+  type WorkingChoosing,
+} from "./components/ChangesOverlay";
 import { CommandLog } from "./components/CommandLog";
 import { CommitPanel } from "./components/CommitPanel";
 import { ConflictBanner } from "./components/ConflictBanner";
@@ -33,7 +36,7 @@ import { Tooltip } from "./components/Tooltip";
 import { TopBar } from "./components/TopBar";
 import { Tree } from "./components/Tree";
 import { WorkingCopy } from "./components/WorkingCopy";
-import { findCommit } from "./model/commits.mjs";
+import { amendTargets, findCommit } from "./model/commits.mjs";
 import {
   clampSidebarWidth,
   SIDEBAR_DEFAULT_WIDTH,
@@ -45,6 +48,7 @@ import { useCommitFiles } from "./state/useCommitFiles";
 import { commitMenuItems } from "./state/useCommitMenu";
 import { useConfig } from "./state/useConfig";
 import { useKeyboard } from "./state/useKeyboard";
+import { useLineChoices } from "./state/useLineChoices";
 import { useMergedBranchDeletion } from "./state/useMergedBranchDeletion";
 import { useRepositoryActions } from "./state/useRepositoryActions";
 import { useSmartlog } from "./state/useSmartlog";
@@ -107,8 +111,53 @@ export function App({ settings }: { settings: HostSettings }) {
 
   const repository = useRepositoryActions(smartlog);
   const commitActions = useCommitActions(smartlog);
-  const workingCopy = useWorkingCopy(smartlog, selectedCommit);
   const commitFiles = useCommitFiles(smartlog);
+  // A file reset while its diff is on screen is read again, so the overlay stops showing the
+  // lines the reset just dropped.
+  const lineChoices = useLineChoices(
+    smartlog,
+    commitFiles.refreshWorkingCopyChanges
+  );
+  const workingCopy = useWorkingCopy(smartlog, selectedCommit, lineChoices);
+  const { closeChanges } = commitFiles;
+  const { amendInto, openCommitForm } = workingCopy;
+
+  const choosing = useMemo((): WorkingChoosing => {
+    const uncommitted = model?.uncommitted ?? [];
+    return {
+      rowPaths: new Set(uncommitted.map(file => file.path)),
+      pickedPaths: smartlog.pickedPaths,
+      choices: lineChoices.choices,
+      chooser: lineChoices.chooser,
+      targets: model ? amendTargets(model) : [],
+      selectedSha,
+      canAct:
+        !model?.conflict &&
+        uncommitted.some(file => smartlog.pickedPaths.has(file.path)),
+      amending: workingCopy.amending,
+      // The form sits under the list the overlay covers, so the overlay makes way for it.
+      onCommit: () => {
+        closeChanges();
+        openCommitForm();
+      },
+      onAmend: target =>
+        void amendInto(target).then(response => {
+          if (response.ok) {
+            closeChanges();
+          }
+        }),
+    };
+  }, [
+    amendInto,
+    closeChanges,
+    lineChoices.chooser,
+    lineChoices.choices,
+    model,
+    openCommitForm,
+    selectedSha,
+    smartlog.pickedPaths,
+    workingCopy.amending,
+  ]);
   useMergedBranchDeletion(smartlog, config.deleteMergedBranches);
 
   const openUrl = useCallback((url: string) => {
@@ -251,6 +300,7 @@ export function App({ settings }: { settings: HostSettings }) {
               <WorkingCopy
                 model={model}
                 pickedPaths={smartlog.pickedPaths}
+                choices={lineChoices.choices}
                 amendTarget={selectedCommit}
                 commitDraft={smartlog.commitDraft}
                 commitFormOpen={workingCopy.commitFormOpen}
@@ -259,9 +309,12 @@ export function App({ settings }: { settings: HostSettings }) {
                 absorbing={workingCopy.absorbing}
                 discardTarget={workingCopy.discardTarget}
                 discarding={workingCopy.discarding}
-                onPick={smartlog.setPicked}
-                onToggleAll={smartlog.toggleAllPicked}
+                onPick={lineChoices.pickFile}
+                onToggleAll={lineChoices.toggleAll}
                 onViewChanges={() => void commitFiles.showWorkingCopyChanges()}
+                onChooseLines={path =>
+                  void commitFiles.showWorkingCopyChanges(path)
+                }
                 onOpenDiff={(file, background) =>
                   void commitFiles.openWorkingCopyDiff(file, background)
                 }
@@ -382,6 +435,7 @@ export function App({ settings }: { settings: HostSettings }) {
       />
       <ChangesOverlay
         changes={commitFiles.changes}
+        choosing={choosing}
         onClose={commitFiles.closeChanges}
       />
       <ContextMenu menu={menu} onClose={closeMenu} />

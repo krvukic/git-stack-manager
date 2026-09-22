@@ -19,6 +19,11 @@ import { classes } from "../classes";
 import { canAbsorb } from "../model/actionGuards.mjs";
 import { truncate } from "../model/commits.mjs";
 import {
+  chosenLineCount,
+  goesInWhole,
+  type LineChoice,
+} from "../model/lineChoice.mjs";
+import {
   COMMIT_BODY_HEIGHT_KEY,
   COMMIT_BODY_MIN_HEIGHT,
 } from "../model/messageHeight.mjs";
@@ -32,6 +37,8 @@ import { PickableFileRow } from "./FileRow";
 export type WorkingCopyProps = {
   model: RenderModel;
   pickedPaths: Set<string>;
+  /** The lines left out of each partly chosen path. */
+  choices: ReadonlyMap<string, LineChoice>;
   /** The commit *Amend into…* would write to, defaulting to HEAD. */
   amendTarget: UICommit | null;
   commitDraft: { subject: string; body: string };
@@ -46,6 +53,8 @@ export type WorkingCopyProps = {
   onToggleAll: () => void;
   /** Every uncommitted change at once, in the overlay the commit rows open. */
   onViewChanges: () => void;
+  /** One change in that overlay, where its lines are chosen. */
+  onChooseLines: (path: string) => void;
   /** One change in the diff editor, or the overlay when the host has none. */
   onOpenDiff: (file: FileChange, background: boolean) => void;
   onRequestDiscard: (file: FileChange) => void;
@@ -64,6 +73,7 @@ export type WorkingCopyProps = {
 export function WorkingCopy({
   model,
   pickedPaths,
+  choices,
   amendTarget,
   commitDraft,
   commitFormOpen,
@@ -75,6 +85,7 @@ export function WorkingCopy({
   onPick,
   onToggleAll,
   onViewChanges,
+  onChooseLines,
   onOpenDiff,
   onRequestDiscard,
   onConfirmDiscard,
@@ -99,6 +110,7 @@ export function WorkingCopy({
   const count = uncommitted.length;
   const picked = uncommitted.filter(file => pickedPaths.has(file.path)).length;
   const allPicked = picked === count;
+  const partly = choices.size;
   const conflicted = Boolean(model.conflict);
   // Nothing selected means nothing to commit or amend, whatever else is true.
   const nothingPicked = picked === 0;
@@ -128,7 +140,9 @@ export function WorkingCopy({
           {`✎ ${count} uncommitted change${count > 1 ? "s" : ""}`}
         </button>
         <span className="text-meta text-muted" id="wc-selcount">
-          {allPicked ? "" : `${picked} of ${count} selected`}
+          {allPicked && !partly
+            ? ""
+            : `${picked} of ${count} selected${partly ? `, ${partly} in part` : ""}`}
         </span>
         <Button
           size="small"
@@ -212,16 +226,29 @@ export function WorkingCopy({
           chip would mean clicking twice to answer "what goes in?", which is the question this
           row exists to ask. */}
       <div className="files mt-1.5 ml-2">
-        {uncommitted.map(file => (
-          <PickableFileRow
-            key={file.path}
-            file={file}
-            picked={pickedPaths.has(file.path)}
-            onPick={isPicked => onPick(file.path, isPicked)}
-            onOpenDiff={background => onOpenDiff(file, background)}
-            onDiscard={() => onRequestDiscard(file)}
-          />
-        ))}
+        {uncommitted.map(file => {
+          const choice = choices.get(file.path);
+          return (
+            <PickableFileRow
+              key={file.path}
+              file={file}
+              state={
+                !pickedPaths.has(file.path) ? "none" : choice ? "some" : "all"
+              }
+              chosenLines={
+                choice
+                  ? { chosen: chosenLineCount(choice), total: choice.total }
+                  : null
+              }
+              onPick={isPicked => onPick(file.path, isPicked)}
+              onChooseLines={
+                goesInWhole(file) ? null : () => onChooseLines(file.path)
+              }
+              onOpenDiff={background => onOpenDiff(file, background)}
+              onDiscard={() => onRequestDiscard(file)}
+            />
+          );
+        })}
       </div>
       <div
         id="commit-form"

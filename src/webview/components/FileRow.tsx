@@ -9,7 +9,9 @@ import type { FileChange } from "#git/snapshot";
 import { classes } from "../classes";
 import { backgroundModifierName, opensInBackground } from "../model/clicks.mjs";
 import type { FileClick } from "../model/config.mjs";
+import type { CheckState } from "../model/lineChoice.mjs";
 import { IconButton } from "./Button";
+import { Checkbox } from "./Checkbox";
 
 /**
  * The key that opens a file in a background tab, named once per load.
@@ -84,27 +86,37 @@ function FilePath({ path, className }: { path: string; className?: string }) {
 
 /**
  * A working-copy row: the checkbox that decides whether the change goes into the next commit or
- * amend, then the two things to do with the change — read it, or throw it away.
+ * amend, then what to do with the change — choose some of its lines, read it, or throw it away.
  *
  * Clicking the row selects nothing and opens nothing. The whole row used to be one target for
  * ticking, which made a diff icon beside it a click the pointer had to land on precisely; keeping
  * the toggles on the box and the status letter is what leaves the rest of the row free.
  *
- * Both icons stay on screen, unlike a commit's row, where hovering reveals them. A commit's row
+ * The icons stay on screen, unlike a commit's row, where hovering reveals them. A commit's row
  * opens its own diff on a plain click, so its icons are a shortcut to something already reachable;
  * here the icon is the only way in, and a control that appears only under the pointer is one a
  * reader has to sweep the rows to find.
+ *
+ * ± opens the changes overlay even where ⇄ opens the editor's diff, because the editor's diff has
+ * no boxes to tick.
  */
 export function PickableFileRow({
   file,
-  picked,
+  state,
+  chosenLines,
   onPick,
+  onChooseLines,
   onOpenDiff,
   onDiscard,
 }: {
   file: FileChange;
-  picked: boolean;
+  /** "some" when a few of the file's lines are left out. */
+  state: CheckState;
+  /** How many of the file's lines go in, when only some do. */
+  chosenLines: { chosen: number; total: number } | null;
   onPick: (picked: boolean) => void;
+  /** Opens the file where its lines are chosen, or null when it can only go in whole. */
+  onChooseLines: (() => void) | null;
   onOpenDiff: (background: boolean) => void;
   onDiscard: () => void;
 }) {
@@ -112,14 +124,36 @@ export function PickableFileRow({
     // `pl-0`: this row starts at its checkbox, unlike a commit's file row, which is indented to
     // line up under the panel's heading.
     <div className={classes(FILE_ROW, "pl-0")}>
-      <input
-        type="checkbox"
-        className="pick mr-0.5 flex-none cursor-pointer"
-        checked={picked}
-        onChange={event => onPick(event.target.checked)}
+      <Checkbox
+        className="pick mr-0.5"
+        state={state}
+        label={`Choose ${file.path}`}
+        onToggle={onPick}
       />
-      <StatusLetter status={file.status} onClick={() => onPick(!picked)} />
+      <StatusLetter
+        status={file.status}
+        onClick={() => onPick(state !== "all")}
+      />
       <FilePath path={file.path} className="flex-1" />
+      {chosenLines ? (
+        <span className="linecount flex-none text-meta text-muted">
+          {`${chosenLines.chosen} of ${chosenLines.total} lines`}
+        </span>
+      ) : null}
+      {onChooseLines ? (
+        <IconButton
+          className="chooselines"
+          alwaysVisible
+          aria-label="Choose which lines of this change go in"
+          data-tip="Choose which lines of this change go in"
+          onClick={(event: React.MouseEvent) => {
+            event.stopPropagation();
+            onChooseLines();
+          }}
+        >
+          ±
+        </IconButton>
+      ) : null}
       <FileAction
         kind="diff"
         alwaysVisible

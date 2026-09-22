@@ -15,12 +15,14 @@ import { useCallback, useState } from "react";
 import type { AbsorbPlan } from "../components/AbsorbPreview";
 import { rpc } from "../rpc";
 import { useBusy } from "./useBusy";
+import type { LineChoices } from "./useLineChoices";
 import type { Smartlog } from "./useSmartlog";
 
 export function useWorkingCopy(
   smartlog: Smartlog,
   /** The commit *Amend into…* writes to, or null for HEAD. */
-  amendTarget: UICommit | null
+  amendTarget: UICommit | null,
+  lineChoices: LineChoices
 ) {
   const {
     commitDraft,
@@ -30,7 +32,10 @@ export function useWorkingCopy(
     setCommitDraft,
     showToast,
   } = smartlog;
-  const { busy, whileBusy } = useBusy<"commit" | "absorb" | "discard">();
+  const { lineSelections, forget } = lineChoices;
+  const { busy, whileBusy } = useBusy<
+    "commit" | "amend" | "absorb" | "discard"
+  >();
   const [commitFormOpen, setCommitFormOpen] = useState(false);
   const [absorbPlan, setAbsorbPlan] = useState<AbsorbPlan | null>(null);
   const [discardTarget, setDiscardTarget] = useState<FileChange | null>(null);
@@ -54,17 +59,23 @@ export function useWorkingCopy(
       return;
     }
     const body = commitDraft.body.trim();
+    const paths = pickedFilePaths();
     await whileBusy("commit", () =>
       runAction<{ committed: string[]; newSha: string; model: RenderModel }>(
         "commit",
         {
-          paths: pickedFilePaths(),
+          paths,
           message: subject + (body ? `\n\n${body}` : ""),
+          lines: lineSelections(paths),
         },
         {
           modelFrom: data => data.model,
           selectSha: data => data.newSha,
+          // A refusal for a file that changed after its lines were chosen is only fixed by a
+          // re-read, which is also what resets that file's choice.
+          reloadOnError: true,
           onSuccess: data => {
+            forget(paths);
             showToast(
               `Committed ${data.committed.length} change${data.committed.length > 1 ? "s" : ""} ✓`,
               false
@@ -79,6 +90,8 @@ export function useWorkingCopy(
     );
   }, [
     commitDraft,
+    forget,
+    lineSelections,
     pickedFilePaths,
     runAction,
     setCommitDraft,
@@ -86,22 +99,42 @@ export function useWorkingCopy(
     whileBusy,
   ]);
 
+  /** `target` overrides the selected commit, for the overlay's own picker. */
   const amendInto = useCallback(
-    () =>
-      runAction<{ newSha: string; model: RenderModel }>(
-        "amendIntoCommit",
-        { paths: pickedFilePaths(), sha: amendTarget?.sha ?? null },
-        {
-          modelFrom: data => data.model,
-          selectSha: data => data.newSha,
-          onSuccess: () =>
-            showToast(
-              `Amended into ${amendTarget && !amendTarget.isHead ? `"${amendTarget.subject}"` : "HEAD"} ✓`,
-              false
-            ),
-        }
-      ),
-    [amendTarget, pickedFilePaths, runAction, showToast]
+    (target: UICommit | null = amendTarget) => {
+      const paths = pickedFilePaths();
+      return whileBusy("amend", () =>
+        runAction<{ newSha: string; model: RenderModel }>(
+          "amendIntoCommit",
+          {
+            paths,
+            sha: target?.sha ?? null,
+            lines: lineSelections(paths),
+          },
+          {
+            modelFrom: data => data.model,
+            selectSha: data => data.newSha,
+            reloadOnError: true,
+            onSuccess: () => {
+              forget(paths);
+              showToast(
+                `Amended into ${target && !target.isHead ? `"${target.subject}"` : "HEAD"} ✓`,
+                false
+              );
+            },
+          }
+        )
+      );
+    },
+    [
+      amendTarget,
+      forget,
+      lineSelections,
+      pickedFilePaths,
+      runAction,
+      showToast,
+      whileBusy,
+    ]
   );
 
   const amendWorkingChanges = useCallback(
@@ -213,6 +246,7 @@ export function useWorkingCopy(
 
   return {
     committing: busy.has("commit"),
+    amending: busy.has("amend"),
     absorbing: busy.has("absorb"),
     discarding: busy.has("discard"),
     commitFormOpen,
