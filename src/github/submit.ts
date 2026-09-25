@@ -15,7 +15,7 @@
  * commit message the single source of truth: edit it in the sidebar, submit, and
  * the pull request says the same thing.
  */
-import { GitRunner } from "#git/runner";
+import { GitError, GitRunner } from "#git/runner";
 import { RawCommit, RawData } from "#git/snapshot";
 import { runGh } from "#github/ghRunner";
 
@@ -80,9 +80,14 @@ export async function submitBranch(
   const base = baseBranchFor(snapshot, branch);
   const message = await readMessage(git, branch);
 
+  // Looked up before the push, so a refusal below leaves nothing half-submitted.
+  const existing = await findPullRequest(git, branch);
+  if (!existing) {
+    await requirePublishedBase(git, snapshot, remote, branch, base);
+  }
+
   await pushBranch(git, remote, branch);
 
-  const existing = await findPullRequest(git, branch);
   if (existing) {
     await editPullRequest(git, branch, message);
     // The base to check is the one the pull request actually targets, not the one
@@ -124,6 +129,72 @@ export async function submitBranch(
     base,
     staleBase: await findStaleBase(git, snapshot, remote, branch, base),
   };
+}
+
+/**
+ * Push every branch from the bottom of the stack up to `branch`, and open or update each
+ * one's pull request, bottom first.
+ *
+ * The order is the point. A pull request can only target a branch GitHub already has, so
+ * submitting the top of an unsubmitted stack on its own failed with GitHub's "Base ref must
+ * be a branch", and the stack had to be submitted one layer at a time from the bottom. A
+ * failure stops the walk: the layers above would target the one that just failed.
+ */
+export async function submitStack(
+  git: GitRunner,
+  snapshot: RawData,
+  branch: string,
+  options: { draft?: boolean } = {}
+): Promise<SubmitOutcome[]> {
+  const outcomes: SubmitOutcome[] = [];
+  for (const layer of stackBranchesUpTo(snapshot, branch)) {
+    outcomes.push(await submitBranch(git, snapshot, layer, options));
+  }
+  return outcomes;
+}
+
+/** The branches `submitStack` submits, bottom first, ending with `branch`. */
+export function stackBranchesUpTo(snapshot: RawData, branch: string): string[] {
+  const trunk = trunkParts(snapshot).branch;
+  const layers = [branch];
+  for (
+    let below = baseBranchFor(snapshot, branch);
+    below !== trunk && !layers.includes(below);
+    below = baseBranchFor(snapshot, below)
+  ) {
+    layers.unshift(below);
+  }
+  return layers;
+}
+
+/**
+ * Refuse to open a pull request onto a base GitHub does not have yet, naming the fix.
+ * GitHub's own answer is "Base ref must be a branch", which reads like a bug.
+ */
+async function requirePublishedBase(
+  git: GitRunner,
+  snapshot: RawData,
+  remote: string,
+  branch: string,
+  base: string
+): Promise<void> {
+  if (base === trunkParts(snapshot).branch) {
+    return;
+  }
+  if (
+    await git.succeeds([
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      `${remote}/${base}`,
+    ])
+  ) {
+    return;
+  }
+  throw new GitError(
+    `${branch} is stacked on ${base}, which has not been submitted, so its pull request has no base on GitHub yet. Submit the stack instead, which pushes every layer from the bottom up.`,
+    "submit"
+  );
 }
 
 /**

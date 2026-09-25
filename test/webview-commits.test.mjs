@@ -15,6 +15,7 @@ import {
   findCommit,
   gotoTarget,
   splitMessage,
+  stackBranchesUpTo,
   submitTarget,
   truncate,
 } from "../src/webview/model/commits.mts";
@@ -251,5 +252,28 @@ test("a body that does not repeat the subject is left alone", () => {
       /** @type {UICommit} */ ({ subject: "subject", body: "unrelated" })
     ),
     { subject: "subject", body: "unrelated" }
+  );
+});
+
+/**
+ * Submit stack names every branch it will push, so the walk has to match the host's: a
+ * commit without a branch in between is skipped, not treated as the stack's bottom.
+ */
+test("submit stack lists the branches below, bottom first, past a branchless commit", () => {
+  const model = /** @type {RenderModel} */ ({
+    rows: [
+      commitRow("top", ["mid"], ["upper"]),
+      commitRow("mid", ["low"]),
+      commitRow("low", ["tt"], ["lower"]),
+      { type: "trunk-tip", sha: "tt" },
+    ],
+  });
+  const top = present(findCommit(model, "top"), "the top commit");
+  const low = present(findCommit(model, "low"), "the low commit");
+  assert.deepEqual(stackBranchesUpTo(model, top), ["lower", "upper"]);
+  assert.deepEqual(
+    stackBranchesUpTo(model, low),
+    ["lower"],
+    "a bottom layer has nothing below it, so the menu offers no stack submit"
   );
 });

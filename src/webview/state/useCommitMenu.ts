@@ -8,13 +8,19 @@
  */
 import type { RenderModel, UICommit } from "#ui/renderModel";
 import type { MenuItem } from "../components/ContextMenu";
-import { countDescendants, submitTarget, truncate } from "../model/commits.mjs";
+import {
+  countDescendants,
+  stackBranchesUpTo,
+  submitTarget,
+  truncate,
+} from "../model/commits.mjs";
 
 export type CommitMenuActions = {
   onGoto: (commit: UICommit) => void;
   onGhStack: (payload: Record<string, unknown>, label: string) => void;
   onOpenTerminal: (command: string) => void;
   onSubmit: (commit: UICommit) => void;
+  onSubmitStack: (commit: UICommit) => void;
   onSplit: (commit: UICommit) => void;
   onFold: (commit: UICommit) => void;
   onRebase: (commit: UICommit, destination: "trunk" | "base") => void;
@@ -115,6 +121,15 @@ export function commitMenuItems(
         run: () => actions.onSubmit(commit),
       }
     );
+    const layers = stackBranchesUpTo(model, commit);
+    if (layers.length > 1) {
+      items.push({
+        label: `Submit stack — ${layers.length} branches up to ${submittable.name}`,
+        description:
+          "Submit each branch from the bottom up, so every pull request has its base on GitHub",
+        run: () => actions.onSubmitStack(commit),
+      });
+    }
   }
 
   items.push(

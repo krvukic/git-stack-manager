@@ -186,6 +186,57 @@ export function useCommitActions(smartlog: Smartlog) {
     [loadPullRequests, runAction, showToast, whileBusy]
   );
 
+  /**
+   * Submit every branch from the bottom of the commit's stack up to its own, bottom first.
+   * Shares the busy flag with Submit: both push the same branches.
+   */
+  const submitStack = useCallback(
+    async (commit: UICommit) => {
+      const branch = submitTarget(commit)?.name;
+      if (!branch) {
+        return;
+      }
+      showToast(`Submitting the stack up to ${branch}…`, false);
+      const response = await whileBusy("submit", () =>
+        runAction<{
+          outcomes: Array<{
+            created: boolean;
+            staleBase: { branch: string; reason: string } | null;
+          }>;
+          model: RenderModel;
+        }>(
+          "submitStack",
+          { branch },
+          {
+            modelFrom: data => data.model,
+            reloadOnError: true,
+            onSuccess: ({ outcomes }) => {
+              const opened = outcomes.filter(outcome => outcome.created).length;
+              const done = `Submitted ${outcomes.length} branches — ${opened} opened, ${outcomes.length - opened} updated`;
+              // Bottom-up submission pushes every base first, so only a base rewritten out
+              // from under a layer is left to report.
+              const stale = outcomes.find(
+                outcome => outcome.staleBase
+              )?.staleBase;
+              if (stale) {
+                showToast(
+                  `${done} ✓ — but a diff also shows ${stale.branch}'s changes: rebase onto ${stale.branch}.`,
+                  true
+                );
+              } else {
+                showToast(`${done} ✓`, false);
+              }
+            },
+          }
+        )
+      );
+      // A failure part-way leaves the layers below it submitted, so re-read either way.
+      void loadPullRequests(true);
+      return response;
+    },
+    [loadPullRequests, runAction, showToast, whileBusy]
+  );
+
   const amendMessage = useCallback(
     (sha: string, message: string) =>
       whileBusy("amend", () =>
@@ -257,6 +308,7 @@ export function useCommitActions(smartlog: Smartlog) {
     gotoCommit,
     runRebase,
     runGhStack,
+    submitStack,
     foldCommit,
     submitCommit,
     amendMessage,

@@ -138,7 +138,10 @@ Every one of these is conflict-free and leaves your working copy alone, except w
   description current, for the reason [DESIGN_NOTES.md](DESIGN_NOTES.md) gives. A stacked branch
   targets the branch below it rather than trunk, so its pull request shows only its own commit.
   Where the base would widen the diff anyway, the toast reports whether to submit the base too or
-  rebase onto it.
+  rebase onto it. A new pull request onto a base that was never pushed is refused before anything
+  is pushed, because GitHub has no branch to base it on.
+- **Submit stack** submits every branch from the bottom of the stack up to the selected one, bottom
+  first, so each pull request has its base on GitHub by the time it opens.
 - A branch in a [stacked pull
   request](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/managing-stacked-pull-requests)
   carries its layer position and a *needs rebase* flag on its pill.
@@ -233,8 +236,8 @@ stored height cuts it back rather than pushing the buttons below the box off scr
   back past a restart. A discarded change is therefore gone for good, which is why Discard confirms
   and nothing else does.
 - Submit handles one branch per click and touches no other. Where the base branch is what widens the
-  diff, Submit says so and leaves the fix to you. Submitting a whole stack in one go is
-  `gh stack submit`, in the right-click menu.
+  diff, Submit says so and leaves the fix to you. **Submit stack** covers the branches below, and
+  stops at the first one that fails.
 
 ## Contributing
 

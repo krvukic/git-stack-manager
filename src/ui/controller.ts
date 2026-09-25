@@ -466,6 +466,23 @@ const ACTIONS: Record<string, ActionHandler> = {
     };
   },
 
+  /** Submit every branch from the bottom of the stack up to `branch`, like `submit` per layer. */
+  async submitStack(controller, payload) {
+    const branch = requireString(payload, "branch");
+    const { value, log } = await controller.logged(
+      `Submit stack up to ${branch}`,
+      () =>
+        controller.repository.submitStack(branch, {
+          draft: readFlag(payload, "draft"),
+        })
+    );
+    return {
+      ok: true,
+      data: { outcomes: value, model: await controller.model() },
+      log,
+    };
+  },
+
   /**
    * `gh stack` talks to GitHub and rewrites branches, so these are slow by
    * nature; the UI reports progress rather than blocking a paint. They are not

@@ -10,7 +10,11 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { renderAppHtml } from "#app/appHtml";
-import { affectsWorkingCopy, RefreshCoalescer } from "#app/refresh";
+import {
+  affectsWorkingCopy,
+  gitDirectoriesOf,
+  RefreshCoalescer,
+} from "#app/refresh";
 import { Repository } from "#app/repository";
 import { imageMediaType } from "#core/media";
 import { errorMessage } from "#core/values";
@@ -222,17 +226,22 @@ function wireRefresh(
       refresh.signal();
     }
   };
-  // git's own writes: HEAD moves, refs update, the index changes. Narrow by design — a
-  // recursive watcher over the working tree would fire once per file a build writes, and
-  // the events below already cover every edit VS Code makes.
-  const refs = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(cwd, ".git/{HEAD,index,refs/**}")
-  );
+  // git's own writes: HEAD moves, refs update, the index changes, and `gh stack` records a
+  // stack. Narrow by design — a recursive watcher over the working tree
+  // would fire once per file a build writes, and the events below already cover every
+  // edit VS Code makes.
+  const { gitDirectory, commonDirectory } = gitDirectoriesOf(cwd);
+  const watchers = [
+    new vscode.RelativePattern(gitDirectory, "{HEAD,index}"),
+    new vscode.RelativePattern(commonDirectory, "{refs/**,gh-stack}"),
+  ].map(pattern => vscode.workspace.createFileSystemWatcher(pattern));
   return vscode.Disposable.from(
-    refs,
-    refs.onDidChange(signal),
-    refs.onDidCreate(signal),
-    refs.onDidDelete(signal),
+    ...watchers.flatMap(watcher => [
+      watcher,
+      watcher.onDidChange(signal),
+      watcher.onDidCreate(signal),
+      watcher.onDidDelete(signal),
+    ]),
     // A save, not a keystroke: git sees the file on disk, so an unsaved buffer is not a
     // change yet and reporting it would put a line in the tree that no action could commit.
     vscode.workspace.onDidSaveTextDocument(document =>

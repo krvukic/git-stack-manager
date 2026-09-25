@@ -350,6 +350,7 @@ export function App({ settings }: { settings: HostSettings }) {
                     onOpenTerminal: command =>
                       void rpc("openTerminal", { command }),
                     onSubmit: c => void commitActions.submitCommit(c),
+                    onSubmitStack: c => void commitActions.submitStack(c),
                     onSplit: c => void commitActions.openSplit(c),
                     onFold: c => void commitActions.foldCommit(c),
                     onRebase: (c, destination) =>
@@ -401,6 +402,7 @@ export function App({ settings }: { settings: HostSettings }) {
               void commitActions.runRebase(selectedCommit, "trunk")
             }
             onSubmit={() => void commitActions.submitCommit(selectedCommit)}
+            onSubmitStack={() => void commitActions.submitStack(selectedCommit)}
             onViewChanges={() =>
               void commitFiles.showChanges(selectedCommit.sha)
             }

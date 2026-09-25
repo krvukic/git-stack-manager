@@ -21,7 +21,12 @@
 import type { FileChange } from "#git/snapshot";
 import type { RenderModel, UICommit } from "#ui/renderModel";
 import { useRef, useState } from "react";
-import { gotoTarget, splitMessage, submitTarget } from "../model/commits.mjs";
+import {
+  gotoTarget,
+  splitMessage,
+  stackBranchesUpTo,
+  submitTarget,
+} from "../model/commits.mjs";
 import type { FileClick } from "../model/config.mjs";
 import {
   DESCRIPTION_HEIGHT_KEY,
@@ -119,6 +124,7 @@ export type CommitPanelProps = {
   onGoto: () => void;
   onRebase: () => void;
   onSubmit: () => void;
+  onSubmitStack: () => void;
   onViewChanges: () => void;
   onOpenAllFiles: () => void;
   onOpenDiff: (file: FileChange, background: boolean) => void;
@@ -139,6 +145,7 @@ export function CommitPanel({
   onGoto,
   onRebase,
   onSubmit,
+  onSubmitStack,
   onViewChanges,
   onOpenAllFiles,
   onOpenDiff,
@@ -163,6 +170,7 @@ export function CommitPanel({
   const unchanged = subject === original.subject && body === original.body;
   const target = submitTarget(commit);
   const existing = target?.pullRequest;
+  const layers = stackBranchesUpTo(model, commit);
   const goto = gotoTarget(commit);
 
   return (
@@ -302,6 +310,16 @@ export function CommitPanel({
                     ? `Submit → #${existing.number}`
                     : "Submit as pull request"}
               </Button>
+              {layers.length > 1 ? (
+                <Button
+                  id="btn-submit-stack"
+                  disabled={conflicted || submitting}
+                  title={`Submit ${layers.join(", ")} in that order, so every pull request has its base on GitHub.`}
+                  onClick={onSubmitStack}
+                >
+                  Submit stack ({layers.length})
+                </Button>
+              ) : null}
             </ButtonRow>
             <div className="mb-3 font-[monospace] text-meta text-muted">
               Submitting always carries the message across — a force push alone

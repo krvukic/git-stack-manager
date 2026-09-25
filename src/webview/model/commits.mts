@@ -105,6 +105,39 @@ export function submitTarget(commit: UICommit): UIBranch | null {
   return details.find(detail => detail.pullRequest) ?? details[0] ?? null;
 }
 
+/**
+ * The branches Submit stack pushes for `commit`, bottom first and ending with its own; a
+ * single entry means nothing sits below it. Mirrors `baseBranchFor` on the host: walk first
+ * parents through the local commits, and take the first branch on each commit that has one.
+ */
+export function stackBranchesUpTo(
+  model: RenderModel,
+  commit: UICommit
+): string[] {
+  const own = submitTarget(commit)?.name;
+  if (!own) {
+    return [];
+  }
+  const bySha = new Map<string, UICommit>();
+  for (const row of model.rows) {
+    if (row.type === "commit") {
+      bySha.set(row.commit.sha, row.commit);
+    }
+  }
+  const layers = [own];
+  const seen = new Set([commit.sha]);
+  let parent = bySha.get(commit.parents[0] ?? "");
+  while (parent && !seen.has(parent.sha)) {
+    seen.add(parent.sha);
+    const below = parent.branches.find(name => !layers.includes(name));
+    if (below) {
+      layers.unshift(below);
+    }
+    parent = bySha.get(parent.parents[0] ?? "");
+  }
+  return layers;
+}
+
 export type GotoTarget = {
   /** What to check out: a branch name, or the commit's own sha. */
   ref: string;
