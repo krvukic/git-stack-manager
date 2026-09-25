@@ -99,23 +99,40 @@ test("amending a message then submitting carries the new text to the pull reques
   ).toBe("feat: add escapeHtml, with tests");
 });
 
-test("a stacked branch submits against the layer below and warns while that layer lags", async ({
+test("a stacked branch whose base was never pushed is refused before the push", async ({
+  smartlog,
+  fakeGitHub,
+  demoRepository,
+}) => {
+  // redact-utils sits on mask-utils, and neither is pushed. GitHub cannot base a pull
+  // request on a branch it does not have, so Submit names Submit stack instead.
+  await selectCommit(smartlog, "feat(redact): add redactEmails on top of mask");
+  await smartlog.locator("#btn-submit").click();
+  await expectToast(smartlog, "Submit the stack instead");
+
+  expect(fakeGitHub.calls().filter(call => call.args[1] === "create")).toEqual(
+    []
+  );
+  expect(
+    await demoRepository.git(["branch", "-r", "--list", "origin/redact-utils"])
+  ).toBe("");
+});
+
+test("submit stack opens every layer from the bottom up, each against the one below", async ({
   smartlog,
   fakeGitHub,
 }) => {
-  // redact-utils sits on mask-utils, and neither is pushed. So the base is the
-  // branch below, and the diff would also carry mask-utils' commit until that one
-  // is submitted too — which the toast has to say.
   await selectCommit(smartlog, "feat(redact): add redactEmails on top of mask");
-  await smartlog.locator("#btn-submit").click();
-  await expectToast(smartlog, "submit mask-utils too");
+  await smartlog.locator("#btn-submit-stack").click();
+  await expectToast(smartlog, "Submitted 2 branches — 2 opened, 0 updated");
 
-  const create = fakeGitHub.calls().find(call => call.args[1] === "create");
-  expect(create.args.slice(2, 6)).toEqual([
-    "--head",
-    "redact-utils",
-    "--base",
-    "mask-utils",
+  const creates = fakeGitHub
+    .calls()
+    .filter(call => call.args[1] === "create")
+    .map(call => call.args.slice(2, 6));
+  expect(creates).toEqual([
+    ["--head", "mask-utils", "--base", "main"],
+    ["--head", "redact-utils", "--base", "mask-utils"],
   ]);
 });
 

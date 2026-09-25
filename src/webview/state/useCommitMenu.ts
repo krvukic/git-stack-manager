@@ -8,13 +8,19 @@
  */
 import type { RenderModel, UICommit } from "#ui/renderModel";
 import type { MenuItem } from "../components/ContextMenu";
-import { countDescendants, submitTarget, truncate } from "../model/commits.mjs";
+import {
+  countDescendants,
+  stackBranchesUpTo,
+  submitTarget,
+  truncate,
+} from "../model/commits.mjs";
 
 export type CommitMenuActions = {
   onGoto: (commit: UICommit) => void;
   onGhStack: (payload: Record<string, unknown>, label: string) => void;
   onOpenTerminal: (command: string) => void;
   onSubmit: (commit: UICommit) => void;
+  onSubmitStack: (commit: UICommit) => void;
   onSplit: (commit: UICommit) => void;
   onFold: (commit: UICommit) => void;
   onRebase: (commit: UICommit, destination: "trunk" | "base") => void;
@@ -51,7 +57,10 @@ export function commitMenuItems(
   const stacked = (commit.branchDetails ?? []).find(detail => detail.stack);
   if (stacked) {
     // `gh stack` owns the server-side stack object and pushes with --force-with-lease, so
-    // delegate rather than reimplement these.
+    // delegate rather than reimplement these. The branch names the stack, because `gh stack`
+    // otherwise acts on whichever stack the checkout is on.
+    const onGhStack = (payload: Record<string, unknown>, label: string) =>
+      actions.onGhStack({ ...payload, branch: stacked.name }, label);
     items.push(
       { separator: true },
       { head: "gh stack" },
@@ -59,16 +68,13 @@ export function commitMenuItems(
         label: "Rebase stack (all layers)",
         description: "gh stack rebase — realign every layer bottom-to-top",
         run: () =>
-          actions.onGhStack(
-            { command: "rebase", scope: "all" },
-            "Rebasing stack"
-          ),
+          onGhStack({ command: "rebase", scope: "all" }, "Rebasing stack"),
       },
       {
         label: "Rebase this layer and above",
         description: "gh stack rebase --upstack",
         run: () =>
-          actions.onGhStack(
+          onGhStack(
             { command: "rebase", scope: "upstack" },
             "Rebasing upstack"
           ),
@@ -77,18 +83,17 @@ export function commitMenuItems(
         label: "Push stack",
         description:
           "gh stack push — force-with-lease every branch in the stack",
-        run: () => actions.onGhStack({ command: "push" }, "Pushing stack"),
+        run: () => onGhStack({ command: "push" }, "Pushing stack"),
       },
       {
         label: "Submit stack (create/update PRs)",
         description: "gh stack submit",
-        run: () => actions.onGhStack({ command: "submit" }, "Submitting stack"),
+        run: () => onGhStack({ command: "submit" }, "Submitting stack"),
       },
       {
         label: "Sync stack with remote (prune merged)",
         description: "gh stack sync --prune",
-        run: () =>
-          actions.onGhStack({ command: "sync", prune: true }, "Syncing stack"),
+        run: () => onGhStack({ command: "sync", prune: true }, "Syncing stack"),
       },
       {
         // Drop, insert, rename, and reorder all live in gh stack's own TUI, so point at it
@@ -115,6 +120,15 @@ export function commitMenuItems(
         run: () => actions.onSubmit(commit),
       }
     );
+    const layers = stackBranchesUpTo(model, commit);
+    if (layers.length > 1) {
+      items.push({
+        label: `Submit stack — ${layers.length} branches up to ${submittable.name}`,
+        description:
+          "Submit each branch from the bottom up, so every pull request has its base on GitHub",
+        run: () => actions.onSubmitStack(commit),
+      });
+    }
   }
 
   items.push(

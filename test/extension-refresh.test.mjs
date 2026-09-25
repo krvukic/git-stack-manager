@@ -11,6 +11,7 @@
  * Each test opens its own host, because the open panel is module state.
  */
 import assert from "node:assert/strict";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { REFRESH_WINDOW_MS } from "#app/refresh";
@@ -28,6 +29,20 @@ import { openHostPanel } from "./vscodeStub.mjs";
 function openPanel(t) {
   const repositoryPath = scratchRoot(t, "gsm-host-");
   return { repositoryPath, ...openHostPanel({ repositoryPath }) };
+}
+
+/**
+ * Each watcher's base and glob, as plain values.
+ *
+ * @param {{ watchers: Array<{ pattern: unknown }> }} panel
+ */
+function watchedPatterns(panel) {
+  return panel.watchers.map(watcher => {
+    const { base, pattern } = /** @type {{ base: string, pattern: string }} */ (
+      watcher.pattern
+    );
+    return { base, pattern };
+  });
 }
 
 /** @param {number} milliseconds */
@@ -79,15 +94,44 @@ test("creating, deleting, and renaming files each ask for a re-read", async t =>
 /** The signal that was already there, kept: a commit, a checkout, a rebase. */
 test("a change under .git's refs asks the panel to re-read", t => {
   const panel = openPanel(t);
-  const [watcher] = panel.watchers;
-  assert.ok(watcher, "the host created no file system watcher");
-  assert.match(
-    String(/** @type {{ pattern?: unknown }} */ (watcher.pattern).pattern),
-    /^\.git\//,
-    "the watcher should be scoped to the git directory"
+  const gitDirectory = join(panel.repositoryPath, ".git");
+  assert.deepEqual(
+    watchedPatterns(panel),
+    [
+      { base: gitDirectory, pattern: "{HEAD,index}" },
+      {
+        base: gitDirectory,
+        pattern: "{refs/**,gh-stack,worktrees/*/gh-stack}",
+      },
+    ],
+    "the watchers should be scoped to the git directory"
   );
-  watcher.fireChange(panel.uriFor(join(panel.repositoryPath, ".git/HEAD")));
+  panel.watchers[0]?.fireChange(panel.uriFor(join(gitDirectory, "HEAD")));
   assert.equal(panel.refreshes().length, 1);
+});
+
+/**
+ * A linked worktree's `.git` is a file, so watching `<checkout>/.git/refs` saw nothing: a
+ * commit made there, or `gh stack init` run there, left the tree as it was.
+ */
+test("a linked worktree watches the git directories its .git file names", t => {
+  const root = scratchRoot(t, "gsm-host-worktree-");
+  const commonDirectory = join(root, "main", ".git");
+  const gitDirectory = join(commonDirectory, "worktrees", "feature");
+  const repositoryPath = join(root, "feature");
+  mkdirSync(gitDirectory, { recursive: true });
+  mkdirSync(repositoryPath);
+  writeFileSync(join(repositoryPath, ".git"), `gitdir: ${gitDirectory}\n`);
+  writeFileSync(join(gitDirectory, "commondir"), "../..\n");
+
+  const panel = openHostPanel({ repositoryPath });
+  assert.deepEqual(watchedPatterns(panel), [
+    { base: gitDirectory, pattern: "{HEAD,index}" },
+    {
+      base: commonDirectory,
+      pattern: "{refs/**,gh-stack,worktrees/*/gh-stack}",
+    },
+  ]);
 });
 
 /**

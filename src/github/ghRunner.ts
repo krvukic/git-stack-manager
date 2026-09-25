@@ -118,17 +118,20 @@ export function ghFailureDetail(error: unknown): string {
  * The log is what makes a submit legible: it pushed and edited a pull request, and the panel
  * should show both rather than the git half alone. `input` is written to stdin and left out
  * of the log, matching how a reword's piped message stays out — the log shows
- * `gh pr edit … --body-file -` without pasting the whole body into the panel.
+ * `gh pr edit … --body-file -` without pasting the whole body into the panel. `cwd` runs
+ * `gh` in another checkout while still logging to this one's action.
  */
 export async function runGh(
   git: GitRunner,
   args: string[],
-  input?: string
+  input?: string,
+  cwd: string = git.cwd
 ): Promise<string> {
-  git.record(`gh ${args.join(" ")}`);
+  const command = `gh ${args.join(" ")}`;
+  git.record(cwd === git.cwd ? command : `(cd ${cwd}) ${command}`);
   try {
     return await spawnGh(args, {
-      cwd: git.cwd,
+      cwd,
       timeoutMilliseconds: WRITE_TIMEOUT_MILLISECONDS,
       ...(input === undefined ? {} : { input }),
     });

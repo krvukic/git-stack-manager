@@ -136,7 +136,7 @@ test("the command panel records exactly what the action ran", async ({
     "git config user.email",
     "git for-each-ref --include-root-refs --format=… HEAD refs/heads refs/remotes/origin/HEAD refs/remotes/origin/main refs/remotes/origin/master refs/heads/main refs/heads/master",
     "git status --porcelain=v2 --branch -z",
-    "git rev-parse --path-format=absolute --git-common-dir",
+    "git rev-parse --path-format=absolute --git-common-dir --git-dir",
     "git log --author-date-order --boundary --format=… --branches HEAD --not origin/main",
     "git rev-list --left-right --count <sha>...origin/main",
     "git rev-list --left-right --count <sha>...origin/main",

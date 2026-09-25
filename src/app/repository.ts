@@ -13,10 +13,9 @@ import { CommitDiff, readCommitDiff, readWorkingCopyDiff } from "#git/diff";
 import { readRawData } from "#git/reader";
 import { GitError, GitRunner } from "#git/runner";
 import { FileChange, RawData } from "#git/snapshot";
-import { runGh } from "#github/ghRunner";
-import { ghStackArguments, GhStackCommand } from "#github/ghStack";
+import { GhStackCommand, runGhStackCommand } from "#github/ghStack";
 import { PullRequestService } from "#github/pullRequests";
-import { submitBranch, SubmitOutcome } from "#github/submit";
+import { submitBranch, SubmitOutcome, submitStack } from "#github/submit";
 import {
   AbsorbPlan,
   AbsorbResult,
@@ -553,10 +552,11 @@ export class Repository {
   /**
    * Delegate to the `gh stack` extension. It owns the server-side stack object
    * and force-pushes with --force-with-lease, so reimplementing submit/sync here
-   * would only drift from GitHub's own view of the stack.
+   * would only drift from GitHub's own view of the stack. `branch` names the stack, since
+   * `gh stack` would otherwise act on whichever one the checkout happens to be on.
    */
-  runGhStack(command: GhStackCommand): Promise<string> {
-    return runGh(this.git, ghStackArguments(command));
+  runGhStack(command: GhStackCommand, branch: string): Promise<string> {
+    return runGhStackCommand(this.git, command, branch);
   }
 
   /**
@@ -576,12 +576,35 @@ export class Repository {
       branch,
       options
     );
-    // Badges come from a search query, and GitHub indexes a pull request opened seconds
-    // ago asynchronously — so the refresh the UI fires next can miss what this submit just
-    // opened, and the button goes on offering to open it. Submit's own reads bypass the
-    // index, so hand that answer straight to the cache. Checks and review decision stay
-    // empty rather than being carried over from the previous read: the push moved the head
-    // commit, so what was known about the old one no longer describes this pull request.
+    this.rememberSubmitted(outcome);
+    return outcome;
+  }
+
+  /** Submit every branch from the bottom of the stack up to `branch`, bottom first. */
+  async submitStack(
+    branch: string,
+    options: { draft?: boolean } = {}
+  ): Promise<SubmitOutcome[]> {
+    const outcomes = await submitStack(
+      this.git,
+      await this.read(),
+      branch,
+      options
+    );
+    outcomes.forEach(outcome => this.rememberSubmitted(outcome));
+    return outcomes;
+  }
+
+  /**
+   * Badges come from a search query, and GitHub indexes a pull request opened seconds ago
+   * asynchronously — so the refresh the UI fires next can miss what a submit just opened,
+   * and the button goes on offering to open it. Submit's own reads bypass the index, so
+   * hand that answer straight to the cache. Checks and review decision stay empty rather
+   * than being carried over from the previous read: the push moved the head commit, so
+   * what was known about the old one no longer describes this pull request.
+   */
+  private rememberSubmitted(outcome: SubmitOutcome): void {
+    const { branch } = outcome;
     if (outcome.number) {
       this.pullRequests.remember(branch, {
         number: outcome.number,
@@ -596,7 +619,6 @@ export class Repository {
         checks: null,
       });
     }
-    return outcome;
   }
 
   /**

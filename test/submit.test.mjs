@@ -247,11 +247,14 @@ test("a stacked branch targets the layer below, not trunk", async t => {
   const { logPath, repository } = scratchRepository(t);
   // feature-b sits on feature-a. Targeting trunk would show A's commit as part of
   // B's pull request.
+  await repository.submit("feature-a");
   const outcome = await repository.submit("feature-b");
   assert.equal(outcome.base, "feature-a");
   const create = present(
-    ghCalls(logPath).find(call => call.args[1] === "create"),
-    "a `gh pr create` call"
+    ghCalls(logPath).find(
+      call => call.args[1] === "create" && call.args[3] === "feature-b"
+    ),
+    "a `gh pr create` call for feature-b"
   );
   assert.deepEqual(create.args.slice(2, 6), [
     "--head",
@@ -261,18 +264,58 @@ test("a stacked branch targets the layer below, not trunk", async t => {
   ]);
 });
 
-test("submitting onto a base that was never pushed reports the inflated diff", async t => {
+/**
+ * GitHub answers `gh pr create --base` onto a branch it does not have with "Base ref must be
+ * a branch", verified against a live repository: submitting the top of a new stack failed
+ * while every layer below it was unsubmitted.
+ */
+test("opening a pull request onto a base that was never pushed is refused before the push", async t => {
+  const { origin, logPath, repository } = scratchRepository(t);
+  await assert.rejects(
+    repository.submit("feature-b"),
+    /feature-b is stacked on feature-a, which has not been submitted.*Submit the stack/
+  );
+  assert.equal(
+    run(origin, "git", ["branch", "--list", "feature-b"]),
+    "",
+    "nothing was pushed"
+  );
+  assert.deepEqual(
+    ghCalls(logPath).map(call => call.args.slice(0, 2)),
+    [["pr", "list"]],
+    "no pull request was opened"
+  );
+});
+
+test("submitting the stack pushes and opens every layer from the bottom up", async t => {
+  const { repo, origin, logPath, repository } = scratchRepository(t);
+  const outcomes = await repository.submitStack("feature-b");
+  assert.deepEqual(
+    outcomes.map(outcome => [outcome.branch, outcome.base, outcome.staleBase]),
+    [
+      ["feature-a", "main", null],
+      ["feature-b", "feature-a", null],
+    ]
+  );
+  const creates = ghCalls(logPath)
+    .filter(call => call.args[1] === "create")
+    .map(call => call.args.slice(2, 6));
+  assert.deepEqual(creates, [
+    ["--head", "feature-a", "--base", "main"],
+    ["--head", "feature-b", "--base", "feature-a"],
+  ]);
+  assert.equal(
+    run(origin, "git", ["rev-parse", "feature-b"]),
+    run(repo, "git", ["rev-parse", "feature-b"]),
+    "the top layer reached the remote"
+  );
+});
+
+test("submitting a base with local work past its remote reports the inflated diff", async t => {
   // GitHub diffs against the base as pushed. Observed with a real stacked pull
   // request: while the base branch lagged, the PR listed the parent branch's file
   // next to its own, and that file dropped out once the base was submitted.
   const { repository } = scratchRepository(t);
-  const outcome = await repository.submit("feature-b");
-  assert.deepEqual(outcome.staleBase, {
-    branch: "feature-a",
-    reason: "unsubmitted",
-  });
-
-  // Once the base is pushed, the warning goes away.
   await repository.submit("feature-a");
   const afterBasePushed = await repository.submit("feature-b");
   assert.equal(afterBasePushed.staleBase, null);

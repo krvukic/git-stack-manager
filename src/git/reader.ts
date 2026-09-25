@@ -470,7 +470,7 @@ export async function readRawData(
   // Independent reads run concurrently; each is one process either way. The version
   // check joins them rather than gating them, so it costs no round trip — and when it
   // does reject, its message wins over the empty ref read an old git would produce.
-  const [, repoRoot, userEmail, refs, statusOutput, gitDirectory] =
+  const [, repoRoot, userEmail, refs, statusOutput, gitDirectories] =
     await Promise.all([
       requireSupportedGit(git),
       git.run(["rev-parse", "--show-toplevel"]),
@@ -479,9 +479,14 @@ export async function readRawData(
       git
         .tryRun(["status", "--porcelain=v2", "--branch", "-z"])
         .then(output => output ?? ""),
-      // `gh stack` keeps its state in the common git directory, so a linked
-      // worktree still sees the repository's stacks.
-      git.tryRun(["rev-parse", "--path-format=absolute", "--git-common-dir"]),
+      // Both, because `gh stack` keeps its state per worktree: the common directory
+      // leads to every worktree's state, and this checkout's own goes first.
+      git.tryRun([
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+        "--git-dir",
+      ]),
     ]);
 
   const status = parseStatus(statusOutput);
@@ -526,16 +531,22 @@ export async function readRawData(
     }
   }
 
-  // Reading `.git/gh-stack` is a file read, not a subprocess, so stack badges
-  // cost nothing per refresh.
+  // Reading the `gh-stack` files is a file read per worktree, not a subprocess, so
+  // stack badges cost nothing per refresh.
   const shaOfBranch = new Map<string, string>();
   for (const ref of refs) {
     if (ref.refName.startsWith("refs/heads/")) {
       shaOfBranch.set(toShortRef(ref.refName), ref.sha);
     }
   }
-  const stackMembership = gitDirectory
-    ? indexStackMembership(readGhStacks(gitDirectory), shaOfBranch)
+  const [commonDirectory, ownGitDirectory] = (gitDirectories ?? "")
+    .trim()
+    .split("\n");
+  const stackMembership = commonDirectory
+    ? indexStackMembership(
+        readGhStacks(commonDirectory, ownGitDirectory),
+        shaOfBranch
+      )
     : new Map<string, StackMembership>();
 
   // Everything the repository-wide reads answer, which an empty repository has as much of

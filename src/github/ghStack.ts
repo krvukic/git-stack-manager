@@ -7,7 +7,7 @@
  * reimplementing the behaviour — it owns the server-side stack object, and a
  * hand-rolled equivalent would drift from it.
  *
- * Stack membership is read from `.git/gh-stack` rather than from
+ * Stack membership is read from the `gh-stack` state file rather than from
  * `gh stack view --json`. The file is the extension's own state, carries an
  * explicit `schemaVersion`, and reading it costs nothing; shelling out to `gh`
  * costs ~0.5s and would put a subprocess in the render path for information
@@ -31,8 +31,11 @@
  * - Feature docs: https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/managing-stacked-pull-requests
  * - CLI reference: https://cli.github.com/manual/gh_stack
  */
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
+import { dirname, join } from "path";
 import { asArray, asRecord } from "#core/values";
+import { GitError, GitRunner } from "#git/runner";
+import { runGh } from "#github/ghRunner";
 
 /** The schema of `.git/gh-stack` this reader understands. */
 const SUPPORTED_SCHEMA_VERSION = 1;
@@ -44,6 +47,11 @@ export type GhStackBranch = {
 };
 
 export type GhStackInfo = {
+  /**
+   * The checkout whose git directory holds this stack's state. `gh stack` finds a stack
+   * only from there, and only through the branch checked out there.
+   */
+  workingDirectory: string;
   trunkBranch: string;
   trunkHead: string;
   /** Branches bottom-to-top, the order `gh stack` replays them in. */
@@ -60,11 +68,61 @@ export type StackMembership = {
 };
 
 /**
- * Read every stack `gh stack` tracks in this repository. Returns an empty list
- * when the extension is not in use, which is the common case.
+ * Read every stack `gh stack` tracks in this repository, in any of its worktrees. Returns
+ * an empty list when the extension is not in use, which is the common case.
+ *
+ * `gh stack` keeps its state per worktree, in `git rev-parse --git-dir`, not in the common
+ * directory: `gh stack init` run in a linked worktree writes `.git/worktrees/<name>/gh-stack`,
+ * and the main checkout's `gh stack view` then reports "not part of a stack". Branches are
+ * shared across worktrees, so every worktree's stacks describe branches this checkout draws.
+ * `ownGitDirectory` goes first, so a branch tracked in two worktrees takes this one's stack.
  */
-export function readGhStacks(gitDirectory: string): GhStackInfo[] {
-  const statePath = `${gitDirectory}/gh-stack`;
+export function readGhStacks(
+  commonDirectory: string,
+  ownGitDirectory: string = commonDirectory
+): GhStackInfo[] {
+  const worktreesDirectory = join(commonDirectory, "worktrees");
+  const linked = existsSync(worktreesDirectory)
+    ? readdirSync(worktreesDirectory).map(name =>
+        join(worktreesDirectory, name)
+      )
+    : [];
+  const gitDirectories = [commonDirectory, ...linked].sort(
+    (left, right) =>
+      Number(right === ownGitDirectory) - Number(left === ownGitDirectory)
+  );
+  return gitDirectories.flatMap(gitDirectory => {
+    const workingDirectory = workingDirectoryOf(commonDirectory, gitDirectory);
+    return workingDirectory
+      ? readStateFile(join(gitDirectory, "gh-stack"), workingDirectory)
+      : [];
+  });
+}
+
+/**
+ * The checkout a git directory belongs to. A linked worktree's `gitdir` file names its
+ * `.git` file; the main checkout is the common directory's parent. Null for a worktree
+ * whose checkout was deleted without `git worktree prune`, where `gh stack` cannot run.
+ */
+function workingDirectoryOf(
+  commonDirectory: string,
+  gitDirectory: string
+): string | null {
+  if (gitDirectory === commonDirectory) {
+    return dirname(commonDirectory);
+  }
+  try {
+    const dotGit = readFileSync(join(gitDirectory, "gitdir"), "utf8").trim();
+    return existsSync(dotGit) ? dirname(dotGit) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readStateFile(
+  statePath: string,
+  workingDirectory: string
+): GhStackInfo[] {
   if (!existsSync(statePath)) {
     return [];
   }
@@ -82,11 +140,14 @@ export function readGhStacks(gitDirectory: string): GhStackInfo[] {
   }
 
   return asArray(root.stacks)
-    .map(readStack)
+    .map(stack => readStack(stack, workingDirectory))
     .filter((stack): stack is GhStackInfo => stack !== null);
 }
 
-function readStack(value: unknown): GhStackInfo | null {
+function readStack(
+  value: unknown,
+  workingDirectory: string
+): GhStackInfo | null {
   const stack = asRecord(value);
   if (!stack) {
     return null;
@@ -106,6 +167,7 @@ function readStack(value: unknown): GhStackInfo | null {
     return null;
   }
   return {
+    workingDirectory,
     trunkBranch: typeof trunk?.branch === "string" ? trunk.branch : "",
     trunkHead: typeof trunk?.head === "string" ? trunk.head : "",
     branches,
@@ -127,6 +189,10 @@ export function indexStackMembership(
   const membership = new Map<string, StackMembership>();
   for (const stack of stacks) {
     stack.branches.forEach((entry, index) => {
+      // The first stack read wins, which `readGhStacks` orders to be this checkout's own.
+      if (membership.has(entry.branch)) {
+        return;
+      }
       const below =
         index === 0
           ? stack.trunkBranch
@@ -178,4 +244,110 @@ export function ghStackArguments(command: GhStackCommand): string[] {
       }
       return ["stack", "rebase"];
   }
+}
+
+/**
+ * Run a `gh stack` command on the stack holding `branch`, from wherever that stack lives.
+ *
+ * `gh stack` picks its stack from the branch checked out, in the worktree whose git
+ * directory holds the state, and refuses anything else: `not part of a stack` from any
+ * other checkout, `not on any branch` from a detached HEAD. Running it in this panel's
+ * checkout therefore failed for every stack initialised in a linked worktree.
+ *
+ * A detached owner at the tip of one of the stack's branches gets that branch attached
+ * for the command and detached again afterwards. Switching between a sha and the branch
+ * pointing at it touches no file, and detaching again frees the branch for checking out
+ * elsewhere. A checkout on some other branch or commit is refused rather than moved,
+ * because moving it would rewrite files someone may be editing.
+ */
+export async function runGhStackCommand(
+  git: GitRunner,
+  command: GhStackCommand,
+  branch: string
+): Promise<string> {
+  const [commonDirectory = "", ownGitDirectory] = (
+    await git.run([
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-common-dir",
+      "--git-dir",
+    ])
+  )
+    .trim()
+    .split("\n");
+  const stack = readGhStacks(commonDirectory, ownGitDirectory).find(entry =>
+    entry.branches.some(layer => layer.branch === branch)
+  );
+  if (!stack) {
+    throw new GitError(`${branch} is not in a gh stack.`, "gh stack");
+  }
+  const directory = stack.workingDirectory;
+  const attached = await attachToStack(git, directory, stack);
+  try {
+    return await runGh(git, ghStackArguments(command), undefined, directory);
+  } finally {
+    // A rebase stopped on a conflict needs the branch until `gh stack rebase --continue`.
+    if (attached && !(await rebaseInProgress(git, directory))) {
+      await git.tryRun(["-C", directory, "switch", "--quiet", "--detach"]);
+    }
+  }
+}
+
+function rebaseInProgress(git: GitRunner, directory: string): Promise<boolean> {
+  return git.succeeds([
+    "-C",
+    directory,
+    "rev-parse",
+    "--verify",
+    "--quiet",
+    "REBASE_HEAD",
+  ]);
+}
+
+/** Put `directory` on one of the stack's branches, returning whether it had to attach one. */
+async function attachToStack(
+  git: GitRunner,
+  directory: string,
+  stack: GhStackInfo
+): Promise<boolean> {
+  const names = stack.branches.map(layer => layer.branch);
+  const current = (
+    await git.tryRun([
+      "-C",
+      directory,
+      "symbolic-ref",
+      "--quiet",
+      "--short",
+      "HEAD",
+    ])
+  )?.trim();
+  if (current && names.includes(current)) {
+    return false;
+  }
+  const choices = `Check out one of ${names.join(", ")} there first.`;
+  if (current) {
+    throw new GitError(
+      `gh stack acts on the checked-out branch, and ${directory} has ${current} checked out. ${choices}`,
+      "gh stack"
+    );
+  }
+  const head = (await git.run(["-C", directory, "rev-parse", "HEAD"])).trim();
+  const tips = await git.run([
+    "for-each-ref",
+    "--format=%(refname:short)%00%(objectname)%00%(worktreepath)",
+    ...names.map(name => `refs/heads/${name}`),
+  ]);
+  // A branch another worktree holds cannot be checked out here.
+  const atHead = tips
+    .split("\n")
+    .map(line => line.split("\0"))
+    .find(([, sha, worktree]) => sha === head && !worktree)?.[0];
+  if (!atHead) {
+    throw new GitError(
+      `gh stack acts on the checked-out branch, and ${directory} is detached at ${head.slice(0, 7)}. ${choices}`,
+      "gh stack"
+    );
+  }
+  await git.run(["-C", directory, "switch", "--quiet", atHead]);
+  return true;
 }

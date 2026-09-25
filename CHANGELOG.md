@@ -3,6 +3,26 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-09-25
+
+### Added
+
+- **Submit stack**, in the right-click menu and the commit panel, submits every branch from the
+  bottom of the stack up to the selected one, bottom first.
+
+### Fixed
+
+- A stack that `gh stack init` recorded in a linked worktree shows its badges and `gh stack`
+  commands in every checkout. `gh stack` keeps its state per worktree, and the panel read only the
+  main checkout's.
+- The `gh stack` commands run in the worktree that recorded the stack, on the selected commit's
+  stack. They used to run in the panel's own checkout, where `gh stack` answered "not part of a
+  stack", or "not on any branch" from a detached HEAD.
+- Submitting a branch whose base was never pushed is refused before the push, naming Submit stack.
+  GitHub used to reject the pull request with "Base ref must be a branch", after the push.
+- The panel refreshes after a commit or checkout in a linked worktree, and after `gh stack` records
+  a stack. The watcher looked for `.git` as a directory, which a linked worktree has as a file.
+
 ## [0.10.0] - 2026-09-22
 
 ### Changed

@@ -12,7 +12,8 @@
  * becomes a bounded number of reads. `hosts/extension.ts` owns the other half — which VS
  * Code events count as signals.
  */
-import { isAbsolute, relative } from "path";
+import { existsSync, readFileSync, statSync } from "fs";
+import { isAbsolute, join, relative, resolve } from "path";
 
 /** Run `task` after `delayMs`, returning the function that cancels it. */
 export type Scheduler = (task: () => void, delayMs: number) => () => void;
@@ -55,6 +56,42 @@ export function affectsWorkingCopy(
   // Both separators, because `relative` answers in the host's own and a URI's path arrives
   // with forward slashes even on Windows.
   return inside.split(/[\\/]/)[0] !== ".git";
+}
+
+/**
+ * The git directories whose writes the panel follows, found without spawning git.
+ *
+ * In a linked worktree `.git` is a file naming `.git/worktrees/<name>`, so a watcher on
+ * `<checkout>/.git/refs/**` matched nothing and a commit made there never refreshed the
+ * tree. `gitDirectory` holds this checkout's `HEAD`, index, and `gh stack` state;
+ * `commonDirectory` holds the refs and every worktree's `gh stack` state. The two are the
+ * same directory in the main checkout.
+ */
+export function gitDirectoriesOf(repositoryPath: string): {
+  gitDirectory: string;
+  commonDirectory: string;
+} {
+  const dotGit = join(repositoryPath, ".git");
+  try {
+    if (statSync(dotGit).isDirectory()) {
+      return { gitDirectory: dotGit, commonDirectory: dotGit };
+    }
+    const pointer = readFileSync(dotGit, "utf8").match(
+      /^gitdir:\s*(.+)$/m
+    )?.[1];
+    if (!pointer) {
+      return { gitDirectory: dotGit, commonDirectory: dotGit };
+    }
+    const gitDirectory = resolve(repositoryPath, pointer.trim());
+    const commonPath = join(gitDirectory, "commondir");
+    const commonDirectory = existsSync(commonPath)
+      ? resolve(gitDirectory, readFileSync(commonPath, "utf8").trim())
+      : gitDirectory;
+    return { gitDirectory, commonDirectory };
+  } catch {
+    // No repository yet; the watcher then waits on the conventional location.
+    return { gitDirectory: dotGit, commonDirectory: dotGit };
+  }
 }
 
 export type CoalescerOptions = {
