@@ -3,6 +3,12 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.1] - 2026-09-25
+
+### Fixed
+
+- `just package` no longer bundles `.tmp/`, the repo-local scratch directory, into the `.vsix`.
+
 ## [0.11.0] - 2026-09-25
 
 ### Added
