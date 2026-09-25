@@ -360,6 +360,7 @@ export function App({ settings }: { settings: HostSettings }) {
               }}
               onGoto={commit => void commitActions.gotoCommit(commit)}
               onGotoTrunk={() => void repository.gotoTrunk()}
+              onGotoBranch={branch => void repository.gotoBranch(branch)}
               onOpenUrl={openUrl}
             />
           </div>

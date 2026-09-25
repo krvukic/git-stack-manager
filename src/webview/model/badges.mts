@@ -126,10 +126,9 @@ export type TrunkBehindBadge = {
 /**
  * How far the local trunk branch trails the ref the trunk row draws.
  *
- * The trunk row is the only place this can appear. A trunk branch that has merely fallen
- * behind carries no local commits, so the graph gives it no row and no pill — the count
- * showed in VS Code's status bar and nowhere here, which reads as a graph claiming trunk
- * is current when it is forty commits stale.
+ * It sits on the trunk row, whose Goto is the fix. The branch's own row further down shows
+ * where the branch is, and a gap of forty commits between the two reads as spacing, not as
+ * something to pull.
  *
  * Amber rather than red: falling behind trunk is the ordinary state of a repository that
  * fetches on a timer, not work about to be lost. The description names the fix, and which

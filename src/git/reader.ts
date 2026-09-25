@@ -202,6 +202,8 @@ type TrunkBranch = {
   name: string;
   /** How it compares to what it tracks, which for trunk is how far behind it has fallen. */
   sync: BranchSync;
+  /** The commit it points at, with the subject and date the ref read already carries. */
+  tip: CommitRef;
 };
 
 /**
@@ -219,9 +221,8 @@ type TrunkBranch = {
  * checked out an unrelated feature branch. The name match handles that case, and it is
  * also what a fresh clone looks like before its first push.
  *
- * The branch's own sync comes back with it, because the trunk row is the only place that
- * can report it: a trunk branch left behind its remote has no local commits, so it never
- * reaches the graph as a row of its own.
+ * The branch's own sync and tip come back with it, because the history walk never reaches
+ * them: a trunk branch left behind its remote has no local commits.
  *
  * Whether another worktree holds the branch is not decided here: `heldBranches` answers that
  * for every branch, so the trunk row and the commit rows read the same map.
@@ -239,6 +240,7 @@ function resolveTrunkBranch(
   const resolved = (ref: RefRow): TrunkBranch => ({
     name: toShortRef(ref.refName),
     sync: parseTrack(toShortRef(ref.refName), ref.upstream, ref.track),
+    tip: { sha: ref.sha, subject: ref.subject, authorDate: ref.authorDate },
   });
   if (trunk.refName.startsWith("refs/heads/")) {
     return resolved(trunk);
@@ -252,6 +254,45 @@ function resolveTrunkBranch(
   const tail = trunkShort.split("/").slice(1).join("/");
   const named = locals.find(ref => toShortRef(ref.refName) === tail);
   return named ? resolved(named) : null;
+}
+
+/**
+ * Place the local trunk branch on trunk, as `describeBases` places a fork base.
+ *
+ * Usually free. A branch on the tip needs no count, and a branch that tracks the trunk ref
+ * already carries its counts in `%(upstream:track)`. Only a branch tracking something else,
+ * such as under a trunk override naming another remote, costs one `rev-list`.
+ */
+async function locateTrunkBranch(
+  git: GitRunner,
+  trunkBranch: TrunkBranch | null,
+  trunkRef: string | null,
+  trunkTip: CommitRef | null
+): Promise<BaseInfo | null> {
+  if (!trunkBranch || !trunkRef || !trunkTip) {
+    return null;
+  }
+  const { sync, tip } = trunkBranch;
+  if (tip.sha === trunkTip.sha) {
+    return { ...tip, onTrunk: true, distanceToTrunkTip: 0 };
+  }
+  if (sync.upstream === trunkRef && !sync.gone) {
+    return sync.ahead
+      ? { ...tip, onTrunk: false, distanceToTrunkTip: -1 }
+      : { ...tip, onTrunk: true, distanceToTrunkTip: sync.behind };
+  }
+  const counts = await git.tryRun([
+    "rev-list",
+    "--left-right",
+    "--count",
+    `${tip.sha}...${trunkRef}`,
+  ]);
+  const [ahead = -1, behind = -1] = (counts ?? "")
+    .split(/\s+/)
+    .map(value => parseInt(value, 10));
+  return ahead === 0
+    ? { ...tip, onTrunk: true, distanceToTrunkTip: behind }
+    : { ...tip, onTrunk: false, distanceToTrunkTip: -1 };
 }
 
 type HeadState = {
@@ -554,7 +595,14 @@ export async function readRawData(
     uncommitted: status.uncommitted,
   };
   if (!head.sha) {
-    return { ...common, headSha: "", commits: [], bases: [], conflict: null };
+    return {
+      ...common,
+      trunkBranchCommit: null,
+      headSha: "",
+      commits: [],
+      bases: [],
+      conflict: null,
+    };
   }
 
   const { commits, boundaries } = await walkLocalCommits(
@@ -563,8 +611,9 @@ export async function readRawData(
     branchesAtSha,
     syncsAtSha
   );
-  const [bases, conflict] = await Promise.all([
+  const [bases, trunkBranchCommit, conflict] = await Promise.all([
     describeBases(git, commits, boundaries, trunkRef),
+    locateTrunkBranch(git, trunkBranch, trunkRef, trunkTip),
     status.hasUnmerged
       ? readConflictState(
           git,
@@ -575,5 +624,12 @@ export async function readRawData(
       : Promise.resolve(null),
   ]);
 
-  return { ...common, headSha: head.sha, commits, bases, conflict };
+  return {
+    ...common,
+    trunkBranchCommit,
+    headSha: head.sha,
+    commits,
+    bases,
+    conflict,
+  };
 }

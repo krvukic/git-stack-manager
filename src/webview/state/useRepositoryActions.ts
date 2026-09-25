@@ -1,11 +1,12 @@
 /**
- * The actions that move the whole repository: the top bar's Pull, Restack, and Undo, the trunk
- * row's Goto, and the controls the banner shows while a rebase is stopped on a conflict.
+ * The actions that move the whole repository: the top bar's Pull, Restack, and Undo, the Goto
+ * on the trunk row and on the row the trunk branch was left on, and the controls the banner
+ * shows while a rebase is stopped on a conflict.
  *
  * Grouped by what they act on rather than by which button runs them, which is what separates
- * them from `useCommitActions` — nothing here needs a commit to be selected. The trunk row's
- * Goto belongs here for that reason: trunk is the repository's own branch, and the row names
- * no commit the reader picked.
+ * them from `useCommitActions` — nothing here needs a commit to be selected. Both Gotos belong
+ * here for that reason: trunk is the repository's own branch, and neither row names a commit
+ * the reader picked.
  *
  * Every one that can leave a conflict behind re-reads on failure (`reloadOnError`): a rebase
  * that stopped has already moved refs, so the model on screen is stale whether it succeeded
@@ -107,6 +108,20 @@ export function useRepositoryActions(smartlog: Smartlog) {
     [runAction, showToast]
   );
 
+  /** Goto on the row a fetch left the trunk branch on: a plain checkout, no fast-forward. */
+  const gotoBranch = useCallback(
+    (branch: string) =>
+      runAction<RenderModel>(
+        "checkout",
+        { ref: branch, detach: false },
+        {
+          modelFrom: data => data,
+          onSuccess: () => showToast(`Checked out ${branch} ✓`, false),
+        }
+      ),
+    [runAction, showToast]
+  );
+
   const undoLast = useCallback(
     () =>
       runAction<{ undone: string; model: RenderModel }>(
@@ -182,6 +197,7 @@ export function useRepositoryActions(smartlog: Smartlog) {
     pull,
     restack,
     gotoTrunk,
+    gotoBranch,
     undoLast,
     openMergeTool,
     continueRebase,

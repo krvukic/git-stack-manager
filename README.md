@@ -65,6 +65,9 @@ Run `just init-repo` once, then pick a host:
   such as `origin/main`, so its Goto carries the *local* branch tracking that ref: `git switch
   origin/main` would detach HEAD instead of putting you on main. It prefers whatever tracks trunk
   over whatever shares its name, so a local trunk under another name still works.
+- The local trunk branch always has a place on the graph. While it is level with the trunk ref, its
+  pill sits on the trunk row. Once a fetch moves the ref on, the branch gets a row of its own on
+  trunk, so "You are here" stays visible while you are on it.
 - **Pull** fetches and fast-forwards the branch you are on, never merging and never rebasing. Pull
   collects work that already happened elsewhere, and either of those is a history decision a Pull
   button should not make on its own. It refuses, changing nothing, on a detached HEAD, a branch

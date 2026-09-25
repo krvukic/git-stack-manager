@@ -70,6 +70,11 @@ export type Row =
        * put it on the graph as a commit row, which carries the counts itself.
        */
       trunkBranchBehind: number;
+      /**
+       * `trunkBranch` points at this row's commit, so the row draws its pill beside the ref.
+       * False when trunk is that branch itself, where a second pill would repeat the first.
+       */
+      trunkBranchAtTip: boolean;
       isHead: boolean;
     }
   | { type: "ellipsis"; count: number }
@@ -79,6 +84,12 @@ export type Row =
       shortSha: string;
       subject: string;
       isHead: boolean;
+      /** A stack forked here. False on a row drawn only because the trunk branch points here. */
+      isForkPoint: boolean;
+      /** The local trunk branch, when it points here: a `main` a fetch left behind. */
+      trunkBranch: string | null;
+      /** Where that branch is already checked out, when another worktree holds it. */
+      trunkBranchWorktree: string | null;
     }
   | { type: "commit"; commit: UICommit };
 
@@ -241,19 +252,44 @@ export function buildModel(
     return output;
   };
 
-  const baseRow = (base: BaseInfo): Row => ({
-    type: "base",
-    sha: base.sha,
-    shortSha: shorten(base.sha),
-    subject: base.subject,
-    isHead: rawData.headSha === base.sha,
-  });
+  /*
+   * The local trunk branch on trunk below the tip gets an anchor row, as a fork base does.
+   * On the tip it rides on the trunk row, and ahead of trunk it is a commit row already.
+   */
+  const trunkBranchCommit = rawData.trunkBranchCommit?.onTrunk
+    ? rawData.trunkBranchCommit
+    : null;
+  const trunkBranchBelowTip =
+    trunkBranchCommit && trunkBranchCommit.distanceToTrunkTip > 0
+      ? trunkBranchCommit
+      : null;
+  const trunkBranchWorktree = rawData.trunkBranch
+    ? (rawData.heldBranches.get(rawData.trunkBranch) ?? null)
+    : null;
+  const forkPoints = new Set(rawData.bases.map(base => base.sha));
+
+  const baseRow = (base: BaseInfo): Row => {
+    const holdsTrunkBranch = base.sha === trunkBranchBelowTip?.sha;
+    return {
+      type: "base",
+      sha: base.sha,
+      shortSha: shorten(base.sha),
+      subject: base.subject,
+      isHead: rawData.headSha === base.sha,
+      isForkPoint: forkPoints.has(base.sha),
+      trunkBranch: holdsTrunkBranch ? rawData.trunkBranch : null,
+      trunkBranchWorktree: holdsTrunkBranch ? trunkBranchWorktree : null,
+    };
+  };
 
   // Order bases: on-trunk bases sorted newest-first (smallest distance to tip),
   // then any off-trunk bases.
-  const onTrunkBases = rawData.bases
-    .filter(base => base.onTrunk)
-    .sort((a, b) => a.distanceToTrunkTip - b.distanceToTrunkTip);
+  const onTrunkBases = [
+    ...rawData.bases.filter(base => base.onTrunk),
+    ...(trunkBranchBelowTip && !forkPoints.has(trunkBranchBelowTip.sha)
+      ? [trunkBranchBelowTip]
+      : []),
+  ].sort((a, b) => a.distanceToTrunkTip - b.distanceToTrunkTip);
   const offTrunkBases = rawData.bases.filter(base => !base.onTrunk);
 
   if (rawData.trunkTip) {
@@ -264,10 +300,11 @@ export function buildModel(
       subject: rawData.trunkTip.subject,
       trunkRef: rawData.trunkRef ?? "trunk",
       trunkBranch: rawData.trunkBranch,
-      trunkBranchWorktree: rawData.trunkBranch
-        ? (rawData.heldBranches.get(rawData.trunkBranch) ?? null)
-        : null,
+      trunkBranchWorktree,
       trunkBranchBehind: behindOnTrunkBranch(rawData),
+      trunkBranchAtTip:
+        trunkBranchCommit?.distanceToTrunkTip === 0 &&
+        rawData.trunkBranch !== rawData.trunkRef,
       isHead: rawData.headSha === rawData.trunkTip.sha,
     });
     // A stack forked directly off the tip sits above it, so it splices in before the tip row.

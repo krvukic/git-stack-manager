@@ -269,6 +269,72 @@ test("the behind count holds while HEAD is on another branch, where the row's ow
   assert.match(badge.description, /Goto this row fast-forwards it/);
 });
 
+test("a fetch after Goto on the trunk row leaves You are here on main's own row", async t => {
+  // Goto brought main level with origin/main; the next background fetch moved origin/main on.
+  // Main's commit was then neither local nor a fork base, so no row drew HEAD at all.
+  const fixture = trunkRepository(t, "gsm-trunk-left-behind-");
+  const { repo, repository } = fixture;
+  const other = teammateClone(fixture.root, fixture.origin);
+  pushFromClone(other, "theirs.txt", "other work theirs.txt");
+  run(repo, "git", ["fetch", "-q", "origin"]);
+  await repository.gotoTrunk();
+  pushFromClone(other, "theirs2.txt", "other work theirs2.txt");
+  pushFromClone(other, "theirs3.txt", "other work theirs3.txt");
+  run(repo, "git", ["fetch", "-q", "origin"]);
+
+  const rawData = await repository.read();
+  const model = buildModel(rawData);
+  assert.deepEqual(
+    model.rows.map(row => row.type),
+    ["trunk-tip", "ellipsis", "base"]
+  );
+  assert.equal(trunkRow(model).isHead, false);
+  assert.equal(trunkRow(model).trunkBranchAtTip, false);
+  const ellipsis = present(model.rows[1], "the ellipsis row");
+  assert.equal(ellipsis.type === "ellipsis" && ellipsis.count, 1);
+  const mainRow = present(model.rows[2], "main's row");
+  assert.equal(mainRow.type, "base");
+  assert.equal(mainRow.type === "base" && mainRow.sha, rawData.headSha);
+  assert.equal(mainRow.type === "base" && mainRow.isHead, true);
+  assert.equal(mainRow.type === "base" && mainRow.trunkBranch, "main");
+  assert.equal(
+    mainRow.type === "base" && mainRow.isForkPoint,
+    false,
+    "nothing forked here, so the row claims no base"
+  );
+});
+
+test("a trunk branch level with the ref rides on the trunk row as a pill", async t => {
+  const { repository } = trunkRepository(t, "gsm-trunk-level-pill-");
+  const model = buildModel(await repository.read());
+
+  assert.equal(trunkRow(model).trunkBranchAtTip, true);
+  assert.equal(trunkRow(model).isHead, true);
+  assert.equal(
+    model.rows.filter(row => row.type === "base").length,
+    0,
+    "main's commit is the tip, so it needs no row of its own"
+  );
+});
+
+test("a trunk branch left at a fork point shares that base row", async t => {
+  const fixture = trunkRepository(t, "gsm-trunk-left-at-base-");
+  const { repo, repository } = fixture;
+  const other = teammateClone(fixture.root, fixture.origin);
+  run(repo, "git", ["switch", "-qc", "dev/feature"]);
+  commitFile(repo, "feature.txt", "feature\n", "feat: my work");
+  pushFromClone(other, "theirs.txt", "other work theirs.txt");
+  run(repo, "git", ["fetch", "-q", "origin"]);
+
+  const model = buildModel(await repository.read());
+  const bases = model.rows.filter(row => row.type === "base");
+  assert.equal(bases.length, 1, "one row, not a base and a main side by side");
+  const [forkPoint] = bases;
+  assert.equal(forkPoint?.isForkPoint, true);
+  assert.equal(forkPoint?.trunkBranch, "main");
+  assert.equal(forkPoint?.isHead, false);
+});
+
 test("a trunk branch level with the ref earns no badge", async t => {
   const { repository } = behindTrunk(t, "gsm-trunk-behind-current-");
   await repository.pull();
@@ -308,6 +374,11 @@ test("a diverged trunk branch leaves the counts to its own commit row", async t 
       .map(branch => branch.name),
     ["main"],
     "main has a row of its own to carry the counts"
+  );
+  assert.equal(
+    model.rows.some(row => row.type === "base" && row.trunkBranch),
+    false,
+    "a main with commits of its own is not also drawn on trunk"
   );
 });
 

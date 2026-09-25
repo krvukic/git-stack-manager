@@ -105,6 +105,15 @@ export type RawData = {
    * VS Code's status bar and nowhere in the graph.
    */
   trunkBranchSync: BranchSync | null;
+  /**
+   * The commit `trunkBranch` points at, located against trunk the way a fork base is. Null
+   * when there is no local trunk branch.
+   *
+   * A `main` that trails `origin/main` sits on a trunk commit that is neither local nor a
+   * fork base, so without this the graph drew no row for it. Goto on the trunk row, then a
+   * background fetch, left HEAD on that commit and "You are here" nowhere on screen.
+   */
+  trunkBranchCommit: BaseInfo | null;
   headSha: string;
   headBranch: string | null;
   commits: RawCommit[]; // local-only commits, topo order (newest first)

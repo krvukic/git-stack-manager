@@ -21,6 +21,7 @@ export function Tree({
   onContextMenu,
   onGoto,
   onGotoTrunk,
+  onGotoBranch,
   onOpenUrl,
 }: {
   model: RenderModel;
@@ -31,6 +32,7 @@ export function Tree({
   onContextMenu: (event: React.MouseEvent, commit: UICommit) => void;
   onGoto: (commit: UICommit) => void;
   onGotoTrunk: () => void;
+  onGotoBranch: (branch: string) => void;
   onOpenUrl: (url: string) => void;
 }) {
   const layout = useMemo(() => layoutGraph(model.rows), [model.rows]);
@@ -97,9 +99,11 @@ export function Tree({
             <BaseRow
               key={`base-${row.sha}`}
               row={row}
+              headBranch={model.headBranch}
               layout={layout}
               rowIndex={rowIndex}
               rowHeight={rowHeight}
+              onGotoBranch={onGotoBranch}
             />
           );
         }

@@ -213,9 +213,9 @@ export const CommitRow = memo(function CommitRow({
  * stays visible but disabled, naming the directory that holds it: a missing button reads
  * as a bug in the row, whereas the path tells you where to look.
  *
- * The badge is how far that local branch trails this row. It belongs here because a trunk
- * branch left behind has no local commits and so no row of its own — without it the graph
- * showed nothing at all between a fetched trunk and a stale `main`. Goto goes away once
+ * The badge is how far that local branch trails this row. The branch has a pill of its own,
+ * on this row while level and on a `BaseRow` further down once a fetch leaves it behind, but
+ * only this row's Goto can bring it level, so the count sits beside that Goto. Goto goes away once
  * HEAD is already on the branch, where the switch would change nothing; the badge's own
  * wording then points at Pull instead, which is the only way left to move the branch.
  */
@@ -260,6 +260,9 @@ export function TrunkTipRow({
     >
       <span className="pillgroup">
         <Pill label={row.trunkRef} variant="trunk" />
+        {row.trunkBranchAtTip && row.trunkBranch ? (
+          <Pill label={row.trunkBranch} />
+        ) : null}
         {behind ? <Badge {...behind} /> : null}
       </span>
       <span className="subject text-muted" title={row.subject}>
@@ -284,18 +287,33 @@ export function TrunkTipRow({
   );
 }
 
-/** The commit a stack forked from. Not local, so it carries no branch pills. */
+/**
+ * A commit on trunk below the tip: where a stack forked, where the local trunk branch was
+ * left when trunk moved on, or both.
+ *
+ * Only the trunk branch earns a pill here, since every other branch at a fork point is a
+ * local commit with a row of its own. Its Goto is a plain checkout rather than the trunk
+ * row's fast-forward, because this row names the commit the branch is on.
+ */
 export function BaseRow({
   row,
+  headBranch,
   layout,
   rowIndex,
   rowHeight,
+  onGotoBranch,
 }: {
   row: Extract<ModelRow, { type: "base" }>;
+  /** Branch HEAD is on, or null when detached. */
+  headBranch: string | null;
   layout: GraphLayout;
   rowIndex: number;
   rowHeight: number;
+  onGotoBranch: (branch: string) => void;
 }) {
+  const branch = row.trunkBranch;
+  const heldBy = row.trunkBranchWorktree;
+  const canGoto = Boolean(branch) && !row.isHead && headBranch !== branch;
   return (
     <RowShell
       layout={layout}
@@ -303,14 +321,36 @@ export function BaseRow({
       kind="base"
       isHead={row.isHead}
       rowHeight={rowHeight}
-      className={classes("row", row.isHead && "head")}
+      className={classes(
+        "row",
+        row.isHead && "head",
+        canGoto && !heldBy && "clickable"
+      )}
     >
+      {branch ? (
+        <span className="pillgroup">
+          <Pill label={branch} />
+        </span>
+      ) : null}
       <span className="subject text-muted" title={row.subject}>
         {row.subject}
       </span>
       <Sha value={row.shortSha} />
-      <span className="basehint text-muted">(base — where you branched)</span>
+      {row.isForkPoint ? (
+        <span className="basehint text-muted">(base — where you branched)</span>
+      ) : null}
       {row.isHead ? <YouAreHere /> : null}
+      {canGoto && branch ? (
+        <GotoButton
+          onGoto={() => onGotoBranch(branch)}
+          disabled={Boolean(heldBy)}
+          description={
+            heldBy
+              ? `${branch} is checked out in ${heldBy}`
+              : `Check out ${branch}`
+          }
+        />
+      ) : null}
     </RowShell>
   );
 }

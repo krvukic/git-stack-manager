@@ -3,6 +3,19 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-09-25
+
+### Added
+
+- The graph always shows the local trunk branch. While `main` is level with `origin/main`, its pill
+  sits beside `origin/main` on the trunk row. Once a fetch moves `origin/main` on, `main` gets a row
+  of its own on trunk, with its own Goto. That row carries "You are here" when `main` is checked
+  out.
+
+### Fixed
+
+- After Goto on the trunk row, a background fetch no longer takes "You are here" off the graph.
+
 ## [0.11.0] - 2026-09-25
 
 ### Added
