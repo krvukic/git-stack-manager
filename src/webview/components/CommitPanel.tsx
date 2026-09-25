@@ -20,7 +20,7 @@
  */
 import type { FileChange } from "#git/snapshot";
 import type { RenderModel, UICommit } from "#ui/renderModel";
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { gotoTarget, splitMessage, submitTarget } from "../model/commits.mjs";
 import type { FileClick } from "../model/config.mjs";
 import {
@@ -182,11 +182,19 @@ export function CommitPanel({
       {commit.branchDetails?.length ? (
         <div className="branchrow">
           {commit.branchDetails.map(branch => (
-            <BranchPills
-              key={branch.name}
-              branch={branch}
-              onOpenUrl={onOpenUrl}
-            />
+            <Fragment key={branch.name}>
+              <BranchPills branch={branch} onOpenUrl={onOpenUrl} />
+              {branch.pullRequest ? (
+                <Button
+                  size="small"
+                  className="ml-1"
+                  title={`Open pull request #${branch.pullRequest.number} on GitHub.`}
+                  onClick={() => onOpenUrl(branch.pullRequest!.url)}
+                >
+                  Open PR
+                </Button>
+              ) : null}
+            </Fragment>
           ))}
         </div>
       ) : null}

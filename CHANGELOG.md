@@ -3,6 +3,13 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-09-25
+
+### Added
+
+- **Open PR** sits next to a branch's pull request badge in the commit panel, and opens that
+  pull request on GitHub.
+
 ## [0.10.0] - 2026-09-22
 
 ### Changed
