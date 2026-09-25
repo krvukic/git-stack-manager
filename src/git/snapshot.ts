@@ -114,6 +114,11 @@ export type RawData = {
    * background fetch, left HEAD on that commit and "You are here" nowhere on screen.
    */
   trunkBranchCommit: BaseInfo | null;
+  /**
+   * HEAD's commit on trunk, when no other row draws it: not the tip, a fork base, or the
+   * trunk branch's commit. A detached checkout of an old trunk sha is the common case.
+   */
+  headCommit: BaseInfo | null;
   headSha: string;
   headBranch: string | null;
   commits: RawCommit[]; // local-only commits, topo order (newest first)

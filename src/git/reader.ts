@@ -295,6 +295,49 @@ async function locateTrunkBranch(
     : { ...tip, onTrunk: false, distanceToTrunkTip: -1 };
 }
 
+/**
+ * Place HEAD on trunk when no other row draws its commit.
+ *
+ * The walk covers HEAD, so a HEAD it did not return is reachable from trunk. When that commit
+ * is not the tip, a fork base, or the trunk branch's commit, nothing drew it: `git checkout`
+ * of an old trunk sha, or a branch cut there with no commits yet, left "You are here" off
+ * the graph. Costs one `rev-list --count`, and only in that state.
+ */
+async function locateHead(
+  git: GitRunner,
+  head: HeadState,
+  refs: RefRow[],
+  walk: BoundaryWalk,
+  trunkRef: string | null,
+  trunkTip: CommitRef | null,
+  trunkBranch: TrunkBranch | null
+): Promise<BaseInfo | null> {
+  if (
+    !trunkRef ||
+    head.sha === trunkTip?.sha ||
+    head.sha === trunkBranch?.tip.sha ||
+    walk.boundaries.has(head.sha) ||
+    walk.commits.some(commit => commit.sha === head.sha)
+  ) {
+    return null;
+  }
+  const headRow = refs.find(ref => ref.refName === "HEAD");
+  const [meta, count] = await Promise.all([
+    headRow
+      ? {
+          sha: head.sha,
+          subject: headRow.subject,
+          authorDate: headRow.authorDate,
+        }
+      : readCommitRef(git, head.sha),
+    git.tryRun(["rev-list", "--count", `${head.sha}..${trunkRef}`]),
+  ]);
+  const distance = parseInt(count ?? "", 10);
+  return Number.isNaN(distance)
+    ? null
+    : { ...meta, onTrunk: true, distanceToTrunkTip: distance };
+}
+
 type HeadState = {
   sha: string;
   branch: string | null;
@@ -598,6 +641,7 @@ export async function readRawData(
     return {
       ...common,
       trunkBranchCommit: null,
+      headCommit: null,
       headSha: "",
       commits: [],
       bases: [],
@@ -605,15 +649,12 @@ export async function readRawData(
     };
   }
 
-  const { commits, boundaries } = await walkLocalCommits(
-    git,
-    trunkRef,
-    branchesAtSha,
-    syncsAtSha
-  );
-  const [bases, trunkBranchCommit, conflict] = await Promise.all([
+  const walk = await walkLocalCommits(git, trunkRef, branchesAtSha, syncsAtSha);
+  const { commits, boundaries } = walk;
+  const [bases, trunkBranchCommit, headCommit, conflict] = await Promise.all([
     describeBases(git, commits, boundaries, trunkRef),
     locateTrunkBranch(git, trunkBranch, trunkRef, trunkTip),
+    locateHead(git, head, refs, walk, trunkRef, trunkTip, trunkBranch),
     status.hasUnmerged
       ? readConflictState(
           git,
@@ -627,6 +668,7 @@ export async function readRawData(
   return {
     ...common,
     trunkBranchCommit,
+    headCommit,
     headSha: head.sha,
     commits,
     bases,

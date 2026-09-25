@@ -3,6 +3,14 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] - 2026-09-25
+
+### Fixed
+
+- A HEAD on an older trunk commit shows "You are here" on a row of its own. A detached checkout of
+  that commit, or a branch cut there with no commits yet, used to leave HEAD off the graph. The
+  branch, when there is one, gets its pill on that row.
+
 ## [0.12.0] - 2026-09-25
 
 ### Added

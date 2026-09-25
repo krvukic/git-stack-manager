@@ -90,6 +90,11 @@ export type Row =
       trunkBranch: string | null;
       /** Where that branch is already checked out, when another worktree holds it. */
       trunkBranchWorktree: string | null;
+      /**
+       * The branch HEAD is on, when HEAD is here on a branch other than `trunkBranch`: one cut
+       * from an old trunk commit and not yet committed to. Null when detached.
+       */
+      headBranch: string | null;
     }
   | { type: "commit"; commit: UICommit };
 
@@ -270,25 +275,35 @@ export function buildModel(
 
   const baseRow = (base: BaseInfo): Row => {
     const holdsTrunkBranch = base.sha === trunkBranchBelowTip?.sha;
+    const isHead = rawData.headSha === base.sha;
     return {
       type: "base",
       sha: base.sha,
       shortSha: shorten(base.sha),
       subject: base.subject,
-      isHead: rawData.headSha === base.sha,
+      isHead,
       isForkPoint: forkPoints.has(base.sha),
       trunkBranch: holdsTrunkBranch ? rawData.trunkBranch : null,
       trunkBranchWorktree: holdsTrunkBranch ? trunkBranchWorktree : null,
+      headBranch:
+        isHead && rawData.headBranch !== rawData.trunkBranch
+          ? rawData.headBranch
+          : null,
     };
   };
 
   // Order bases: on-trunk bases sorted newest-first (smallest distance to tip),
-  // then any off-trunk bases.
+  // then any off-trunk bases. The trunk branch and HEAD join them when no row draws them;
+  // the reader already leaves HEAD out when it sits on the trunk branch's commit.
+  const extraAnchors = [trunkBranchBelowTip, rawData.headCommit].filter(
+    (anchor): anchor is BaseInfo =>
+      !!anchor?.onTrunk &&
+      anchor.distanceToTrunkTip > 0 &&
+      !forkPoints.has(anchor.sha)
+  );
   const onTrunkBases = [
     ...rawData.bases.filter(base => base.onTrunk),
-    ...(trunkBranchBelowTip && !forkPoints.has(trunkBranchBelowTip.sha)
-      ? [trunkBranchBelowTip]
-      : []),
+    ...extraAnchors,
   ].sort((a, b) => a.distanceToTrunkTip - b.distanceToTrunkTip);
   const offTrunkBases = rawData.bases.filter(base => !base.onTrunk);
 

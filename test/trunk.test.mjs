@@ -335,6 +335,83 @@ test("a trunk branch left at a fork point shares that base row", async t => {
   assert.equal(forkPoint?.isHead, false);
 });
 
+/**
+ * The anchor rows below the trunk row, which is where a HEAD on an old trunk commit lands.
+ *
+ * @param {import("#ui/renderModel").RenderModel} model
+ */
+function anchorsBelowTip(model) {
+  return model.rows.flatMap(row => (row.type === "base" ? [row] : []));
+}
+
+/**
+ * `behindTrunk`, with main then brought level so the only commit below the tip left to draw
+ * is the one HEAD moves to.
+ *
+ * @param {import("node:test").TestContext} t
+ * @param {string} prefix
+ */
+function levelTrunk(t, prefix) {
+  const fixture = behindTrunk(t, prefix);
+  run(fixture.repo, "git", ["merge", "-q", "--ff-only", "origin/main"]);
+  return fixture;
+}
+
+test("a HEAD detached on an old trunk commit gets a row of its own", async t => {
+  // Nothing forks there and no branch points there, so the walk, which leaves out
+  // everything reachable from trunk, gave the commit no row and "You are here" no place.
+  const { repo, repository } = levelTrunk(t, "gsm-head-detached-old-");
+  run(repo, "git", ["switch", "-q", "--detach", "origin/main~1"]);
+
+  const rawData = await repository.read();
+  const model = buildModel(rawData);
+  assert.equal(trunkRow(model).isHead, false);
+  const [row, ...rest] = anchorsBelowTip(model);
+  assert.equal(rest.length, 0);
+  assert.equal(row?.sha, rawData.headSha);
+  assert.equal(row?.isHead, true);
+  assert.equal(row?.isForkPoint, false);
+  assert.equal(row?.trunkBranch, null, "main is on the tip, not here");
+  assert.equal(row?.headBranch, null, "a detached HEAD has no branch to pill");
+});
+
+test("a branch cut from an old trunk commit and not yet committed to shows its pill there", async t => {
+  const { repo, repository } = levelTrunk(t, "gsm-head-empty-branch-");
+  run(repo, "git", ["switch", "-qc", "spike", "origin/main~2"]);
+
+  const model = buildModel(await repository.read());
+  const [row] = anchorsBelowTip(model);
+  assert.equal(row?.isHead, true);
+  assert.equal(row?.headBranch, "spike");
+  assert.equal(
+    present(model.rows[1], "the row between").type,
+    "ellipsis",
+    "the commit between the tip and HEAD is folded, not drawn"
+  );
+});
+
+test("a HEAD detached on the trunk branch's commit shares that branch's row", async t => {
+  const { repo, repository } = behindTrunk(t, "gsm-head-detached-on-main-");
+  run(repo, "git", ["switch", "-q", "--detach", "main"]);
+
+  const bases = anchorsBelowTip(buildModel(await repository.read()));
+  assert.equal(bases.length, 1, "one row, not main's and HEAD's side by side");
+  assert.equal(bases[0]?.trunkBranch, "main");
+  assert.equal(bases[0]?.isHead, true);
+  assert.equal(bases[0]?.headBranch, null);
+});
+
+test("a HEAD detached on the trunk tip stays on the trunk row", async t => {
+  const { repo, repository } = trunkRepository(t, "gsm-head-detached-tip-");
+  run(repo, "git", ["switch", "-q", "--detach", "origin/main"]);
+
+  const rawData = await repository.read();
+  assert.equal(rawData.headCommit, null, "the trunk row already draws it");
+  const model = buildModel(rawData);
+  assert.equal(trunkRow(model).isHead, true);
+  assert.equal(anchorsBelowTip(model).length, 0);
+});
+
 test("a trunk branch level with the ref earns no badge", async t => {
   const { repository } = behindTrunk(t, "gsm-trunk-behind-current-");
   await repository.pull();

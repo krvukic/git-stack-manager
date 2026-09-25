@@ -289,11 +289,11 @@ export function TrunkTipRow({
 
 /**
  * A commit on trunk below the tip: where a stack forked, where the local trunk branch was
- * left when trunk moved on, or both.
+ * left when trunk moved on, where HEAD sits, or any mix of the three.
  *
- * Only the trunk branch earns a pill here, since every other branch at a fork point is a
- * local commit with a row of its own. Its Goto is a plain checkout rather than the trunk
- * row's fast-forward, because this row names the commit the branch is on.
+ * Only two branches earn a pill here: the trunk branch, and the branch HEAD is on. Any other
+ * branch with commits has a row of its own. The trunk branch's Goto is a plain checkout
+ * rather than the trunk row's fast-forward, because this row names the commit it is on.
  */
 export function BaseRow({
   row,
@@ -327,9 +327,10 @@ export function BaseRow({
         canGoto && !heldBy && "clickable"
       )}
     >
-      {branch ? (
+      {branch || row.headBranch ? (
         <span className="pillgroup">
-          <Pill label={branch} />
+          {branch ? <Pill label={branch} /> : null}
+          {row.headBranch ? <Pill label={row.headBranch} /> : null}
         </span>
       ) : null}
       <span className="subject text-muted" title={row.subject}>
