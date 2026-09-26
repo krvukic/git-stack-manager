@@ -177,8 +177,8 @@ export function useCommitActions(smartlog: Smartlog) {
           }
         )
       );
-      // The badge's number and checks come from the cached `gh pr list`, which this submit
-      // just invalidated.
+      // The badge's number and checks come from the cached pull request fetch, which this
+      // submit just invalidated.
       if (response.ok) {
         void loadPullRequests(true);
       }

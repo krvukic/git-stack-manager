@@ -1,36 +1,35 @@
 /**
  * pullRequests — per-branch pull request status, read through the `gh` CLI.
  *
- * This is the one data source that cannot ride along with the git reads: a
- * `gh pr list` round trip takes roughly a second, while the whole smartlog read
- * costs a handful of local processes. Blocking the render on it would make every
- * refresh feel broken, and the file watcher fires often enough that a
- * per-refresh network call would also invite rate limiting.
+ * This is the one data source that cannot ride along with the git reads: the round trip
+ * costs real network time, while the whole smartlog read costs a handful of local
+ * processes. Blocking the render on it would make every refresh feel broken, and the file
+ * watcher fires often enough that a per-refresh network call would also invite rate
+ * limiting.
  *
- * So the status is fetched out of band and cached. The model always renders
- * immediately from whatever the cache holds — possibly nothing on first paint —
- * and the UI asks for a refreshed copy separately. One `gh pr list` still covers
- * every branch, so the round trip count does not grow with the stack.
+ * So the status is fetched out of band and cached. The model always renders immediately
+ * from whatever the cache holds — possibly nothing on first paint — and the UI asks for a
+ * refreshed copy separately.
  *
- * That call names the branches the smartlog draws. An unscoped `pr list --limit 200`
- * asks GitHub for the repository's newest 200 pull requests with every check
- * attached, which on a monorepo exceeds the GraphQL time budget and answers HTTP
- * 504 — the badges then never arrive, however long the caller waits. Scoping also
- * fixes a quieter failure: a repository merging 200 pull requests within the window
- * pushes older ones out of it, and a branch whose pull request had dropped off
- * looked identical to one never submitted.
+ * Each branch is found two ways at once, because neither alone covers every branch. By
+ * name — `Repository.pullRequests(headRefName: …)` — for the ordinary case, and it is
+ * also what survives a local amend or rebase after pushing: the pull request's head moves
+ * away from what the branch now points at, but its name does not. By tip commit —
+ * `Commit.associatedPullRequests` — for the opposite case, where Sapling or `gh stack`
+ * push under a server-side branch of their own choosing (a local `dev/playwright_readme`
+ * lands as `pr26403`), so the name a lookup would ask about was never the pull request's.
+ * Both are exact, structured GraphQL lookups rather than a text match, so their cost is
+ * bounded by the branch count rather than by how many pull requests happen to mention a
+ * similar string anywhere in the repository's history.
  *
- * Each branch contributes two search terms, its name and its tip commit, because a
- * name alone cannot find every pull request. Sapling and `gh stack` push under a
- * server-side branch of their own choosing — a local `dev/playwright_readme` lands as
- * `pr26403` — so `head:` matches nothing and the commit reads unsubmitted long after
- * its pull request merged. The tip sha finds that pull request whatever the remote
- * branch was called, so the response is keyed back to the local branch by sha as well
- * as by name.
+ * One alias per lookup per branch batches all of it into one query per batch;
+ * `BRANCHES_PER_BATCH` keeps each batch small so one slow round trip delays only its own
+ * branches rather than the whole stack, and so a failure — GitHub still has bad days —
+ * costs a page, not the whole fetch.
  *
- * `--search` reads GitHub's search index, which trails a pull request opened seconds ago.
- * Submitting therefore hands its own answer to `remember`, whose records fill in for
- * branches a fetch found nothing for; see `cached`.
+ * GitHub can take a moment to associate a just-opened pull request with its commit, same
+ * as it can take a moment to process a push at all. Submitting hands its own answer to
+ * `remember`, whose records fill in for branches a fetch found nothing for; see `cached`.
  *
  * A missing `gh`, a repository with no GitHub remote, or a failed auth check are
  * all normal: this extension works fine on a plain git repo. Those cases
@@ -105,19 +104,25 @@ export type BranchTip = {
 const CACHE_TIME_TO_LIVE_MILLISECONDS = 60_000;
 const FETCH_TIMEOUT_MILLISECONDS = 20_000;
 /**
- * Headroom over the branch count, not a page size. Prefix matching means one
- * `head:` term can return several pull requests, and a branch's own history can
- * hold more than one, so the ceiling has to exceed the number of terms asked for.
+ * Branches per GraphQL call. Each branch costs two exact, structured lookups rather than
+ * a free-text search, so this is not about staying under a resource limit — it is about
+ * keeping one slow or failed round trip from costing the whole stack's worth of branches
+ * rather than one page of it, and about giving progress something to report between pages.
  */
-const SEARCH_RESULT_LIMIT = 200;
+const BRANCHES_PER_BATCH = 20;
+/** Pull requests read per lookup, per branch. A branch can carry more than one over its
+ * life — reopened, or closed then replaced — and `preferPullRequest` picks the one that
+ * matters, but the API has to be asked for more than the one most callers will ever want. */
+const PULL_REQUESTS_PER_BRANCH = 3;
 
 /**
  * How long a directly-read pull request outlives the fetch that failed to find it.
  *
- * It covers GitHub's search index catching up, which takes seconds — three against a
- * quiet repository, longer under load — so a few minutes is already generous. Bounded
- * rather than permanent because nothing refreshes such a record: a branch the search
- * never returns at all would otherwise keep reporting `OPEN` long past a merge.
+ * It covers GitHub associating a just-opened pull request with its branch and commit,
+ * which takes seconds — three against a quiet repository, longer under load — so a few
+ * minutes is already generous. Bounded rather than permanent because nothing refreshes
+ * such a record: a branch a fetch never finds a match for would otherwise keep reporting
+ * `OPEN` long past a merge.
  */
 const REMEMBERED_TIME_TO_LIVE_MILLISECONDS = 300_000;
 
@@ -128,21 +133,52 @@ export class PullRequestService {
   /** The single follow-up a forced caller waits for while a fetch is already running. */
   private queuedForce: Promise<Map<string, PullRequestStatus>> | null = null;
   /**
-   * Pull requests read outside the search index, by branch.
+   * Pull requests read outside a fetch, by branch.
    *
-   * `pr list --search` is what makes one call cover every branch, and GitHub indexes a new
-   * pull request asynchronously. So the refresh that follows a submit asks for a pull
-   * request the index does not hold yet, finds nothing, and caches that nothing for a
-   * minute — leaving the button offering to open the pull request it just opened. Submit
-   * learns the number from `pr create` and `pr list --head`, neither of which reads the
-   * index, so what it learned is merged over the fetched map until the search catches up.
+   * GitHub's GraphQL API answers `associatedPullRequests` for a commit it has not
+   * finished processing yet with an empty list rather than an error. So the refresh that
+   * follows a submit still asks about a pull request the API does not know about yet,
+   * finds nothing, and caches that nothing for a minute — leaving the button offering to
+   * open the pull
+   * request it just opened. Submit learns the number from `pr create` directly, which
+   * does not depend on GitHub having caught up, so what it learned is merged over the
+   * fetched map until the next fetch does too.
    */
   private remembered = new Map<string, RememberedEntry>();
   private availability: PullRequestAvailability | null = null;
   private lastAttemptSucceeded: boolean | null = null;
   private lastError: string | null = null;
+  /** `gh repo view` resolved once and kept: the owner and name do not change mid-session,
+   * and every batch otherwise asked GitHub the same question again. Cached only on
+   * success — a transient failure here should not permanently disable every later fetch
+   * the way a cached rejection would. */
+  private repoIdentity: { owner: string; repo: string } | null = null;
 
-  constructor(private readonly cwd: string) {}
+  constructor(
+    private readonly cwd: string,
+    /**
+     * Where a fetch attempt's duration and outcome go. Defaulted to a no-op rather than
+     * made optional at each call site, since every caller but the diagnostic log itself
+     * wants the same nothing.
+     *
+     * This runs on a timer with no user action to blame it on, so the per-action command
+     * log a submit or a rebase populates never sees it — see `runGh` below for why that
+     * log stays scoped to actions. A timeout that only ever says "GitHub did not answer
+     * in time" cannot be told apart from a slow query, a dropped connection, or GitHub
+     * genuinely rate-limiting this token, and the difference matters for what to do next.
+     */
+    private readonly log: (line: string) => void = () => {},
+    /**
+     * How many of a fetch's branches have been answered, and the total — called once per
+     * batch rather than once per branch, since a batch is the unit that actually returns.
+     * A fetch that covers one branch never calls this at all, matching the header's own
+     * choice to show nothing for a fetch too quick to watch.
+     */
+    private readonly onProgress: (
+      done: number,
+      total: number
+    ) => void = () => {}
+  ) {}
 
   /** How the last fetch went, for the header's freshness indicator. */
   refreshState(): PullRequestRefreshState {
@@ -278,65 +314,149 @@ export class PullRequestService {
   private async fetch(
     branches: BranchTip[]
   ): Promise<Map<string, PullRequestStatus>> {
-    const fields = [
-      "number",
-      "state",
-      "isDraft",
-      "title",
-      "url",
-      "headRefName",
-      "headRefOid",
-      "reviewDecision",
-      "statusCheckRollup",
-    ];
-    const localNames = new Set(branches.map(branch => branch.name));
-    // Several branches can sit on one commit, and each deserves the badge.
-    const namesAtSha = new Map<string, string[]>();
-    for (const branch of branches) {
-      if (!branch.sha) {
-        continue;
-      }
-      const names = namesAtSha.get(branch.sha);
-      if (names) {
-        names.push(branch.name);
-      } else {
-        namesAtSha.set(branch.sha, [branch.name]);
+    // A branch with no tip commit — never actually seen, `BranchTip.sha` is not
+    // optional, but the type does not forbid an empty string — has nothing to look up.
+    const findable = branches.filter(branch => branch.sha);
+    const { owner, repo } = await this.resolveRepo();
+    const byBranch = new Map<string, PullRequestStatus>();
+    let done = 0;
+    for (const batch of chunk(findable, BRANCHES_PER_BATCH)) {
+      const output = await this.runGh(
+        [
+          "api",
+          "graphql",
+          "-f",
+          `owner=${owner}`,
+          "-f",
+          `repo=${repo}`,
+          "-F",
+          "query=@-",
+        ],
+        lookupQuery(batch)
+      );
+      applyBatch(batch, output, byBranch);
+      done += batch.length;
+      this.onProgress(done, findable.length);
+    }
+    this.availability = { usable: true, reason: null };
+    return byBranch;
+  }
+
+  /**
+   * The owner and repository name `object(oid: …)` needs but `--search` never did: a
+   * structured GraphQL query has no equivalent of `gh pr list` inferring the repository
+   * from `cwd`'s remote, so this asks once and the fetch above trusts the cache.
+   */
+  private async resolveRepo(): Promise<{ owner: string; repo: string }> {
+    if (this.repoIdentity) {
+      return this.repoIdentity;
+    }
+    const output = await this.runGh(["repo", "view", "--json", "owner,name"]);
+    const parsed = asRecord(JSON.parse(output));
+    const owner = asRecord(parsed?.owner)?.login;
+    const name = parsed?.name;
+    if (typeof owner !== "string" || typeof name !== "string") {
+      throw new Error("gh repo view did not report an owner and a name.");
+    }
+    this.repoIdentity = { owner, repo: name };
+    return this.repoIdentity;
+  }
+
+  /**
+   * Read through `gh`, recording why the badges are missing when it fails.
+   *
+   * The failure is described here and rethrown: the caller keeps the previous snapshot on
+   * screen, so the panel needs a sentence explaining the gap even though nothing is thrown
+   * at the user. Every attempt also goes to `this.log`, since the badge's own sentence
+   * — "GitHub did not answer in time" — cannot tell a slow query apart from a killed one
+   * or a short one that still 504'd, and the log line below can.
+   */
+  private async runGh(args: string[], input?: string): Promise<string> {
+    // A query can run past a thousand characters; the log wants to know one ran, not to
+    // reproduce it.
+    const summary = args
+      .map(arg => (arg.length > 200 ? `<${arg.length} chars omitted>` : arg))
+      .join(" ");
+    const startedAt = Date.now();
+    this.log(`gh ${summary}`);
+    try {
+      const output = await spawnGh(args, {
+        cwd: this.cwd,
+        timeoutMilliseconds: FETCH_TIMEOUT_MILLISECONDS,
+        ...(input === undefined ? {} : { input }),
+      });
+      this.log(`  → ok in ${Date.now() - startedAt}ms`);
+      return output;
+    } catch (error: unknown) {
+      const kind = classifyGhFailure(error);
+      const detail = ghFailureDetail(error) || errorMessage(error);
+      this.log(
+        `  → failed after ${Date.now() - startedAt}ms (${kind}): ${detail}`
+      );
+      this.availability = { usable: false, reason: describeFailure(error) };
+      throw error;
+    }
+  }
+}
+
+/** `branches`, `size` at a time, in order — the pages a fetch is asked to report between. */
+function chunk<T>(items: T[], size: number): T[][] {
+  const batches: T[][] = [];
+  for (let start = 0; start < items.length; start += size) {
+    batches.push(items.slice(start, start + size));
+  }
+  return batches;
+}
+
+/** The fields read off every pull request node, by either lookup below. */
+const PULL_REQUEST_NODE_FIELDS =
+  "number state isDraft title url headRefName headRefOid reviewDecision";
+
+/**
+ * One GraphQL query answering every branch in `batch` at once, two ways: `n{index}` by
+ * name, `c{index}` by tip commit. Both are exact, structured lookups, so a branch with no
+ * match on either resolves to an empty list or `null` rather than an error — read
+ * defensively in `applyBatch` rather than assumed present.
+ */
+function lookupQuery(batch: BranchTip[]): string {
+  const aliases = batch
+    .map(
+      (branch, index) => `
+  n${index}: pullRequests(headRefName: ${JSON.stringify(branch.name)}, states: [OPEN, CLOSED, MERGED], first: ${PULL_REQUESTS_PER_BRANCH}) {
+    nodes { ${PULL_REQUEST_NODE_FIELDS} }
+  }
+  c${index}: object(oid: ${JSON.stringify(branch.sha)}) {
+    ... on Commit {
+      statusCheckRollup { state }
+      associatedPullRequests(first: ${PULL_REQUESTS_PER_BRANCH}) {
+        nodes { ${PULL_REQUEST_NODE_FIELDS} }
       }
     }
+  }`
+    )
+    .join("");
+  return `query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) {${aliases}\n} }`;
+}
 
-    // `--state all` so a merged or closed PR still annotates its branch; a stale
-    // local branch whose PR merged is exactly what the user wants to notice.
-    const output = await this.runGh([
-      "pr",
-      "list",
-      "--state",
-      "all",
-      "--search",
-      searchQuery(branches),
-      "--limit",
-      String(SEARCH_RESULT_LIMIT),
-      "--json",
-      fields.join(","),
-    ]);
-
-    const byBranch = new Map<string, PullRequestStatus>();
-    for (const value of asArray(JSON.parse(output))) {
+/** Read `lookupQuery(batch)`'s answer into `byBranch`, keyed by `batch`'s own branches. */
+function applyBatch(
+  batch: BranchTip[],
+  output: string,
+  byBranch: Map<string, PullRequestStatus>
+): void {
+  const repository = asRecord(
+    asRecord(asRecord(JSON.parse(output))?.data)?.repository
+  );
+  batch.forEach((branch, index) => {
+    const commit = asRecord(repository?.[`c${index}`]);
+    // Only the commit lookup has a check run to report; a name match with no matching
+    // commit — the branch moved since the pull request's head was read — has none to give.
+    const checks = rollupState(commit?.statusCheckRollup);
+    const byName = asArray(asRecord(repository?.[`n${index}`])?.nodes);
+    const byCommit = asArray(asRecord(commit?.associatedPullRequests)?.nodes);
+    for (const value of [...byName, ...byCommit]) {
       const entry = asRecord(value);
       if (!entry) {
-        continue;
-      }
-      const headRef =
-        typeof entry.headRefName === "string" ? entry.headRefName : "";
-      const headSha =
-        typeof entry.headRefOid === "string" ? entry.headRefOid : "";
-      // Two ways to claim a pull request, and the sha is what covers the Sapling and
-      // `gh stack` case where the remote branch is named nothing like the local one.
-      // `head:` also matches by prefix, so `head:main` returns `main-refactor` too —
-      // hence an exact name check rather than trusting the response.
-      const owners = localNames.has(headRef)
-        ? [headRef]
-        : (namesAtSha.get(headSha) ?? []);
-      if (!owners.length) {
         continue;
       }
       const status: PullRequestStatus = {
@@ -345,62 +465,21 @@ export class PullRequestService {
         isDraft: entry.isDraft === true,
         title: typeof entry.title === "string" ? entry.title : "",
         url: typeof entry.url === "string" ? entry.url : "",
-        headSha,
+        headSha: typeof entry.headRefOid === "string" ? entry.headRefOid : "",
         reviewDecision:
           typeof entry.reviewDecision === "string"
             ? entry.reviewDecision
             : null,
-        checks: rollUpChecks(entry.statusCheckRollup),
+        checks,
       };
-      for (const owner of owners) {
-        // A branch can carry several PRs over time (reopened, or closed then
-        // replaced). Prefer an open one, else the highest number — the newest.
-        const existing = byBranch.get(owner);
-        if (!existing || preferPullRequest(status, existing)) {
-          byBranch.set(owner, status);
-        }
+      // A branch can carry several PRs over time (reopened, or closed then
+      // replaced). Prefer an open one, else the highest number — the newest.
+      const existing = byBranch.get(branch.name);
+      if (!existing || preferPullRequest(status, existing)) {
+        byBranch.set(branch.name, status);
       }
     }
-    this.availability = { usable: true, reason: null };
-    return byBranch;
-  }
-
-  /**
-   * Read through `gh`, recording why the badges are missing when it fails.
-   *
-   * The failure is described here and rethrown: the caller keeps the previous snapshot on
-   * screen, so the panel needs a sentence explaining the gap even though nothing is thrown
-   * at the user.
-   */
-  private async runGh(args: string[]): Promise<string> {
-    try {
-      return await spawnGh(args, {
-        cwd: this.cwd,
-        timeoutMilliseconds: FETCH_TIMEOUT_MILLISECONDS,
-      });
-    } catch (error: unknown) {
-      this.availability = { usable: false, reason: describeFailure(error) };
-      throw error;
-    }
-  }
-}
-
-/**
- * One search covering every branch, by name and by tip commit.
- *
- * The terms are joined with explicit `OR` because GitHub treats bare
- * space-separated terms as `AND` once a free-text sha is among them, which would
- * ask for a single pull request matching every branch at once and return nothing.
- */
-function searchQuery(branches: BranchTip[]): string {
-  const terms: string[] = [];
-  for (const branch of branches) {
-    terms.push(`head:${branch.name}`);
-    if (branch.sha) {
-      terms.push(branch.sha);
-    }
-  }
-  return terms.join(" OR ");
+  });
 }
 
 /** Turn a `gh` failure into a sentence that says what to do about it. */
@@ -437,60 +516,30 @@ function upperCaseField(value: unknown): string {
 }
 
 /**
- * Collapse GitHub's per-check rollup into one verdict. Anything still running
- * outweighs successes, and a single failure outweighs everything: the badge
- * should not read green while a required check is red.
+ * `Commit.statusCheckRollup.state` into the badge's own three-way verdict.
  *
- * Exported for the tests. Every branch below shadows the ones under it, so the
- * precedence is the behaviour, and reaching it through a `gh` shim tests the
- * transport instead.
+ * This is GitHub's own rollup of every check and status on the commit, already collapsed
+ * to one enum — unlike `gh pr list --json statusCheckRollup`, which synthesizes an array of
+ * every individual check run and status context per result. That synthesis is what made
+ * the old `--search`-based fetch expensive per match rather than merely broad; asking for
+ * the rollup GitHub already computes, on the one commit each batch names directly, costs
+ * one enum comparison instead.
+ *
+ * Exported for the tests. `EXPECTED` is a check that has not started, which reads the same
+ * as one still running.
  */
-export function rollUpChecks(rollup: unknown): PullRequestStatus["checks"] {
-  const checks = asArray(rollup);
-  if (!checks.length) {
-    return null;
+export function rollupState(rollup: unknown): PullRequestStatus["checks"] {
+  const state = upperCaseField(asRecord(rollup)?.state);
+  if (state === "SUCCESS") {
+    return "success";
   }
-  let sawPending = false;
-  let sawSuccess = false;
-  for (const value of checks) {
-    const check = asRecord(value);
-    // Check runs report `conclusion` + `status`; legacy commit statuses use `state`.
-    const conclusion = upperCaseField(check?.conclusion);
-    const state = upperCaseField(check?.status ?? check?.state);
-    if (
-      conclusion === "FAILURE" ||
-      conclusion === "TIMED_OUT" ||
-      state === "FAILURE" ||
-      state === "ERROR"
-    ) {
-      return "failure";
-    }
-    if (conclusion === "SUCCESS" || state === "SUCCESS") {
-      sawSuccess = true;
-      continue;
-    }
-    // Skipped and cancelled checks are neither a pass nor a failure; ignore them
-    // so a mostly-skipped workflow does not read as perpetually pending.
-    if (
-      conclusion === "SKIPPED" ||
-      conclusion === "NEUTRAL" ||
-      conclusion === "CANCELLED"
-    ) {
-      continue;
-    }
-    if (
-      !conclusion ||
-      state === "IN_PROGRESS" ||
-      state === "QUEUED" ||
-      state === "PENDING"
-    ) {
-      sawPending = true;
-    }
+  if (state === "FAILURE" || state === "ERROR") {
+    return "failure";
   }
-  if (sawPending) {
+  if (state === "PENDING" || state === "EXPECTED") {
     return "pending";
   }
-  return sawSuccess ? "success" : null;
+  return null;
 }
 
 /** Prefer an open PR, then a draft over nothing, then the newest number. */

@@ -28,6 +28,12 @@ export type RpcResult<T = unknown> =
  */
 type HostMessage =
   | { type: "refresh"; id?: undefined }
+  | {
+      type: "pullRequestProgress";
+      done: number;
+      total: number;
+      id?: undefined;
+    }
   | (RpcResult & { type?: undefined; id: number });
 
 /** How long an HTTP call may take before it is reported as unreachable. */
@@ -64,6 +70,12 @@ if (vscode) {
       }
       return;
     }
+    if (message?.type === "pullRequestProgress") {
+      for (const listener of pullRequestProgressListeners) {
+        listener(message.done, message.total);
+      }
+      return;
+    }
     if (!message) {
       return;
     }
@@ -85,6 +97,23 @@ const refreshListeners = new Set<() => void>();
 export function onHostRefresh(listener: () => void): () => void {
   refreshListeners.add(listener);
   return () => refreshListeners.delete(listener);
+}
+
+/**
+ * A pull request fetch reporting how many of its branches are answered, and the total.
+ * Pushed rather than polled because the fetch it describes is itself the reply to an
+ * earlier `rpc("pullRequests", …)` call still in flight — there is no response to attach
+ * an intermediate count to.
+ */
+const pullRequestProgressListeners = new Set<
+  (done: number, total: number) => void
+>();
+
+export function onPullRequestProgress(
+  listener: (done: number, total: number) => void
+): () => void {
+  pullRequestProgressListeners.add(listener);
+  return () => pullRequestProgressListeners.delete(listener);
 }
 
 export function rpc<T = unknown>(

@@ -28,8 +28,8 @@ export type SubmitOutcome = {
   url: string | null;
   /**
    * Title and draft state as the pull request now holds them, so a caller can draw the
-   * badge from this outcome. `gh pr list --search`, which the badges normally come from,
-   * reads an index that trails a pull request opened a moment ago.
+   * badge from this outcome. The commit lookup the badges normally come from can trail a
+   * pull request opened a moment ago, same as the search index it replaced did.
    */
   title: string;
   isDraft: boolean;

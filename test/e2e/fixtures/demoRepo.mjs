@@ -359,12 +359,10 @@ export async function stateOf(repository) {
  * Canned pull request statuses, one record per pull request, newest first.
  *
  * The demo repository's origin is a local bare repository, so nothing here can come
- * from GitHub — which is why every `.prbadge` variant used to render in production
- * and nowhere else. Each record carries the fields `gh pr list --json` emits, so
- * `#github/pullRequests` parses the same shape it will meet in a real repository.
- * `statusCheckRollup` deliberately mixes the two entry kinds GitHub returns: a
- * CheckRun reports `conclusion` plus `status`, a legacy StatusContext reports only
- * `state`, and `rollUpChecks` collapses them by different rules.
+ * from GitHub — which is why every `.prbadge` variant renders in this demo and nowhere
+ * else. `checksState` is GitHub's own rollup enum (`SUCCESS` | `FAILURE` | `PENDING`, or
+ * absent when nothing ran) — the same shape `Commit.statusCheckRollup.state` answers with
+ * in the real API, which `#github/pullRequests` reads directly.
  *
  * Branch name is the only key, so the demo generator stays free to add and remove
  * branches: a record whose branch is gone is never looked up, and a branch with no
@@ -401,23 +399,7 @@ const CANNED_PULL_REQUESTS = [
     headRefName: "trim-utils",
     baseRefName: "pad-utils",
     reviewDecision: "APPROVED",
-    // A skipped job is neither a pass nor a failure, so this still rolls up green.
-    statusCheckRollup: [
-      {
-        __typename: "CheckRun",
-        name: "lint",
-        status: "COMPLETED",
-        conclusion: "SUCCESS",
-        workflowName: "ci",
-      },
-      {
-        __typename: "CheckRun",
-        name: "publish",
-        status: "COMPLETED",
-        conclusion: "SKIPPED",
-        workflowName: "release",
-      },
-    ],
+    checksState: "SUCCESS",
   },
   {
     number: 205,
@@ -428,22 +410,7 @@ const CANNED_PULL_REQUESTS = [
     headRefName: "pad-utils",
     baseRefName: "case-utils",
     reviewDecision: "REVIEW_REQUIRED",
-    // One of each kind, and the running one has to win: a badge that reads green
-    // while a required job is still queued is the failure this guards.
-    statusCheckRollup: [
-      {
-        __typename: "StatusContext",
-        context: "buildkite/strkit",
-        state: "SUCCESS",
-      },
-      {
-        __typename: "CheckRun",
-        name: "test",
-        status: "IN_PROGRESS",
-        conclusion: "",
-        workflowName: "ci",
-      },
-    ],
+    checksState: "PENDING",
   },
   {
     number: 204,
@@ -454,7 +421,7 @@ const CANNED_PULL_REQUESTS = [
     headRefName: "case-utils",
     baseRefName: "main",
     reviewDecision: null,
-    statusCheckRollup: [],
+    checksState: null,
   },
   {
     number: 198,
@@ -465,30 +432,7 @@ const CANNED_PULL_REQUESTS = [
     headRefName: "case-utils",
     baseRefName: "main",
     reviewDecision: "CHANGES_REQUESTED",
-    // Two green jobs around one red one, which must not average out to green.
-    statusCheckRollup: [
-      {
-        __typename: "CheckRun",
-        name: "lint",
-        status: "COMPLETED",
-        conclusion: "SUCCESS",
-        workflowName: "ci",
-      },
-      {
-        __typename: "CheckRun",
-        name: "test",
-        status: "COMPLETED",
-        conclusion: "FAILURE",
-        workflowName: "ci",
-      },
-      {
-        __typename: "CheckRun",
-        name: "typecheck",
-        status: "COMPLETED",
-        conclusion: "SUCCESS",
-        workflowName: "ci",
-      },
-    ],
+    checksState: "FAILURE",
   },
   {
     number: 191,
@@ -499,13 +443,7 @@ const CANNED_PULL_REQUESTS = [
     headRefName: "parse-dates",
     baseRefName: "parse-utils",
     reviewDecision: null,
-    // A legacy commit status carries `state` and no `conclusion`, and reports a
-    // broken run as ERROR rather than FAILURE. Both differences are why this exists
-    // beside #198's red CheckRun: the same red badge is reached by another branch of
-    // the collapsing logic.
-    statusCheckRollup: [
-      { __typename: "StatusContext", context: "ci/circleci", state: "ERROR" },
-    ],
+    checksState: "FAILURE",
   },
   {
     number: 173,
@@ -516,17 +454,9 @@ const CANNED_PULL_REQUESTS = [
     headRefName: "local-experiment",
     baseRefName: "pad-utils",
     reviewDecision: null,
-    // Cancelled when the pull request closed, so the rollup holds a check that
-    // reports neither outcome and the badge shows no CI glyph at all.
-    statusCheckRollup: [
-      {
-        __typename: "CheckRun",
-        name: "test",
-        status: "COMPLETED",
-        conclusion: "CANCELLED",
-        workflowName: "ci",
-      },
-    ],
+    // No non-cancelled check ran, so the rollup holds nothing and the badge shows no
+    // CI glyph at all.
+    checksState: null,
   },
   {
     number: 189,
@@ -539,7 +469,7 @@ const CANNED_PULL_REQUESTS = [
     headRefName: "add-words",
     baseRefName: "main",
     reviewDecision: "APPROVED",
-    statusCheckRollup: [],
+    checksState: null,
   },
   {
     number: 142,
@@ -553,7 +483,7 @@ const CANNED_PULL_REQUESTS = [
     headRefOid: PUSHED_TIP,
     baseRefName: "main",
     reviewDecision: "APPROVED",
-    statusCheckRollup: [],
+    checksState: null,
   },
   {
     number: 118,
@@ -564,7 +494,7 @@ const CANNED_PULL_REQUESTS = [
     headRefName: "fix-slugify-unicode",
     baseRefName: "main",
     reviewDecision: null,
-    statusCheckRollup: [],
+    checksState: null,
   },
 ];
 
@@ -578,40 +508,52 @@ const CANNED_PULL_REQUESTS = [
  * production code — nothing in `src/` refers to a stand-in, and a shim that only a
  * recipe's own process can see cannot reach a real repository.
  *
- * `gh pr list` is asked two different questions and each needs its own answer.
- * Submit passes `--head` to find one branch's open pull request; the badge fetch
- * passes `--search` with a `head:` term per branch, `--state all`, with the rollup
- * fields. Both are served by filtering `CANNED_PULL_REQUESTS` and projecting the
- * `--json` fields the caller asked for, exactly as `gh` does — so the branches with
- * no record answer submit with `[]` and send it down the create path, while the
- * branches with one both badge in the tree and, if a demo visitor presses Submit,
- * update rather than duplicate.
+ * Three different questions each need their own answer. Submit passes `--head` to
+ * `gh pr list` to find one branch's open pull request. The badge fetch resolves the
+ * owner and name through `gh repo view`, then asks `gh api graphql` for every branch
+ * twice over — by name and by tip commit, aliased `n{index}`/`c{index}` — in one query
+ * per batch. `#github/pullRequests` builds and parses that query, so this reads the
+ * same one back with a regex rather than a GraphQL parser.
  *
- * `head:` matches by PREFIX here, as GitHub's search does. That is not a detail the
- * shim is free to simplify: it is why `#github/pullRequests` filters the response
- * against the branch names it asked for, and an exact-matching shim would let that
- * filter be deleted with every test still passing.
+ * Every canned record's `headRefOid` is resolved here, against the demo repository's
+ * actual local branch tips, rather than hardcoded: a literal sha would drift the moment
+ * the demo generator changed anything upstream of that commit. `PUSHED_TIP` is the one
+ * exception, resolved against the *remote* branch instead, for the record whose local
+ * tip has since diverged from what was pushed — found only by the name lookup, since a
+ * lookup by commit cannot find a pull request at a commit the branch has moved past.
  *
  * @param {string} directory
  */
 export function writeStandInGitHub(directory) {
-  const logPath = join(directory, "calls.jsonl");
-  mkdirSync(directory, { recursive: true });
+  // Each invocation is its own `gh` process, and a fetch's batches — or a submit
+  // running alongside a background refresh — can have two invocations writing at
+  // once. One file per call, rather than one shared file appended by many
+  // processes, needs no atomic-append guarantee from the filesystem underneath.
+  const logDirectory = join(directory, "calls");
+  mkdirSync(logDirectory, { recursive: true });
   writeFileSync(
     join(directory, "gh"),
     `#!/usr/bin/env node
 const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
 const { execFileSync } = require("child_process");
-const PULL_REQUESTS = ${JSON.stringify(CANNED_PULL_REQUESTS)}.map((pullRequest) =>
-  pullRequest.headRefOid === ${JSON.stringify(PUSHED_TIP)}
-    ? { ...pullRequest, headRefOid: pushedTip(pullRequest.headRefName) }
-    : pullRequest,
-);
+const PULL_REQUESTS = ${JSON.stringify(CANNED_PULL_REQUESTS)}.map((pullRequest) => ({
+  ...pullRequest,
+  headRefOid:
+    pullRequest.headRefOid === ${JSON.stringify(PUSHED_TIP)}
+      ? tipOf("refs/remotes/origin/" + pullRequest.headRefName)
+      : tipOf("refs/heads/" + pullRequest.headRefName),
+}));
 const args = process.argv.slice(2);
 let stdin = "";
 process.stdin.on("data", (chunk) => (stdin += chunk));
 process.stdin.on("end", () => {
-  fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({ args, stdin }) + "\\n");
+  const callPath = path.join(
+    ${JSON.stringify(logDirectory)},
+    \`\${Date.now()}-\${process.pid}-\${crypto.randomUUID()}.json\`
+  );
+  fs.writeFileSync(callPath, JSON.stringify({ args, stdin }));
   process.stdout.write(answer());
 });
 
@@ -622,14 +564,20 @@ function answer() {
   if (args[0] === "pr" && args[1] === "list") {
     return JSON.stringify(listPullRequests());
   }
+  if (args[0] === "repo" && args[1] === "view") {
+    return JSON.stringify({ owner: { login: "example" }, name: "strkit" });
+  }
+  if (args[0] === "api" && args[1] === "graphql") {
+    return answerGraphql();
+  }
   // Everything else — \`pr edit\` among them — reports success and says nothing,
   // which is what the callers of those commands read.
   return "[]";
 }
 
-function pushedTip(branch) {
+function tipOf(ref) {
   try {
-    return execFileSync("git", ["rev-parse", "--verify", "-q", "refs/remotes/origin/" + branch], {
+    return execFileSync("git", ["rev-parse", "--verify", "-q", ref], {
       encoding: "utf8",
     }).trim();
   } catch {
@@ -648,30 +596,78 @@ function listPullRequests() {
   const state = (option("--state") || "open").toUpperCase();
   const limit = Number(option("--limit") || 30);
   const fields = (option("--json") || "").split(",").filter(Boolean);
-  const terms = (option("--search") || "")
-    .split(/\\s+/)
-    .filter((term) => term && term !== "OR");
-  // GitHub's head: qualifier is a prefix match, so this is too. Anything else is
-  // free text, which the caller uses to name a head commit.
-  const prefixes = terms.filter((term) => term.startsWith("head:")).map((term) => term.slice(5));
-  const shas = terms.filter((term) => !term.includes(":"));
-  const matched = (pullRequest) =>
-    prefixes.some((prefix) => pullRequest.headRefName.startsWith(prefix)) ||
-    shas.some((sha) => pullRequest.headRefOid === sha);
   const matching = PULL_REQUESTS.filter(
     (pullRequest) =>
       (!head || pullRequest.headRefName === head) &&
-      (!terms.length || matched(pullRequest)) &&
       (state === "ALL" || pullRequest.state === state),
   ).slice(0, limit);
   if (!fields.length) {
     return matching;
   }
   // gh emits only the fields --json names, so a reader depending on an unrequested
-  // one fails here the way it would against the real CLI.
+  // one fails against this the way it would against the real CLI.
   return matching.map((pullRequest) =>
     Object.fromEntries(fields.map((field) => [field, pullRequest[field]])),
   );
+}
+
+// Prefer an open pull request, then the highest number — the newest. Mirrors
+// \`preferPullRequest\` in #github/pullRequests, which is what decides among the several
+// nodes this can return for one commit once the real caller has them.
+function betterPullRequest(candidate, existing) {
+  const openness = (pullRequest) => (pullRequest.state === "OPEN" ? 1 : 0);
+  if (openness(candidate) !== openness(existing)) {
+    return openness(candidate) > openness(existing);
+  }
+  return candidate.number > existing.number;
+}
+
+function nodeFrom(pullRequest) {
+  return {
+    number: pullRequest.number,
+    state: pullRequest.state,
+    isDraft: pullRequest.isDraft,
+    title: pullRequest.title,
+    url: pullRequest.url,
+    headRefName: pullRequest.headRefName,
+    headRefOid: pullRequest.headRefOid,
+    reviewDecision: pullRequest.reviewDecision,
+  };
+}
+
+function answerGraphql() {
+  const repository = {};
+  const namePattern = /n(\\d+): pullRequests\\(headRefName: "([^"]*)"/g;
+  let nameMatch;
+  while ((nameMatch = namePattern.exec(stdin))) {
+    const [, index, name] = nameMatch;
+    const matching = PULL_REQUESTS.filter(
+      (pullRequest) => pullRequest.headRefName === name,
+    );
+    repository["n" + index] = { nodes: matching.map(nodeFrom) };
+  }
+  const commitPattern = /c(\\d+): object\\(oid: "([0-9a-f]{40})"\\)/g;
+  let commitMatch;
+  while ((commitMatch = commitPattern.exec(stdin))) {
+    const [, index, sha] = commitMatch;
+    const matching = PULL_REQUESTS.filter(
+      (pullRequest) => pullRequest.headRefOid && pullRequest.headRefOid === sha,
+    );
+    if (!matching.length) {
+      repository["c" + index] = null;
+      continue;
+    }
+    const commitRecord = matching.reduce((best, pullRequest) =>
+      betterPullRequest(pullRequest, best) ? pullRequest : best,
+    );
+    repository["c" + index] = {
+      statusCheckRollup: commitRecord.checksState
+        ? { state: commitRecord.checksState }
+        : null,
+      associatedPullRequests: { nodes: matching.map(nodeFrom) },
+    };
+  }
+  return JSON.stringify({ data: { repository } });
 }
 `,
     { mode: 0o755 }
@@ -679,12 +675,11 @@ function listPullRequests() {
   return {
     environment: { PATH: `${directory}:${process.env.PATH}` },
     calls: () =>
-      existsSync(logPath)
-        ? readFileSync(logPath, "utf8")
-            .split("\n")
-            .filter(Boolean)
-            .map(line => JSON.parse(line))
-        : [],
+      readdirSync(logDirectory)
+        .sort()
+        .map(name =>
+          JSON.parse(readFileSync(join(logDirectory, name), "utf8"))
+        ),
   };
 }
 

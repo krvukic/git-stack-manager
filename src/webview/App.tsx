@@ -256,6 +256,7 @@ export function App({ settings }: { settings: HostSettings }) {
         unseenLogEntries={unseenLogEntries}
         openDrawer={openDrawer}
         pullRequestsLoading={smartlog.pullRequestsLoading}
+        pullRequestProgress={smartlog.pullRequestProgress}
         pulling={repository.pulling}
         restacking={repository.restacking}
         onPull={() => void repository.pull()}

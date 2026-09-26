@@ -217,6 +217,10 @@ export function createVscodeStub({ repositoryPath, configuration = {} }) {
         dispose() {},
       }),
       createWebviewPanel: () => panel,
+      createOutputChannel: () => ({
+        appendLine() {},
+        dispose() {},
+      }),
       createTerminal: () => ({
         show() {},
         /** @param {string} text */

@@ -27,6 +27,13 @@ import * as vscode from "vscode";
 
 let panel: vscode.WebviewPanel | undefined;
 /**
+ * Where a pull request fetch's duration and outcome go — background polling that no
+ * per-action command log ever sees, and the one place a silent 20-second timeout becomes
+ * legible. Lives for the extension's whole session, not the panel's, so a fetch mid-close
+ * still lands somewhere.
+ */
+const pullRequestLog = vscode.window.createOutputChannel("Git Stack Manager");
+/**
  * The refresh subscriptions of the panel currently open, disposed with it rather than with
  * the extension: each open creates its own, and a set left behind would go on watching for a
  * panel that no longer exists.
@@ -78,6 +85,7 @@ function wireActivityBarLauncher(
 
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
+    pullRequestLog,
     wireActivityBarLauncher(context),
     vscode.commands.registerCommand("gsm.open", () => openPanel(context)),
     vscode.commands.registerCommand("gsm.refresh", () =>
@@ -113,7 +121,18 @@ function openPanel(context: vscode.ExtensionContext) {
 
   const configuration = vscode.workspace.getConfiguration("gsm");
   const trunk = configuration.get<string>("trunk") || undefined;
-  const repository = new Repository(cwd, trunk);
+  const repository = new Repository(
+    cwd,
+    trunk,
+    line =>
+      pullRequestLog.appendLine(`[${new Date().toLocaleTimeString()}] ${line}`),
+    (done, total) =>
+      void panel?.webview.postMessage({
+        type: "pullRequestProgress",
+        done,
+        total,
+      })
+  );
   const controller = new Controller(repository);
   const blobProvider = registerBlobProvider(repository);
 

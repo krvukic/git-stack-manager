@@ -12,7 +12,7 @@ Pull request badges and the `gh stack` actions need [GitHub CLI](https://cli.git
 
 Run `just init-repo` once, then pick a host:
 
-- `just install` builds and installs the extension. It opens as *Git Stack: Open Smartlog*, or by
+- `just install` builds and installs the extension. It opens as _Git Stack: Open Smartlog_, or by
   either of the other two routes under [Opening it](#opening-it).
 - `just web <path-to-repo> <port>` serves the same UI in a browser, defaulting to this repository
   on port 6175. `just web-bg` backgrounds it so it survives a terminal or SSH exit.
@@ -20,14 +20,14 @@ Run `just init-repo` once, then pick a host:
 ## Reading the stack
 
 - **Click a commit** for its message, metadata, and changed files.
-- **View changes in *hash*** shows every file's diff for that commit as one scrollable read-only
+- **View changes in _hash_** shows every file's diff for that commit as one scrollable read-only
   view with both line-number gutters, which is Sapling's view of the same name. **Open diff view**
   does the same for the selected file, in VS Code's own diff editor where there is one and in the
   same overlay where there is not. For the checked-out commit, both open in VS Code's editors with
   the files themselves on the right, so they stay editable: **View changes** in the multi-file diff
   editor, **Open diff view** in the diff editor. **Open current file** opens the file as it is now. Clicking a
   file name runs one of the last two, chosen in **Config**.
-- **✎ *N* uncommitted changes** opens the same overlay for the changes no commit holds yet, staged
+- **✎ _N_ uncommitted changes** opens the same overlay for the changes no commit holds yet, staged
   ones included, and the diff icon on an uncommitted file's row opens that one change — HEAD's
   version against the file itself, which stays editable in the diff editor. A file git has never
   seen reads as every line added, because no `git diff` reports one.
@@ -35,15 +35,19 @@ Run `just init-repo` once, then pick a host:
   Each tab opens behind the panel, and holding `⌘` — `Ctrl` off a Mac — does the same for a single
   file, whether you click its row or one of its two icons. macOS gives Control-click to the context
   menu, so the modifier follows the editor's own accelerator rather than accepting both keys.
-- **Branch badges** compare each branch to its remote: not submitted, *N* unsubmitted, diverged,
+- **Branch badges** compare each branch to its remote: not submitted, _N_ unsubmitted, diverged,
   upstream gone, no local upstream. Where `gh` is available they also carry pull request status,
   meaning the number, the CI rollup, and the review decision.
 - **Command log** prints the exact git commands each action ran, in terminal form, grouped per
   action.
+- The **Git Stack Manager** output channel (Output panel, VS Code's own, not this extension's
+  webview) logs every pull request fetch's duration and outcome. Branch badges fetch on a timer
+  with no action to blame a failure on, so a stale "PRs stale — never loaded" indicator sends you
+  here rather than to the command log above.
 - **Legend** explains every pill and badge with a live sample of each, drawn by the same code as
   the tree.
 - **Config** sets where the branch pills sit, whether long rows wrap, and how large the text is.
-  Putting the pills *after* the subject lines every commit message up on one left edge, which turns
+  Putting the pills _after_ the subject lines every commit message up on one left edge, which turns
   the tree into a list you can read down; each row's pills follow its own subject, so they stay next
   to the commit they describe. **Long rows** either keep to one line, truncating what will not fit
   so every row is the same height, or wrap and grow the row to match. Wrapping earns its keep once
@@ -62,14 +66,14 @@ Run `just init-repo` once, then pick a host:
 ## Moving around and catching up
 
 - **Goto** checks out the branch on any row, trunk included. The trunk row displays a remote ref
-  such as `origin/main`, so its Goto carries the *local* branch tracking that ref: `git switch
-  origin/main` would detach HEAD instead of putting you on main. It prefers whatever tracks trunk
+  such as `origin/main`, so its Goto carries the _local_ branch tracking that ref: `git switch
+origin/main` would detach HEAD instead of putting you on main. It prefers whatever tracks trunk
   over whatever shares its name, so a local trunk under another name still works.
 - **Pull** fetches and fast-forwards the branch you are on, never merging and never rebasing. Pull
   collects work that already happened elsewhere, and either of those is a history decision a Pull
   button should not make on its own. It refuses, changing nothing, on a detached HEAD, a branch
   tracking no remote, a dirty working copy, or a branch that has diverged. The last of those reports
-  both counts and points at *Rebase onto trunk*, which carries the whole stack.
+  both counts and points at _Rebase onto trunk_, which carries the whole stack.
 
 ## Refreshing the state
 
@@ -122,13 +126,13 @@ Every one of these is conflict-free and leaves your working copy alone, except w
   first.
 - **Split** separates a commit into two, choosing per hunk which changes go first.
 - **Fold** combines a commit with the one below, keeping both messages.
-- **Rebase** a commit *and its descendants* onto the trunk tip or the stack's own fork base, as
+- **Rebase** a commit _and its descendants_ onto the trunk tip or the stack's own fork base, as
   Sapling's menu does. Every branch pointer in the moving set follows, including mid-chain ones.
   **Restack** is the bulk form: fetch, then rebase every local stack.
 - **Undo** reverses the last edit by restoring the refs it moved.
 - **Conflicts** are the one case that touches files. They stop the rebase in place and raise a
   banner listing the unmerged files, with a button for your configured merge tool and
-  *Continue* / *Abort*.
+  _Continue_ / _Abort_.
 
 ## Working with GitHub
 
@@ -141,7 +145,7 @@ Every one of these is conflict-free and leaves your working copy alone, except w
   rebase onto it.
 - A branch in a [stacked pull
   request](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/managing-stacked-pull-requests)
-  carries its layer position and a *needs rebase* flag on its pill.
+  carries its layer position and a _needs rebase_ flag on its pill.
 - The right-click menu offers `gh stack rebase`, `push`, `submit`, and `sync --prune`, and launches
   `gh stack modify` for drop, reorder, insert, and rename. That TUI already covers restructuring, so
   this extension does not rebuild it.
@@ -158,11 +162,11 @@ first workspace folder, so open a git repository first:
   button that runs a command", so the icon's view acts as the trigger: becoming visible opens the
   editor tab and closes the sidebar again.
 - The **Source Control** title bar button.
-- *Git Stack: Open Smartlog* in the command palette.
+- _Git Stack: Open Smartlog_ in the command palette.
 
 ## Keyboard
 
-`?` opens the same list inside the app, next to *Show legend*. It is built from the table the key
+`?` opens the same list inside the app, next to _Show legend_. It is built from the table the key
 handler reads, so it cannot fall out of step with what the keys do.
 
 | Key       | Action                                                  |
@@ -201,7 +205,7 @@ stored height cuts it back rather than pushing the buttons below the box off scr
 
 - `gsm.trunk` names the trunk ref. Auto-detects `origin/HEAD`, then `origin/main`, `origin/master`,
   `main`, `master`.
-- `gsm.submitCommand` is the terminal command behind *Submit Stack*, defaulting to `gh stack`.
+- `gsm.submitCommand` is the terminal command behind _Submit Stack_, defaulting to `gh stack`.
 - `gsm.onlyMyCommits` dims commits whose author differs from `git config user.email`. Off by
   default, so a shared branch does not look broken.
 
