@@ -142,6 +142,9 @@ test-e2e-report:
 # Everything a change has to pass: formatting, types, lint, both suites
 check: format-check typecheck lint canonical-classes test test-e2e
 
+# `check` without comparing snapshot pictures, as CI runs it
+check-ci: format-check typecheck lint canonical-classes test (test-e2e "--ignore-snapshots")
+
 # Re-record the README screenshot from the demo repository
 screenshot: build
     node scripts/screenshot.mjs

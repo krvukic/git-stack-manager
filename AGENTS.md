@@ -29,7 +29,8 @@ gets rewritten points at a commit nothing reaches.
 
 ## What a change has to pass
 
-`just check` covers formatting, types, lint, and both suites.
+`just check` covers formatting, types, lint, and both suites. CI runs `just check-ci`, which compares
+no pictures, so run `just check` locally.
 
 `just test-e2e-update` rewrites every failing picture without asking, so read each changed PNG and
 name the cause before committing it. `test/e2e/fixtures/snapshot.mjs` documents the two traps that

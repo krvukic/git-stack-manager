@@ -99,6 +99,10 @@ rendering differs enough between platforms that these tests may exceed the toler
 they do, `just test` still covers the logic, and the images are best re-recorded from a Linux
 checkout.
 
+CI runs `just check-ci`, which compares no pictures. Symbols such as ↑ and ✎ render in whichever
+fallback font the machine has installed, so no CI image reproduces the baselines. Run `just check`
+locally before pushing a change to the layout.
+
 `just screenshot` re-records `media/screenshot.png`, the picture in the README, from the same demo
 repository. It is not part of `just check`, so re-record it when a change alters the layout.
 
