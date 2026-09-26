@@ -100,9 +100,8 @@ export function TopBar({
     >
       {/* Which build you are looking at, first thing on the row — the question a bug report
           starts with. Rendered only when a host stamped a version, so a bare `v` never
-          appears. Unmasked in the recorded screenshots, unlike the freshness note beside
-          Refresh PRs: this is deterministic per commit, and a release re-recording them is
-          the same mechanical churn as editing the demo fixture. */}
+          appears. The recorded screenshots print a fixed placeholder instead, so a release
+          does not re-record them; `PINNED_VERSION` in the snapshot fixture says why. */}
       {version ? (
         <span
           className="flex-none font-[monospace] text-meta whitespace-nowrap text-muted"

@@ -3,6 +3,13 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.2] - 2026-09-25
+
+### Changed
+
+- The end-to-end snapshots print a fixed `v0.0.0` in the top bar, so a version bump no longer
+  re-records every full-page picture.
+
 ## [0.12.1] - 2026-09-25
 
 ### Fixed

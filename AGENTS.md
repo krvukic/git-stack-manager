@@ -12,10 +12,8 @@ Before finishing, raise `version` in `package.json` and add the change under a n
 - Minor for a new action, badge, setting, or recipe.
 - Major when an existing setting or command stops working.
 
-The version is not decoration. The top bar prints it, `just package` names the `.vsix` after it, and
-every full-page snapshot baseline photographs it. So bump the version **before** running
-`just test-e2e-update`, never after: otherwise the next run fails on every picture that holds the
-top bar, each differing by three characters.
+The version is not decoration. The top bar prints it, and `just package` names the `.vsix` after it.
+The snapshot baselines print a fixed `v0.0.0` instead, so a bump re-records no picture.
 
 ## Tag once the commit is on main
 

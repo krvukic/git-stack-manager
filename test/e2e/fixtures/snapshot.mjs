@@ -17,6 +17,9 @@
  * repeating the mask in every test. Freezing it instead would assert a constant that
  * can never be wrong, and the age is the whole point of the element.
  *
+ * The version in the top bar is the opposite case: frozen rather than masked, since it
+ * changes per release rather than per run. `PINNED_VERSION` below gives the reason.
+ *
  * Nothing else is masked, which is unusual enough to justify. The remaining reasons to
  * mask — a random id, a live avatar — do not apply here: the demo repository is
  * generated from a fixed epoch with a pinned committer identity, and the config pins
@@ -148,6 +151,33 @@ async function hideTimedLayers(page) {
 }
 
 /**
+ * What every picture prints in place of the real version.
+ *
+ * Every release used to re-record every full-page baseline for a three-character change in
+ * the top bar. A mask would grey the digits but not fix their width, and the version comes
+ * first on the row: `0.9.9` becoming `0.10.0` would still move every control after it. A
+ * fixed string fixes both. The top bar test asserts the real number as text.
+ */
+const PINNED_VERSION = "v0.0.0";
+
+/**
+ * Print `PINNED_VERSION` in the top bar.
+ *
+ * Only the text changes, not the title, because the picture never holds the tooltip. A page
+ * rendered without a version has no element and keeps it that way.
+ *
+ * @param {import("@playwright/test").Page} page
+ */
+async function pinVersion(page) {
+  await page.evaluate(pinned => {
+    const element = document.getElementById("version");
+    if (element) {
+      element.textContent = pinned;
+    }
+  }, PINNED_VERSION);
+}
+
+/**
  * Grow the viewport until the commit tree fits, so no row is cropped.
  *
  * `fullPage` does not help: the tree is an inner scroll container, so the page
@@ -215,6 +245,7 @@ export function createSnapshotTaker(page) {
     // After the resize, which re-runs the hover under a stationary pointer and so can
     // start a tooltip that was not there a moment ago.
     await hideTimedLayers(page);
+    await pinVersion(page);
     const target = locator ?? page;
     await expect(target).toHaveScreenshotOdiff(`${name}.png`, {
       ...ODIFF_STRICT,

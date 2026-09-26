@@ -63,11 +63,10 @@ test("every top bar control describes itself", async ({ smartlog }) => {
 /**
  * The version the top bar prints.
  *
- * Photographed as well, but a picture cannot say whether the digits are the real ones. The
+ * The only assertion on the number: every picture prints a placeholder in its place. The
  * number travels from the manifest to a body data attribute to the bar, and a host that
- * stopped substituting the token would print `v__VERSION__` — on screen, and in every
- * recorded picture, and still nobody would fail a build over it. Comparing against the
- * manifest is what makes that a failure.
+ * stopped substituting the token would print `v__VERSION__`. Comparing against the manifest
+ * is what makes that a failure.
  */
 test("the top bar prints the version from the manifest", async ({
   smartlog,
