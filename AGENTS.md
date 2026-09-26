@@ -41,8 +41,9 @@ pixels away, which looks like a graph bug and is not one.
 
 ## Read before editing
 
-- [STYLE_GUIDE.md](STYLE_GUIDE.md) for prose and TypeScript. ESLint enforces the subset a linter can
-  check, and `eslint.config.mjs` gives each of those rules its reason.
+- [STYLE_GUIDE.md](STYLE_GUIDE.md) for prose, commit messages, and TypeScript. ESLint enforces the
+  subset a linter can check, and `eslint.config.mjs` gives each of those rules its reason. Before
+  finishing, reread every comment and commit message you wrote against the Prose rules.
 - [DESIGN_NOTES.md](DESIGN_NOTES.md) before anything under `src/history/`. Every edit there is
   computed rather than replayed as a patch, and that choice is not visible from the code alone.
 - [LEARNINGS.md](LEARNINGS.md) before the webview's CSS or class lists. Each entry is a trap where

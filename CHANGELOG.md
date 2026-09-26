@@ -9,6 +9,7 @@ numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
 - `just check-ci` runs `just check` without comparing snapshot pictures. GitHub Actions runs it on
   every pull request.
+- STYLE_GUIDE.md states the prose and commit message rules that coding agents read.
 
 ## [0.12.2] - 2026-09-25
 
