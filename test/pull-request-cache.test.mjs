@@ -1,10 +1,12 @@
 /**
  * The pull request cache: what it serves between fetches, and what forcing one means.
  *
- * Both subjects here are timing around `gh`, not parsing of what `gh` said — a search
- * index that answers late, and a refresh asked for while another is already running. So
- * the stand-in `gh` answers from a script, one reply per call, which is what lets a test
+ * Both subjects here are timing around `gh`, not parsing of what `gh` said — a fetch that
+ * answers late, and a refresh asked for while another is already running. So the stand-in
+ * `gh` answers from a script, one reply per `api graphql` call, which is what lets a test
  * make the second answer differ from the first and then check which one the caller got.
+ * `repo view` — the one-time owner/name lookup every fetch needs — answers instantly and
+ * outside the script, since no test here is about that call.
  *
  * `check-rollup.test.mjs` covers the badge fields themselves, together with
  * `webview-badges.test.mjs`; nothing here asserts a glyph.
@@ -23,36 +25,48 @@ import { scratchRoot } from "./repoFixture.mjs";
 const TIPS = [{ name: "feature-a", sha: "a".repeat(40) }];
 
 /**
- * One entry of a `gh pr list --json` response, as GitHub would return it.
+ * `c0`'s answer for `TIPS[0]`'s commit, as GitHub's GraphQL API would shape it: the commit's
+ * own rollup, and the pull request associated with that exact commit.
  *
  * @param {Partial<Record<string, unknown>>} [fields]
  */
-function pullRequestJson(fields = {}) {
+function commitNode(fields = {}) {
   return {
-    number: 7,
-    state: "OPEN",
-    isDraft: false,
-    title: "feat: part A",
-    url: "https://github.com/example/example/pull/7",
-    headRefName: "feature-a",
-    headRefOid: TIPS[0].sha,
-    reviewDecision: "APPROVED",
-    statusCheckRollup: [
-      { __typename: "CheckRun", status: "COMPLETED", conclusion: "SUCCESS" },
-    ],
+    statusCheckRollup: { state: "SUCCESS" },
+    associatedPullRequests: {
+      nodes: [
+        {
+          number: 7,
+          state: "OPEN",
+          isDraft: false,
+          title: "feat: part A",
+          url: "https://github.com/example/example/pull/7",
+          headRefName: "feature-a",
+          headRefOid: TIPS[0].sha,
+          reviewDecision: "APPROVED",
+        },
+      ],
+    },
     ...fields,
   };
 }
 
+/** `c0`'s answer when nothing has caught up to this commit yet. */
+const NOTHING_FOUND = {
+  associatedPullRequests: { nodes: [] },
+};
+
 /**
- * Put a `gh` on PATH that answers `pr list` from a script, one reply per call.
+ * Put a `gh` on PATH that answers `repo view` fixed and instant, and `api graphql` from a
+ * script, one reply per call.
  *
  * A reply can sleep before answering, which is how a test holds one fetch open while it
  * asks for another. The call counter is written before the sleep so a concurrent second
- * call still reads the next reply rather than repeating this one.
+ * call still reads the next reply rather than repeating this one. `callCount` counts only
+ * `api graphql` calls — `repo view` is a fixed, cached lookup no test here is about.
  *
  * @param {import("node:test").TestContext} t
- * @param {{ output: unknown[], sleepMilliseconds?: number }[]} replies
+ * @param {{ output: unknown, sleepMilliseconds?: number }[]} replies
  */
 function installScriptedGh(t, replies) {
   const root = scratchRoot(t, "gsm-pr-cache-");
@@ -66,14 +80,26 @@ function installScriptedGh(t, replies) {
     join(binDirectory, "gh"),
     `#!/usr/bin/env node
 const fs = require("fs");
+if (process.argv[2] === "repo" && process.argv[3] === "view") {
+  process.stdout.write(JSON.stringify({ owner: { login: "example" }, name: "example" }));
+  process.exit(0);
+}
 const replies = JSON.parse(fs.readFileSync(${JSON.stringify(repliesPath)}, "utf8"));
 const called = Number(fs.readFileSync(${JSON.stringify(counterPath)}, "utf8"));
 fs.writeFileSync(${JSON.stringify(counterPath)}, String(called + 1));
 const reply = replies[Math.min(called, replies.length - 1)];
-setTimeout(
-  () => process.stdout.write(JSON.stringify(reply.output)),
-  reply.sleepMilliseconds || 0
-);
+process.stdin.resume();
+process.stdin.on("end", () => {
+  setTimeout(
+    () =>
+      process.stdout.write(
+        JSON.stringify({
+          data: { repository: { n0: { nodes: [] }, c0: reply.output } },
+        })
+      ),
+    reply.sleepMilliseconds || 0
+  );
+});
 `,
     { mode: 0o755 }
   );
@@ -108,13 +134,14 @@ function statusFromSubmit() {
   };
 }
 
-test("a pull request recorded at submit time fills in until the search index has it", async t => {
-  // GitHub indexes a new pull request asynchronously, so the first search finds nothing
-  // for a branch whose pull request already exists — the state right after a submit.
+test("a pull request recorded at submit time fills in until the fetch has it", async t => {
+  // GitHub has not finished associating a just-opened pull request with its commit, so the
+  // first fetch finds nothing for a branch whose pull request already exists — the state
+  // right after a submit.
   const gh = installScriptedGh(t, [
-    { output: [] },
-    { output: [pullRequestJson()] },
-    { output: [] },
+    { output: NOTHING_FOUND },
+    { output: commitNode() },
+    { output: NOTHING_FOUND },
   ]);
   const service = new PullRequestService(gh.cwd);
 
@@ -131,7 +158,7 @@ test("a pull request recorded at submit time fills in until the search index has
   assert.equal(recorded.checks, null);
   assert.equal(recorded.reviewDecision, null);
 
-  // The index caught up. Its copy carries the checks and review decision a record taken
+  // The fetch caught up. Its copy carries the checks and review decision a record taken
   // at submit time cannot, so it has to win.
   await service.refresh(TIPS, true);
   const fetched = present(
@@ -142,15 +169,15 @@ test("a pull request recorded at submit time fills in until the search index has
   assert.equal(fetched.reviewDecision, "APPROVED");
 
   // And the record is gone rather than lingering behind the fetch: a branch whose pull
-  // request the search stops reporting has to stop showing one.
+  // request the fetch stops reporting has to stop showing one.
   await service.refresh(TIPS, true);
   assert.equal(service.cached().get("feature-a"), undefined);
 });
 
 test("a forced refresh runs its own fetch instead of adopting one already in flight", async t => {
   const gh = installScriptedGh(t, [
-    { output: [], sleepMilliseconds: 300 },
-    { output: [pullRequestJson()] },
+    { output: NOTHING_FOUND, sleepMilliseconds: 300 },
+    { output: commitNode() },
   ]);
   const service = new PullRequestService(gh.cwd);
 
@@ -172,7 +199,7 @@ test("a forced refresh runs its own fetch instead of adopting one already in fli
 
 test("two refreshes that are not forced share one gh invocation", async t => {
   const gh = installScriptedGh(t, [
-    { output: [pullRequestJson()], sleepMilliseconds: 200 },
+    { output: commitNode(), sleepMilliseconds: 200 },
   ]);
   const service = new PullRequestService(gh.cwd);
 
@@ -186,4 +213,200 @@ test("two refreshes that are not forced share one gh invocation", async t => {
   // The file watcher and the first paint can ask at the same moment; one `gh` per refresh
   // is what keeps that from doubling the network cost.
   assert.equal(gh.callCount(), 1);
+});
+
+test("a fetch's duration and outcome go to the log, not to any command panel", async t => {
+  // The command log only ever sees an action's own git and gh calls; the fetch behind a
+  // badge runs on a timer with no action to attribute it to, so it needs a home of its own.
+  const gh = installScriptedGh(t, [{ output: commitNode() }]);
+  /** @type {string[]} */
+  const lines = [];
+  const service = new PullRequestService(gh.cwd, line => lines.push(line));
+
+  await service.refresh(TIPS, true);
+
+  assert.ok(lines.some(line => line.startsWith("gh repo view")));
+  assert.ok(lines.some(line => line.startsWith("gh api graphql")));
+  assert.ok(lines.filter(line => /→ ok in \d+ms/.test(line)).length >= 2);
+});
+
+test("a failed fetch logs why, since the badge's own sentence cannot say", async t => {
+  // "GitHub did not answer in time" reads the same whether gh was killed, GitHub 504'd, or
+  // the query itself took too long — the log is where that difference has to show up. Every
+  // call this fake `gh` receives fails the same way, so this also covers the `repo view`
+  // lookup a fetch makes before it ever reaches the batch that would 504.
+  const root = scratchRoot(t, "gsm-pr-log-");
+  const binDirectory = join(root, "fakebin");
+  mkdirSync(binDirectory, { recursive: true });
+  writeFileSync(
+    join(binDirectory, "gh"),
+    `#!/usr/bin/env node
+process.stdin.resume();
+process.stdin.on("end", () => {
+  process.stderr.write("GraphQL: the query took too long to execute.\\n");
+  process.exit(1);
+});
+`,
+    { mode: 0o755 }
+  );
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${binDirectory}:${originalPath}`;
+  t.after(() => {
+    process.env.PATH = originalPath;
+  });
+
+  /** @type {string[]} */
+  const lines = [];
+  const service = new PullRequestService(root, line => lines.push(line));
+
+  await service.refresh(TIPS, true);
+
+  assert.equal(
+    service.availabilityReason(),
+    "GitHub did not answer the pull request query in time. Try again in a moment."
+  );
+  assert.ok(
+    lines.some(
+      line => line.includes("failed after") && line.includes("unreachable")
+    )
+  );
+});
+
+test("a fetch reports progress once per batch, not once per branch", async t => {
+  const gh = installScriptedGh(t, [{ output: commitNode() }]);
+  /** @type {[number, number][]} */
+  const progress = [];
+  const service = new PullRequestService(
+    gh.cwd,
+    () => {},
+    (done, total) => progress.push([done, total])
+  );
+
+  await service.refresh(TIPS, true);
+
+  // One branch is one batch, so progress fires exactly once, already at completion.
+  assert.deepEqual(progress, [[1, 1]]);
+});
+
+/**
+ * Put a `gh` on PATH that answers `repo view` fixed, and `api graphql` by name from
+ * `pullRequests`, failing outright for any call whose batch asks about a branch named in
+ * the file written at `failPath` — a comma-separated list a test can rewrite between
+ * refreshes to make one specific batch start failing.
+ *
+ * @param {import("node:test").TestContext} t
+ * @param {{
+ *   number: number,
+ *   state: string,
+ *   headRefName: string,
+ *   headRefOid: string,
+ * }[]} pullRequests
+ */
+function installBatchFailableGh(t, pullRequests) {
+  const root = scratchRoot(t, "gsm-pr-partial-");
+  const binDirectory = join(root, "fakebin");
+  mkdirSync(binDirectory, { recursive: true });
+  const worldPath = join(root, "world.json");
+  const failPath = join(root, "fail");
+  writeFileSync(worldPath, JSON.stringify(pullRequests));
+  writeFileSync(failPath, "");
+  writeFileSync(
+    join(binDirectory, "gh"),
+    `#!/usr/bin/env node
+const fs = require("fs");
+const args = process.argv.slice(2);
+if (args[0] === "repo" && args[1] === "view") {
+  process.stdout.write(JSON.stringify({ owner: { login: "example" }, name: "example" }));
+  process.exit(0);
+}
+const pullRequests = JSON.parse(fs.readFileSync(${JSON.stringify(worldPath)}, "utf8"));
+let query = "";
+process.stdin.on("data", chunk => (query += chunk));
+process.stdin.on("end", () => {
+  const failing = fs
+    .readFileSync(${JSON.stringify(failPath)}, "utf8")
+    .split(",")
+    .filter(Boolean);
+  const names = [...query.matchAll(/headRefName: "([^"]*)"/g)].map(m => m[1]);
+  if (names.some(name => failing.includes(name))) {
+    process.stderr.write("GraphQL: the query took too long to execute.\\n");
+    process.exit(1);
+  }
+  const repository = {};
+  names.forEach((name, index) => {
+    const pullRequest = pullRequests.find(p => p.headRefName === name);
+    repository["n" + index] = {
+      nodes: pullRequest
+        ? [
+            {
+              number: pullRequest.number,
+              state: pullRequest.state,
+              isDraft: false,
+              title: "pull request " + pullRequest.number,
+              url: "https://github.com/example/example/pull/" + pullRequest.number,
+              headRefName: pullRequest.headRefName,
+              headRefOid: pullRequest.headRefOid,
+              reviewDecision: null,
+              commits: { nodes: [{ commit: { statusCheckRollup: null } }] },
+            },
+          ]
+        : [],
+    };
+    repository["c" + index] = null;
+  });
+  process.stdout.write(JSON.stringify({ data: { repository } }));
+});
+`,
+    { mode: 0o755 }
+  );
+  const originalPath = process.env.PATH;
+  process.env.PATH = `${binDirectory}:${originalPath}`;
+  t.after(() => {
+    process.env.PATH = originalPath;
+  });
+  return {
+    cwd: root,
+    /** @param {string[]} names */
+    fail: names => writeFileSync(failPath, names.join(",")),
+  };
+}
+
+test("one batch's failure keeps that batch's branches at their last known answer", async t => {
+  // 21 branches split into two batches of 20 and 1, so failing the second batch leaves
+  // the first batch's 20 branches to answer normally.
+  const branches = Array.from({ length: 21 }, (_, index) => ({
+    name: `branch-${String(index).padStart(2, "0")}`,
+    sha: index.toString(16).padStart(40, "0"),
+  }));
+  const gh = installBatchFailableGh(
+    t,
+    branches.map((branch, index) => ({
+      number: 100 + index,
+      state: "OPEN",
+      headRefName: branch.name,
+      headRefOid: branch.sha,
+    }))
+  );
+  const service = new PullRequestService(gh.cwd);
+
+  await service.refresh(branches, true);
+  assert.equal(service.cached().size, 21);
+  const before = present(
+    service.cached().get("branch-20"),
+    "branch-20 before the failing refresh"
+  );
+
+  gh.fail(["branch-20"]);
+  await service.refresh(branches, true);
+
+  // The failed batch's branch keeps its last known answer rather than losing its badge.
+  assert.deepEqual(service.cached().get("branch-20"), before);
+  // The batch that did not fail still answers.
+  assert.equal(
+    present(service.cached().get("branch-00"), "branch-00").number,
+    100
+  );
+  // The attempt is reported as failed, not silently as a success.
+  assert.equal(service.refreshState().lastAttemptSucceeded, false);
+  assert.ok(service.refreshState().lastError);
 });

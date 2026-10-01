@@ -3,6 +3,31 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-09-30
+
+### Changed
+
+- Pull request status is looked up through GitHub's GraphQL API — by branch name and by
+  tip commit, in batches — rather than through `gh pr list --search`. Free-text search
+  read an index that trailed a just-opened pull request and, on a monorepo with many
+  checks, could time out and return nothing. The structured lookup still briefly trails a
+  just-opened pull request — submitting fills that gap until the next fetch catches up —
+  but it no longer times out on a monorepo with many checks.
+- Every check on a pull request being cancelled now shows the CI badge as a failure, matching
+  GitHub's own rollup, rather than showing no glyph at all.
+
+### Added
+
+- **Refresh PRs** counts off the branches it has answered while its fetch is still in
+  flight, for a stack with enough branches to make that fetch worth watching.
+- A **Git Stack Manager** output channel logs every pull request fetch's duration and outcome.
+  Branch badges fetch on a timer with no action to blame a failure on, so this is where a stale
+  "PRs stale — never loaded" indicator sends you, rather than the command log.
+
+### Fixed
+
+- `just package` no longer bundles `.tmp/`, the repo-local scratch directory, into the `.vsix`.
+
 ## [0.16.1] - 2026-09-29
 
 ### Changed

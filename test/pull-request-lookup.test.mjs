@@ -8,6 +8,8 @@
  * - A sha matches every pull request that contains the commit, not only the one it heads.
  * - `head:` in a search matches by prefix.
  * - `Repository.pullRequests` lists oldest first unless the query passes `orderBy`.
+ * - `Commit.associatedPullRequests` lists oldest first unless the query passes `orderBy`,
+ *   and answers with only open or merged pull requests, never closed ones.
  */
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -119,14 +121,23 @@ process.stdin.on("end", () => {
       .slice(0, first);
     repository["n" + index] = { nodes: matching.map(node) };
   }
-  for (const [, index, oid] of query.matchAll(/c(\\d+): object\\(oid: "([0-9a-f]{40})"\\)/g)) {
+  for (const [, index, oid, rest] of query.matchAll(
+    /c(\\d+): object\\(oid: "([0-9a-f]{40})"\\)[\\s\\S]*?associatedPullRequests\\(([^)]*)\\)/g
+  )) {
+    const first = Number(/first: (\\d+)/.exec(rest)?.[1] ?? 100);
+    const newestFirst = /direction: DESC/.test(rest);
     const containing = pullRequests.filter(pullRequest => pullRequest.commits.includes(oid));
     const head = containing.find(pullRequest => pullRequest.headRefOid === oid);
+    // associatedPullRequests never answers with a closed pull request.
+    const associated = containing
+      .filter(pullRequest => pullRequest.state !== "CLOSED")
+      .sort((left, right) => (newestFirst ? right.number - left.number : left.number - right.number))
+      .slice(0, first);
     // A commit no pull request contains was never pushed, so GitHub has no object for it.
     repository["c" + index] = containing.length
       ? {
           statusCheckRollup: head?.checks ? { state: head.checks } : null,
-          associatedPullRequests: { nodes: containing.map(node) },
+          associatedPullRequests: { nodes: associated.map(node) },
         }
       : null;
   }
@@ -261,6 +272,39 @@ test("a branch amended since its push keeps its pull request's CI verdict", asyn
   assert.equal(
     present(service.cached().get("feature-a"), "feature-a").checks,
     "failure"
+  );
+});
+
+test("a commit shared by more than three pull requests still finds the one it heads by tip commit", async t => {
+  // Sapling pushed this stack's bottom branch under a server-side name, so only the
+  // by-commit lookup can find it. Its commit also sits in three older, still-open pull
+  // requests stacked above it, so without newest-first order the oldest three would fill
+  // the page and crowd out the one this branch actually heads.
+  const sharedSha = sha("a");
+  const stackedAbove = [11, 12, 13].map(number => ({
+    number,
+    state: /** @type {const} */ ("OPEN"),
+    headRefName: `upper-${number}`,
+    headRefOid: sha(String(number)),
+    commits: [sharedSha, sha(String(number))],
+  }));
+  const cwd = installStandInGitHub(t, [
+    ...stackedAbove,
+    {
+      number: 14,
+      state: "OPEN",
+      headRefName: "pr14",
+      headRefOid: sharedSha,
+      commits: [sharedSha],
+    },
+  ]);
+  const service = new PullRequestService(cwd);
+
+  await service.refresh([{ name: "dev/bottom", sha: sharedSha }], true);
+
+  assert.equal(
+    present(service.cached().get("dev/bottom"), "dev/bottom").number,
+    14
   );
 });
 

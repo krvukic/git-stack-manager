@@ -17,7 +17,13 @@ import type { FileChange } from "#git/snapshot";
 import type { CommandLog } from "#ui/controller";
 import type { RenderModel } from "#ui/renderModel";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { inWebview, onHostRefresh, rpc, type RpcResult } from "../rpc";
+import {
+  inWebview,
+  onHostRefresh,
+  onPullRequestProgress,
+  rpc,
+  type RpcResult,
+} from "../rpc";
 
 /** How often the browser host re-reads. In the webview, a file watcher drives the re-read. */
 const POLL_INTERVAL = 5_000;
@@ -37,6 +43,8 @@ export type SmartlogState = {
   pickedPaths: Set<string>;
   commitDraft: { subject: string; body: string };
   pullRequestsLoading: boolean;
+  /** How far a fetch in progress has gotten, for a stack with enough branches to show it. */
+  pullRequestProgress: { done: number; total: number } | null;
 };
 
 export function useSmartlog() {
@@ -48,6 +56,10 @@ export function useSmartlog() {
   const [pickedPaths, setPickedPaths] = useState<Set<string>>(new Set());
   const [commitDraft, setCommitDraft] = useState({ subject: "", body: "" });
   const [pullRequestsLoading, setPullRequestsLoading] = useState(false);
+  const [pullRequestProgress, setPullRequestProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   /**
    * Paths git reported as dirty at the last reconcile.
@@ -135,8 +147,10 @@ export function useSmartlog() {
   const loadPullRequests = useCallback(
     async (force: boolean) => {
       setPullRequestsLoading(true);
+      setPullRequestProgress(null);
       const response = await rpc<RenderModel>("pullRequests", { force });
       setPullRequestsLoading(false);
+      setPullRequestProgress(null);
       if (!response.ok) {
         if (force) {
           showToast(response.error);
@@ -237,6 +251,20 @@ export function useSmartlog() {
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
   /**
+   * A push from the host, not a poll: the fetch it describes is itself the in-flight
+   * reply to `loadPullRequests`'s own `rpc` call, so there is nothing to attach an
+   * intermediate count to but a message sent while that call is still pending.
+   */
+  useEffect(() => {
+    if (!inWebview) {
+      return;
+    }
+    return onPullRequestProgress((done, total) =>
+      setPullRequestProgress({ done, total })
+    );
+  }, []);
+
+  /**
    * Run a mutating action: one RPC, its commands into the log, then the model it returns.
    *
    * `selectSha` follows the commit a rewrite produced, because every history edit
@@ -321,6 +349,7 @@ export function useSmartlog() {
     commitDraft,
     setCommitDraft,
     pullRequestsLoading,
+    pullRequestProgress,
     loadModel,
     loadPullRequests,
     runAction,

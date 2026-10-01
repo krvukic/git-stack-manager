@@ -107,6 +107,12 @@ export type TopBarProps = {
   unseenLogEntries: number;
   openDrawer: string | null;
   pullRequestsLoading: boolean;
+  /**
+   * How far a fetch in progress has gotten; null when idle. A stack within one batch's
+   * worth of branches still gets a value, but it jumps straight to done — only a stack
+   * spanning several batches sees it move.
+   */
+  pullRequestProgress: { done: number; total: number } | null;
   pulling: boolean;
   restacking: boolean;
   clearingMerged: boolean;
@@ -127,6 +133,7 @@ export function TopBar({
   unseenLogEntries,
   openDrawer,
   pullRequestsLoading,
+  pullRequestProgress,
   pulling,
   restacking,
   clearingMerged,
@@ -227,10 +234,14 @@ export function TopBar({
         <Button
           id="btn-prs"
           disabled={pullRequestsLoading}
-          title="Re-read pull request status through the gh CLI. One network call, roughly a second, then cached for a minute — this button bypasses that cache. Local git state comes from Refresh local state instead."
+          title="Re-read pull request status through the gh CLI, a handful of network calls, then cached for a minute — this button bypasses that cache. Local git state comes from Refresh local state instead."
           onClick={onRefreshPullRequests}
         >
-          {pullRequestsLoading ? "Loading PRs…" : "Refresh PRs"}
+          {pullRequestsLoading
+            ? pullRequestProgress
+              ? `Loading PRs… ${pullRequestProgress.done}/${pullRequestProgress.total}`
+              : "Loading PRs…"
+            : "Refresh PRs"}
         </Button>
         <Freshness model={model} />
       </span>

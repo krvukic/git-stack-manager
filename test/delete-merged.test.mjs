@@ -79,7 +79,7 @@ function recordPullRequest(fixture, branch, state, headSha) {
 }
 
 /**
- * One `gh pr list --json` entry for a merged pull request, as GitHub would answer.
+ * One pull request node, as `#github/pullRequests` reads it off GitHub's GraphQL API.
  *
  * @param {string} branch
  * @param {string} headSha
@@ -94,26 +94,61 @@ function mergedEntry(branch, headSha) {
     headRefName: branch,
     headRefOid: headSha,
     reviewDecision: "APPROVED",
-    statusCheckRollup: [],
+    commits: { nodes: [{ commit: { statusCheckRollup: null } }] },
   };
 }
 
 /**
- * Put a `gh` on PATH that answers every `pr list` with `entries`.
+ * Put a `gh` on PATH that answers `repo view` and `api graphql` from `entries`, the two calls
+ * the sweep's forced status read makes before it deletes.
  *
- * The sweep forces a status read before it deletes, and the fixture's origin is a local bare
- * repository: a real `gh` there reports no GitHub remote, and a machine without `gh` fails
- * differently again. Neither failure is what these tests are about.
+ * The fixture's origin is a local bare repository: a real `gh` there reports no GitHub
+ * remote, and a machine without `gh` fails differently again. Neither failure is what these
+ * tests are about.
  *
  * @param {import("node:test").TestContext} t
  * @param {Record<string, unknown>[]} entries
  */
 function installGh(t, entries) {
-  const binDirectory = join(scratchRoot(t, "gsm-delete-merged-gh-"), "bin");
+  const root = scratchRoot(t, "gsm-delete-merged-gh-");
+  const binDirectory = join(root, "bin");
   mkdirSync(binDirectory, { recursive: true });
+  const entriesPath = join(root, "entries.json");
+  writeFileSync(entriesPath, JSON.stringify(entries));
   writeFileSync(
     join(binDirectory, "gh"),
-    `#!/bin/sh\ncat <<'JSON'\n${JSON.stringify(entries)}\nJSON\n`,
+    `#!/usr/bin/env node
+const fs = require("fs");
+const entries = JSON.parse(fs.readFileSync(${JSON.stringify(entriesPath)}, "utf8"));
+const args = process.argv.slice(2);
+if (args[0] === "repo" && args[1] === "view") {
+  process.stdout.write(JSON.stringify({ owner: { login: "example" }, name: "example" }));
+  process.exit(0);
+}
+let stdin = "";
+process.stdin.on("data", (chunk) => (stdin += chunk));
+process.stdin.on("end", () => {
+  const repository = {};
+  const namePattern = /n(\\d+): pullRequests\\(headRefName: "([^"]*)"/g;
+  let nameMatch;
+  while ((nameMatch = namePattern.exec(stdin))) {
+    const [, index, name] = nameMatch;
+    repository["n" + index] = {
+      nodes: entries.filter((entry) => entry.headRefName === name),
+    };
+  }
+  const commitPattern = /c(\\d+): object\\(oid: "([0-9a-f]{40})"\\)/g;
+  let commitMatch;
+  while ((commitMatch = commitPattern.exec(stdin))) {
+    const [, index, sha] = commitMatch;
+    const matching = entries.filter((entry) => entry.headRefOid === sha);
+    repository["c" + index] = matching.length
+      ? { associatedPullRequests: { nodes: matching } }
+      : null;
+  }
+  process.stdout.write(JSON.stringify({ data: { repository } }));
+});
+`,
     { mode: 0o755 }
   );
   const originalPath = process.env.PATH;

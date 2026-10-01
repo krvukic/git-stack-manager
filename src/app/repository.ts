@@ -145,10 +145,20 @@ export class Repository {
 
   constructor(
     cwd: string,
-    private readonly trunkOverride?: string
+    private readonly trunkOverride?: string,
+    pullRequestReporting?: {
+      /** Where a pull request fetch's duration and outcome go. See `PullRequestService`. */
+      log?: (line: string) => void;
+      /** How many of a pull request fetch's branches are answered, and the total. */
+      progress?: (done: number, total: number) => void;
+    }
   ) {
     this.git = new GitRunner(cwd);
-    this.pullRequests = new PullRequestService(cwd);
+    this.pullRequests = new PullRequestService(
+      cwd,
+      pullRequestReporting?.log,
+      pullRequestReporting?.progress
+    );
     this.undoHistory = new UndoHistory(this.git);
   }
 

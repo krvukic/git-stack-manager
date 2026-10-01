@@ -65,6 +65,7 @@ export function describeFreshness(
     failed: true,
     description:
       (state.lastError || "The last pull request refresh failed.") +
-      (age ? " Badges shown are from the last successful refresh." : ""),
+      (age ? " Badges shown are from the last successful refresh." : "") +
+      " See the Git Stack Manager output channel for the fetch log.",
   };
 }

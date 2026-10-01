@@ -40,6 +40,10 @@ Run `just init-repo` once, then pick a host:
   status, meaning the number, the CI rollup, and the review decision.
 - **Command log** prints the exact git commands each action ran, in terminal form, grouped per
   action.
+- The **Git Stack Manager** output channel (Output panel, VS Code's own, not this extension's
+  webview) logs every pull request fetch's duration and outcome. Branch badges fetch on a timer
+  with no action to blame a failure on, so a stale "PRs stale — never loaded" indicator sends you
+  here rather than to the command log above.
 - **Legend** explains every pill and badge with a live sample of each, drawn by the same code as
   the tree.
 - **Config** sets where the branch pills sit, whether long rows wrap, and how large the text is.

@@ -179,10 +179,15 @@ test("the CI rollup lets the worst check decide the badge", async ({
     checksGlyph: "✓",
   });
 
-  // A cancelled check is the whole rollup here, and it counts as neither outcome —
-  // so the badge shows no CI glyph rather than inventing one.
-  expect(badgeFor(badges, "local-experiment").checks).toBeNull();
-  expect(badgeFor(badges, "local-experiment").title).not.toContain("checks:");
+  // A cancelled check is the whole rollup here, and GitHub's own rollup counts that as a
+  // failure rather than as nothing having run.
+  expect(badgeFor(badges, "local-experiment")).toMatchObject({
+    checks: "failure",
+    checksGlyph: "✗",
+  });
+  expect(badgeFor(badges, "local-experiment").title).toContain(
+    "checks: failure"
+  );
   // And a pull request GitHub ran no checks for at all.
   expect(badgeFor(badges, "fix-slugify-unicode").checks).toBeNull();
 });
