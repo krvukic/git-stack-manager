@@ -18,6 +18,7 @@ import { rowHeightFor } from "../graph/rails.mjs";
 import {
   badgeFontFor,
   CONFIG_DEFAULTS,
+  pillMaxWidth,
   type Config,
 } from "../model/config.mjs";
 import { loadConfig, saveConfig } from "../storage";
@@ -32,6 +33,10 @@ export function useConfig() {
     root.style.setProperty(
       "--badge-font",
       `${badgeFontFor(config.pillFont)}px`
+    );
+    root.style.setProperty(
+      "--pill-max-width",
+      pillMaxWidth(config.pillMaxChars)
     );
     // The row has to grow with the text, and the rail SVG is drawn to exactly this
     // height — larger type in a 26px row left the dots above their own subjects and the

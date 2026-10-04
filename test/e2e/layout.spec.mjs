@@ -574,3 +574,195 @@ test("the wrap choice survives a reload", async ({ smartlog }) => {
 
   await expect(smartlog.locator("body")).toHaveClass(/wrap-rows/);
 });
+
+/** Thirty-one characters, which is the length the complaint about clipping was about. */
+const LONG_BRANCH = "feature/a-thirty-character-name";
+
+/**
+ * The narrowest tree there is, holding a branch long enough to fill a row on its own.
+ *
+ * 1080px of window is what leaves the tree at its 440px floor once the panel takes its 640px
+ * maximum — the half-screen case. The default viewport cannot reach it: at 1400px the same
+ * clamp stops the tree at 760px, which is wide enough that nothing here ever overflows.
+ *
+ * @param {import("@playwright/test").Page} page
+ * @param {{ git: (args: string[]) => Promise<string> }} repository
+ */
+async function starveTreeWithLongBranch(page, repository) {
+  await repository.git(["branch", LONG_BRANCH, "wip-titlecase"]);
+  await page.setViewportSize({ width: 1080, height: 900 });
+  await reopen(page);
+  await selectCommit(page, COMMIT_WITH_FILES);
+  await dragHandle(page, -600, 16);
+  await page.waitForTimeout(200);
+}
+
+/**
+ * Rows whose content wants more width than the row gives it.
+ *
+ * Every assertion below is about what a *starved* row does, so each one checks this first.
+ * Without it they all pass on a tree with room to spare, which is the state the default
+ * viewport is in.
+ *
+ * @param {import("@playwright/test").Page} page
+ */
+function starvedRowCount(page) {
+  return page.evaluate(
+    () =>
+      Array.from(document.querySelectorAll("#tree .row .content")).filter(
+        content => content.scrollWidth > content.clientWidth + 1
+      ).length
+  );
+}
+
+/**
+ * Goto on a starved row.
+ *
+ * It was the last item inside the clipped content, behind pills that cannot shrink, so a
+ * narrow tree pushed it past the clip edge and there was no way left to check a branch out —
+ * on 7 rows of 21 at this width. It now has a slot outside that content, which is also what
+ * stops the wrapping mode giving it a line of its own.
+ */
+test("a starved tree keeps every Goto inside its own row", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  await starveTreeWithLongBranch(smartlog, demoRepository);
+  expect(await starvedRowCount(smartlog)).toBeGreaterThan(0);
+
+  const unreachable = await smartlog.evaluate(
+    () =>
+      Array.from(document.querySelectorAll("#tree .row")).filter(row => {
+        const goto = row.querySelector(".goto-btn");
+        if (!goto) {
+          return false;
+        }
+        const button = goto.getBoundingClientRect();
+        const box = row.getBoundingClientRect();
+        // Past the row's right edge, or clipped to nothing — either way unclickable.
+        return (
+          Math.round(button.right) > Math.round(box.right) + 1 ||
+          Math.round(button.width) === 0
+        );
+      }).length
+  );
+  expect(unreachable).toBe(0);
+});
+
+/**
+ * Where a wrapped row's extra height came from.
+ *
+ * The Goto button is invisible until the row is hovered but laid out either way, and it used
+ * to be the last item inside the wrapping content — so on 12 rows of 21 it took a flex line
+ * to itself and grew the row by a band of nothing. Counting lines that hold no visible item
+ * names that exactly, and needs no tolerance: a row's own height is a bad proxy, because a
+ * subject wrapping inside one flex line makes that line legitimately taller than a row.
+ */
+test("wrapping gives no row a line that holds nothing visible", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  await starveTreeWithLongBranch(smartlog, demoRepository);
+  await smartlog.locator("#btn-config").click();
+  await smartlog.locator('#seg-wraprows button[data-wrap="on"]').click();
+  await smartlog.locator("#btn-config-close").click();
+  await smartlog.waitForTimeout(200);
+
+  const lineCounts = await smartlog.evaluate(() =>
+    Array.from(document.querySelectorAll("#tree .row .content")).map(
+      content => {
+        // `display: contents` on the pill group gives it no box of its own, so its children
+        // are the items. Measuring the group instead reads as a line spanning all of them.
+        const items = Array.from(content.children).flatMap(child =>
+          getComputedStyle(child).display === "contents"
+            ? Array.from(child.children)
+            : [child]
+        );
+        /** @type {Map<number, boolean>} */
+        const lines = new Map();
+        for (const item of items) {
+          const box = item.getBoundingClientRect();
+          if (!box.height) {
+            continue;
+          }
+          const line = Math.round((box.top + box.height / 2) / 6);
+          const visible = getComputedStyle(item).visibility !== "hidden";
+          lines.set(line, (lines.get(line) ?? false) || visible);
+        }
+        return [...lines.values()];
+      }
+    )
+  );
+
+  const blank = lineCounts.filter(lines => lines.some(visible => !visible));
+  expect(blank).toEqual([]);
+  // At least one row really did wrap, or no line was measured that could have been blank.
+  expect(lineCounts.filter(lines => lines.length > 1).length).toBeGreaterThan(
+    0
+  );
+});
+
+/**
+ * The rail dot against the pills beside it.
+ *
+ * The dot is drawn at the middle of the row's first `--row-height`, so that is where the
+ * first line of content has to be. Wrapping broke both halves of that: 2px of top padding
+ * pushed every row's content down, and a first flex line only as tall as its tallest pill
+ * left the dot 4px low — up to 40px adrift on a row whose subject wrapped away from it.
+ */
+test("a wrapped row keeps its dot on the line its pills are on", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  await starveTreeWithLongBranch(smartlog, demoRepository);
+  await smartlog.locator("#btn-config").click();
+  await smartlog.locator('#seg-wraprows button[data-wrap="on"]').click();
+  await smartlog.locator("#btn-config-close").click();
+  await smartlog.waitForTimeout(200);
+
+  const offsets = await smartlog.evaluate(() => {
+    const centre = (/** @type {Element} */ element) => {
+      const box = element.getBoundingClientRect();
+      return box.top + box.height / 2;
+    };
+    return Array.from(document.querySelectorAll("#tree .row"))
+      .map(row => {
+        const dot = row.querySelector(".rail .node");
+        const pill = row.querySelector(".content .pill");
+        return dot && pill ? Math.round(centre(dot) - centre(pill)) : null;
+      })
+      .filter(offset => offset !== null);
+  });
+  // Every row with a pill, or the measurement is of nothing.
+  expect(offsets.length).toBeGreaterThan(5);
+  expect([...new Set(offsets)]).toEqual([0]);
+});
+
+/**
+ * The character cap, which is the only thing that keeps a long branch name from taking the
+ * row its commit message needed.
+ *
+ * Checked both ways round. Clipping alone would also be produced by the row's own overflow,
+ * so the same pill is measured with the cap at its off position: unclipped there, clipped at
+ * the default, which is the cap doing it and not the width.
+ */
+test("the character cap clips a long branch pill, and the top of its range does not", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  await starveTreeWithLongBranch(smartlog, demoRepository);
+  const pill = smartlog.locator(`#tree .pill`, { hasText: LONG_BRANCH });
+
+  const clipped = () =>
+    pill.evaluate(element => element.scrollWidth > element.clientWidth + 1);
+  expect(await clipped()).toBe(true);
+  // The whole name is still one hover away, which is what makes clipping acceptable.
+  await expect(pill).toHaveAttribute("title", LONG_BRANCH);
+
+  await smartlog.locator("#btn-config").click();
+  await smartlog.locator("#rng-pillchars").fill("48");
+  await expect(smartlog.locator("#val-pillchars")).toHaveText("No limit");
+  await smartlog.locator("#btn-config-close").click();
+
+  expect(await clipped()).toBe(false);
+});

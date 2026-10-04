@@ -32,6 +32,15 @@ export type Toast = { text: string; isError: boolean } | null;
 
 export type LogEntry = CommandLog & { id: number };
 
+/**
+ * What the commit form holds between keystrokes.
+ *
+ * `branch` is a branch to start for the commit. Empty means "extend the branch HEAD is on",
+ * which is what a stack wants; the form insists on a name only where the host would refuse
+ * the commit without one, and `model.commitNeedsBranch` says when that is.
+ */
+export type CommitDraft = { subject: string; body: string; branch: string };
+
 export type SmartlogState = {
   model: RenderModel | null;
   /** Set when the first load failed and there is nothing to draw. */
@@ -41,7 +50,7 @@ export type SmartlogState = {
   log: LogEntry[];
   /** Paths the next commit or amend takes. */
   pickedPaths: Set<string>;
-  commitDraft: { subject: string; body: string };
+  commitDraft: CommitDraft;
   pullRequestsLoading: boolean;
   /** How far a fetch in progress has gotten, for a stack with enough branches to show it. */
   pullRequestProgress: { done: number; total: number } | null;
@@ -54,7 +63,11 @@ export function useSmartlog() {
   const [toast, setToast] = useState<Toast>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [pickedPaths, setPickedPaths] = useState<Set<string>>(new Set());
-  const [commitDraft, setCommitDraft] = useState({ subject: "", body: "" });
+  const [commitDraft, setCommitDraft] = useState<CommitDraft>({
+    subject: "",
+    body: "",
+    branch: "",
+  });
   const [pullRequestsLoading, setPullRequestsLoading] = useState(false);
   const [pullRequestProgress, setPullRequestProgress] = useState<{
     done: number;

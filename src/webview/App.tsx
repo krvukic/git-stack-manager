@@ -20,15 +20,13 @@ import {
 } from "./components/ChangesOverlay";
 import { CommandLog } from "./components/CommandLog";
 import { CommitPanel } from "./components/CommitPanel";
+import { ConfigDrawer } from "./components/ConfigDrawer";
 import { ConflictBanner } from "./components/ConflictBanner";
 import { ContextMenu, type MenuState } from "./components/ContextMenu";
-import {
-  ConfigDrawer,
-  LegendDrawer,
-  ShortcutsDrawer,
-  type DrawerName,
-} from "./components/Drawers";
+import { type DrawerName } from "./components/Drawer";
 import { EmptyState } from "./components/Field";
+import { LegendDrawer } from "./components/LegendDrawer";
+import { ShortcutsDrawer } from "./components/ShortcutsDrawer";
 import { SplitPanel } from "./components/SplitPanel";
 import { Splitter } from "./components/Splitter";
 import { Toast } from "./components/Toast";

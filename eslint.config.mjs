@@ -294,6 +294,7 @@ export default typescriptEslint.config(
             "^sha$",
             "^st$",
             "^subject$",
+            "^trailing$",
             "^whole$",
           ],
         },

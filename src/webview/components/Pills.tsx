@@ -41,6 +41,9 @@ export function Pill({
           ? "trunkpill bg-button text-button-fg"
           : "bg-pill text-pill-fg"
       )}
+      // The whole name, for a pill the character cap clipped. Every badge beside it already
+      // carries a description, and a pill carries none, so its name is its description.
+      title={label}
     >
       {label}
     </span>

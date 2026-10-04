@@ -14,6 +14,7 @@ import {
   PullRequestRefreshState,
   PullRequestStatus,
 } from "#github/pullRequests";
+import { commitBranchRefusal } from "#history/createBranch";
 import { deletionRefusal } from "#history/deleteBranch";
 import { MergedBranch, mergedBranches } from "#history/pruneMerged";
 
@@ -128,6 +129,15 @@ export type RenderModel = {
   trunkRef: string | null;
   headSha: string;
   headBranch: string | null;
+  /**
+   * Why a new commit needs a branch of its own, or null when HEAD's branch can take it.
+   *
+   * Computed here for the same reason as `deletionRefusal`: the host owns the rule and its
+   * wording, and the commit form reads it to know whether to insist. Two copies would phrase
+   * the same refusal differently, and the form's copy would be the one nobody tests against a
+   * real repository.
+   */
+  commitNeedsBranch: string | null;
   userEmail: string;
   uncommitted: FileChange[];
   conflict: ConflictState | null;
@@ -163,6 +173,7 @@ export function buildModel(
     trunkRef: rawData.trunkRef,
     headSha: rawData.headSha,
     headBranch: rawData.headBranch,
+    commitNeedsBranch: commitBranchRefusal(rawData),
     userEmail: rawData.userEmail,
     uncommitted: rawData.uncommitted,
     conflict: rawData.conflict,

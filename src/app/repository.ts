@@ -448,13 +448,22 @@ export class Repository {
   /**
    * Commit the selected working-copy paths as a new commit on top of HEAD. `lines` names the
    * lines left out of the partly chosen files, which stay uncommitted.
+   *
+   * `branch` starts a branch at HEAD to carry the commit. `createBranch.commitBranchRefusal`
+   * owns the rule for when one is required.
    */
   async commit(
     paths: string[],
     message: string,
-    lines: LineSelection[] = []
+    lines: LineSelection[] = [],
+    branch?: string
   ): Promise<CommitResult> {
-    return commitPaths(this.git, await this.read(), { paths, lines, message });
+    return commitPaths(this.git, await this.read(), {
+      paths,
+      lines,
+      message,
+      ...(branch === undefined ? {} : { branch }),
+    });
   }
 
   /**

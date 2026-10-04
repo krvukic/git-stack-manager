@@ -59,14 +59,21 @@ export function useWorkingCopy(
       return;
     }
     const body = commitDraft.body.trim();
+    const branch = commitDraft.branch.trim();
     const paths = pickedFilePaths();
     await whileBusy("commit", () =>
-      runAction<{ committed: string[]; newSha: string; model: RenderModel }>(
+      runAction<{
+        committed: string[];
+        newSha: string;
+        branch: string | null;
+        model: RenderModel;
+      }>(
         "commit",
         {
           paths,
           message: subject + (body ? `\n\n${body}` : ""),
           lines: lineSelections(paths),
+          branch,
         },
         {
           modelFrom: data => data.model,
@@ -76,14 +83,19 @@ export function useWorkingCopy(
           reloadOnError: true,
           onSuccess: data => {
             forget(paths);
+            const changes = `${data.committed.length} change${data.committed.length > 1 ? "s" : ""}`;
             showToast(
-              `Committed ${data.committed.length} change${data.committed.length > 1 ? "s" : ""} ✓`,
+              data.branch
+                ? `Committed ${changes} on ${data.branch} ✓`
+                : `Committed ${changes} ✓`,
               false
             );
             setCommitFormOpen(false);
             // The message belongs to the commit that now exists; leaving it would
-            // pre-fill the next commit with the previous one's summary.
-            setCommitDraft({ subject: "", body: "" });
+            // pre-fill the next commit with the previous one's summary. The branch goes
+            // with it: HEAD is on it now, so the next commit extends it rather than
+            // forking a second branch off the same name.
+            setCommitDraft({ subject: "", body: "", branch: "" });
           },
         }
       )

@@ -8,6 +8,8 @@
  * rather than escaping to the host.
  */
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
 import * as payload from "#ui/actionPayload";
 import { Controller } from "#ui/controller";
@@ -40,6 +42,50 @@ test("a missing required field names the field", async t => {
   const result = await controller.handle("files", {});
   assert.equal(result.ok, false);
   assert.match(result.error, /"sha"/);
+});
+
+/**
+ * The commit action's `branch`, which has to survive the boundary as an *absent* field.
+ *
+ * The form sends an empty string for "extend the branch I am on", and `optionalString` reads
+ * that as absent. The empty string would otherwise reach `switch --create ""`, which fails
+ * with a git message about a ref rather than anything about the form.
+ */
+test("the commit action treats an empty branch as none, and a named one as a branch", async t => {
+  const { repo, controller } = buildController(t);
+  run(repo, "git", ["switch", "feature"]);
+  writeFileSync(join(repo, "new.txt"), "new\n");
+
+  const extended = await controller.handle("commit", {
+    paths: ["new.txt"],
+    message: "feat: extend",
+    branch: "",
+  });
+  assert.equal(extended.ok, true);
+  assert.equal(
+    /** @type {{ branch: string | null }} */ (extended.data).branch,
+    null
+  );
+  assert.equal(run(repo, "git", ["branch", "--show-current"]), "feature");
+
+  writeFileSync(join(repo, "second.txt"), "second\n");
+  const forked = await controller.handle("commit", {
+    paths: ["second.txt"],
+    message: "feat: fork",
+    branch: "side",
+  });
+  assert.equal(forked.ok, true);
+  assert.equal(
+    /** @type {{ branch: string | null }} */ (forked.data).branch,
+    "side"
+  );
+  assert.equal(run(repo, "git", ["branch", "--show-current"]), "side");
+  // The log is what the command panel prints, so the branch had better be in it.
+  const { commands } = present(forked.log, "the commit's command log");
+  assert.ok(
+    commands.some(command => command.startsWith("git switch --create side")),
+    commands.join("\n")
+  );
 });
 
 test("a failure inside an operation comes back as a result, not an exception", async t => {

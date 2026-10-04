@@ -3,6 +3,30 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-10-04
+
+### Added
+
+- The commit form has a **Branch** field that starts a branch for the commit, with a name
+  suggested from the summary. Leaving it empty adds the commit to the branch you are on, as
+  before. On trunk, or on a detached HEAD, a name is now required: a commit there moved `main`
+  itself, and a remote that protects `main` then refuses the push, leaving the work on the one
+  branch that cannot carry it.
+- **Branch pill and badge length** in **Config** caps how many characters a pill or badge shows,
+  at 24 by default. A long branch name and the `diverged` badge repeating it could take a narrow
+  row entirely, leaving nothing for the commit message. The full name stays on hover, and pull
+  request badges are never clipped.
+
+### Fixed
+
+- Goto stays at the row's right edge instead of being clipped out of sight when a row's pills do
+  not fit. On a 440px tree, 7 rows of 21 had no reachable Goto at all.
+- A wrapped row no longer grows by an empty line for the invisible Goto button, which happened on
+  12 rows of 21, and its lines now sit closer together than two separate rows do — the two gaps
+  were the wrong way round. Both follow the text size.
+- A wrapped row's graph dot sits on the line its branch pills are on, rather than up to 40px away
+  from it.
+
 ## [0.17.0] - 2026-09-30
 
 ### Changed

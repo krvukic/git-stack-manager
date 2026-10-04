@@ -1,21 +1,10 @@
 /**
- * Uncommitted changes: what is dirty, which of it goes in, and the commit form.
+ * Uncommitted changes: what is dirty, which of it goes in, and the actions it can become.
  *
- * The commit form lives here rather than in the commit panel because the changes being
- * committed are listed directly above it — a panel would put the message a selection away
- * from the files it describes.
- *
- * The message inputs are controlled, which is what makes the browser host's five-second
- * poll invisible: React reconciles the existing input rather than replacing it, so the
- * value survives and the caret stays put. The previous version had to mirror every
- * keystroke into module state and restore `selectionStart` after each render, because a
- * poll landing mid-sentence destroyed the draft and the commit was then refused for having
- * no summary.
+ * `CommitForm` renders the form below the file list, and says why it belongs here.
  */
 import type { FileChange } from "#git/snapshot";
 import type { RenderModel, UICommit } from "#ui/renderModel";
-import { useRef } from "react";
-import { classes } from "../classes";
 import { canAbsorb } from "../model/actionGuards.mjs";
 import { truncate } from "../model/commits.mjs";
 import {
@@ -23,15 +12,11 @@ import {
   goesInWhole,
   type LineChoice,
 } from "../model/lineChoice.mjs";
-import {
-  COMMIT_BODY_HEIGHT_KEY,
-  COMMIT_BODY_MIN_HEIGHT,
-} from "../model/messageHeight.mjs";
-import { useStoredHeight } from "../state/useStoredHeight";
+import type { CommitDraft } from "../state/useSmartlog";
 import { AbsorbPreview, type AbsorbPlan } from "./AbsorbPreview";
-import { Button, ButtonRow } from "./Button";
+import { Button } from "./Button";
+import { CommitForm } from "./CommitForm";
 import { DiscardConfirm } from "./DiscardConfirm";
-import { FieldLabel, TextArea, TextInput } from "./Field";
 import { PickableFileRow } from "./FileRow";
 
 export type WorkingCopyProps = {
@@ -41,7 +26,7 @@ export type WorkingCopyProps = {
   choices: ReadonlyMap<string, LineChoice>;
   /** The commit *Amend into…* would write to, defaulting to HEAD. */
   amendTarget: UICommit | null;
-  commitDraft: { subject: string; body: string };
+  commitDraft: CommitDraft;
   commitFormOpen: boolean;
   committing: boolean;
   absorbPlan: AbsorbPlan | null;
@@ -60,7 +45,7 @@ export type WorkingCopyProps = {
   onRequestDiscard: (file: FileChange) => void;
   onConfirmDiscard: () => void;
   onCancelDiscard: () => void;
-  onDraftChange: (draft: { subject: string; body: string }) => void;
+  onDraftChange: (draft: CommitDraft) => void;
   onOpenCommitForm: () => void;
   onCancelCommitForm: () => void;
   onCommit: () => void;
@@ -99,13 +84,6 @@ export function WorkingCopy({
   onApplyAbsorb,
   onCancelAbsorb,
 }: WorkingCopyProps) {
-  const draftBody = useRef<HTMLTextAreaElement>(null);
-  const draftBodyHeight = useStoredHeight(
-    draftBody,
-    COMMIT_BODY_HEIGHT_KEY,
-    COMMIT_BODY_MIN_HEIGHT
-  );
-
   const uncommitted: FileChange[] = model.uncommitted;
   const count = uncommitted.length;
   const picked = uncommitted.filter(file => pickedPaths.has(file.path)).length;
@@ -250,72 +228,17 @@ export function WorkingCopy({
           );
         })}
       </div>
-      <div
-        id="commit-form"
-        className={classes(
-          "mt-2 mb-1 ml-2 max-w-155",
-          commitFormOpen ? "block" : "hidden"
-        )}
-      >
-        <FieldLabel>Summary</FieldLabel>
-        <TextInput
-          className="my-0.5 mb-1.5 py-1.25 text-body"
-          id="commit-subject"
-          placeholder="What this change does"
-          value={commitDraft.subject}
-          onChange={event =>
-            onDraftChange({ ...commitDraft, subject: event.target.value })
-          }
-        />
-        <FieldLabel>Description</FieldLabel>
-        {/* `min-h-16` has to stay in step with `COMMIT_BODY_MIN_HEIGHT`: the grip cannot drag
-            the box below it, and a stored height is clamped to the same floor. */}
-        <TextArea
-          className="my-0.5 mb-1.5 min-h-16 py-1.25 text-body"
-          id="commit-body"
-          ref={draftBody}
-          style={{ height: draftBodyHeight }}
-          title="Drag the bottom-right corner to resize. The height is remembered."
-          placeholder="Why it is needed (optional)"
-          value={commitDraft.body}
-          onChange={event =>
-            onDraftChange({ ...commitDraft, body: event.target.value })
-          }
-        />
-        <ButtonRow className="mt-0.5">
-          {/*
-            An empty summary disables the button rather than being reported after the click.
-            `commitPicked` still refuses one, because a paste of whitespace can arrive
-            between paint and click, but a dead button is the cheaper answer to a form the
-            reader has not filled in yet.
-          */}
-          <Button
-            id="btn-commit-do"
-            variant="primary"
-            disabled={
-              nothingPicked ||
-              conflicted ||
-              !commitDraft.subject.trim() ||
-              committing
-            }
-            onClick={event => {
-              event.stopPropagation();
-              onCommit();
-            }}
-          >
-            {committing ? "Committing…" : "Commit"}
-          </Button>
-          <Button
-            id="btn-commit-cancel"
-            onClick={event => {
-              event.stopPropagation();
-              onCancelCommitForm();
-            }}
-          >
-            Cancel
-          </Button>
-        </ButtonRow>
-      </div>
+      <CommitForm
+        isOpen={commitFormOpen}
+        draft={commitDraft}
+        needsBranch={model.commitNeedsBranch}
+        headBranch={model.headBranch}
+        blocked={nothingPicked || conflicted}
+        committing={committing}
+        onDraftChange={onDraftChange}
+        onCommit={onCommit}
+        onCancel={onCancelCommitForm}
+      />
     </div>
   );
 }

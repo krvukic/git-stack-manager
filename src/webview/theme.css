@@ -75,8 +75,8 @@
    * that grew with them would push the tree around for a setting about the tree.
    *
    * `meta` and `body` are a real distinction rather than drift, and the clearest example is
-   * two adjacent lines: `Drawers.tsx` prints a shortcut's keys at `body` and the sentence
-   * explaining it at `meta`.
+   * two adjacent lines: `ShortcutsDrawer.tsx` prints a shortcut's keys at `body` and the
+   * sentence explaining it at `meta`.
    *
    * Deliberately no `--text-*--line-height` beside any of them. That pairing is what makes
    * Tailwind's own `text-xs` shorten a button by a pixel, so the line height stays a separate

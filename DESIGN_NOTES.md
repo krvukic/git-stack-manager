@@ -28,6 +28,22 @@ without saving and restoring it. And `git commit -- <path>` rejects a path git d
 so commit `git add`s every selected path first, which also stages a deletion and so covers modify,
 add, and delete on one code path.
 
+A new commit can also **start a branch** (`src/history/createBranch.ts`), and on trunk it has to.
+A commit advances whatever branch HEAD is on, so one made on `main` leaves the work on the single
+branch a protected remote refuses a push to. Moving it off again needs a reset, and this extension
+offers no button for one. A detached HEAD is the same problem one step worse: nothing but the
+reflog reaches the commit.
+
+`git switch --create` runs *before* the commit rather than after. It moves no file and leaves the
+index untouched, so both commit paths work against a dirty working copy unchanged. Creating the
+branch afterwards would instead mean moving the trunk branch back off the new commit. A commit that
+then fails (a rejecting hook is the ordinary case) puts HEAD back and removes the branch, or the
+reader is left on an empty branch with the trunk they started on nowhere on screen.
+
+One function owns both the rule and its wording, and `RenderModel.commitNeedsBranch` carries that
+wording to the form. The form reads that field to know whether to insist, and prints its sentence
+unchanged — the same split `deletionRefusal` already uses.
+
 **Choosing lines** (`src/history/partialSelection.ts`) follows Sapling: every changed line starts
 chosen, so a selection records the lines left out, and a file taken whole sends nothing. A pathspec
 commit takes each path whole from the working tree, so `src/history/chosenChanges.ts` commits a

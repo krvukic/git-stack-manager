@@ -44,6 +44,13 @@ type RowShellProps = {
   sha?: string;
   onClick?: () => void;
   onContextMenu?: (event: React.MouseEvent) => void;
+  /**
+   * The row's action, kept out of `children` so it sits beside the content rather than in
+   * it. A control inside the content competes with pills that cannot shrink: the stylesheet
+   * clips whatever does not fit on one line, and wraps it onto a line of its own when the
+   * reader asks for wrapping. Neither is survivable for the only way to check a branch out.
+   */
+  trailing?: React.ReactNode;
   children: React.ReactNode;
 };
 
@@ -57,6 +64,7 @@ function RowShell({
   sha,
   onClick,
   onContextMenu,
+  trailing,
   children,
 }: RowShellProps) {
   const rails = railGeometry(layout, rowIndex, kind, isHead, rowHeight);
@@ -75,6 +83,7 @@ function RowShell({
       >
         {children}
       </div>
+      {trailing ? <div className="trailing">{trailing}</div> : null}
     </div>
   );
 }
@@ -94,7 +103,7 @@ function GotoButton({
       size="small"
       disabled={disabled}
       // `invisible` rather than `hidden`, so the row's width does not change when it appears.
-      className="goto-btn invisible ml-auto flex-none group-hover/row:visible"
+      className="goto-btn invisible flex-none group-hover/row:visible"
       title={description}
       onClick={event => {
         event.stopPropagation();
@@ -161,6 +170,21 @@ export const CommitRow = memo(function CommitRow({
       sha={commit.sha}
       onClick={() => onSelect(commit)}
       onContextMenu={event => onContextMenu(event, commit)}
+      trailing={
+        commit.isHead ? null : (
+          <GotoButton
+            onGoto={() => onGoto(commit)}
+            disabled={Boolean(goto.heldBy)}
+            description={
+              goto.heldBy
+                ? `${goto.ref} is checked out in ${goto.heldBy}`
+                : goto.detach
+                  ? `Check out ${commit.shortSha}, leaving HEAD detached`
+                  : `Check out ${goto.ref}`
+            }
+          />
+        )
+      }
     >
       <span className="pillgroup">
         {(commit.branchDetails ?? []).map(branch => (
@@ -180,21 +204,7 @@ export const CommitRow = memo(function CommitRow({
         {commit.subject}
       </span>
       <Sha value={commit.shortSha} />
-      {commit.isHead ? (
-        <YouAreHere />
-      ) : (
-        <GotoButton
-          onGoto={() => onGoto(commit)}
-          disabled={Boolean(goto.heldBy)}
-          description={
-            goto.heldBy
-              ? `${goto.ref} is checked out in ${goto.heldBy}`
-              : goto.detach
-                ? `Check out ${commit.shortSha}, leaving HEAD detached`
-                : `Check out ${goto.ref}`
-          }
-        />
-      )}
+      {commit.isHead ? <YouAreHere /> : null}
     </RowShell>
   );
 });
@@ -257,6 +267,21 @@ export function TrunkTipRow({
         row.isHead && "head",
         canGoto && !heldBy && "clickable"
       )}
+      trailing={
+        canGoto ? (
+          <GotoButton
+            onGoto={onGotoTrunk}
+            disabled={Boolean(heldBy)}
+            description={
+              heldBy
+                ? `${row.trunkBranch} is checked out in ${heldBy}`
+                : row.trunkBranchBehind
+                  ? `Check out ${row.trunkBranch} and fast-forward it to ${row.trunkRef}`
+                  : `Check out ${row.trunkBranch}`
+            }
+          />
+        ) : null
+      }
     >
       <span className="pillgroup">
         <Pill label={row.trunkRef} variant="trunk" />
@@ -270,19 +295,6 @@ export function TrunkTipRow({
       </span>
       <Sha value={row.shortSha} />
       {row.isHead ? <YouAreHere /> : null}
-      {canGoto ? (
-        <GotoButton
-          onGoto={onGotoTrunk}
-          disabled={Boolean(heldBy)}
-          description={
-            heldBy
-              ? `${row.trunkBranch} is checked out in ${heldBy}`
-              : row.trunkBranchBehind
-                ? `Check out ${row.trunkBranch} and fast-forward it to ${row.trunkRef}`
-                : `Check out ${row.trunkBranch}`
-          }
-        />
-      ) : null}
     </RowShell>
   );
 }
@@ -326,6 +338,19 @@ export function BaseRow({
         row.isHead && "head",
         canGoto && !heldBy && "clickable"
       )}
+      trailing={
+        canGoto && branch ? (
+          <GotoButton
+            onGoto={() => onGotoBranch(branch)}
+            disabled={Boolean(heldBy)}
+            description={
+              heldBy
+                ? `${branch} is checked out in ${heldBy}`
+                : `Check out ${branch}`
+            }
+          />
+        ) : null
+      }
     >
       {branch || row.headBranch ? (
         <span className="pillgroup">
@@ -341,17 +366,6 @@ export function BaseRow({
         <span className="basehint text-muted">(base — where you branched)</span>
       ) : null}
       {row.isHead ? <YouAreHere /> : null}
-      {canGoto && branch ? (
-        <GotoButton
-          onGoto={() => onGotoBranch(branch)}
-          disabled={Boolean(heldBy)}
-          description={
-            heldBy
-              ? `${branch} is checked out in ${heldBy}`
-              : `Check out ${branch}`
-          }
-        />
-      ) : null}
     </RowShell>
   );
 }

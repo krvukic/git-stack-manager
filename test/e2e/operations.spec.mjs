@@ -410,6 +410,86 @@ test("Commit stays dead until the summary carries something", async ({
   await expect(smartlog.locator("#btn-commit-do")).toBeEnabled();
 });
 
+/**
+ * The Branch field exists for a commit made while HEAD is on trunk.
+ *
+ * A commit advances whatever branch HEAD is on, so without the field this moved `main` — and
+ * a remote that protects `main` then refuses the push, leaving the work on the one branch that
+ * cannot carry it. The host refuses it outright; this drives the form's half of the same rule.
+ */
+test("a commit on trunk needs a branch, and the suggestion fills it in", async ({
+  demoRepository,
+  smartlog,
+  snapshot,
+}) => {
+  await demoRepository.git(["checkout", "main"]);
+  await writeFile(join(demoRepository.path, "src", "trim.js"), "// on trunk\n");
+  await reopen(smartlog);
+  const trunkBefore = await demoRepository.git(["rev-parse", "main"]);
+
+  await smartlog.locator("#btn-commit").click();
+  await smartlog.locator("#commit-subject").fill("feat(trim): off trunk");
+  // Named, rather than left to be discovered by clicking a button that fails.
+  await expect(smartlog.locator("#commit-branch-hint")).toContainText(
+    "main is the trunk"
+  );
+  await expect(smartlog.locator("#btn-commit-do")).toBeDisabled();
+  await snapshot("commit-form-needs-branch", {
+    locator: smartlog.locator("#commit-form"),
+  });
+
+  // The suggestion comes off the summary, with the conventional-commit prefix dropped.
+  await smartlog.locator("#btn-commit-suggest-branch").click();
+  await expect(smartlog.locator("#commit-branch")).toHaveValue("off-trunk");
+  await expect(smartlog.locator("#btn-commit-do")).toBeEnabled();
+
+  await smartlog.locator("#btn-commit-do").click();
+  await expectToast(smartlog, "Committed 1 change on off-trunk");
+
+  // The commit is on the new branch, and trunk is exactly where it was.
+  expect(await demoRepository.git(["branch", "--show-current"])).toBe(
+    "off-trunk"
+  );
+  expect(await demoRepository.git(["rev-parse", "main"])).toBe(trunkBefore);
+  expect(await demoRepository.git(["log", "-1", "--format=%s"])).toBe(
+    "feat(trim): off trunk"
+  );
+});
+
+test("a commit on a branch takes one only when the field is filled in", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  await demoRepository.git(["checkout", "trim-utils"]);
+  await writeFile(join(demoRepository.path, "src", "trim.js"), "// picked\n");
+  await reopen(smartlog);
+  const branchBefore = await demoRepository.git(["rev-parse", "trim-utils"]);
+  await smartlog.locator("#btn-commit").click();
+  await smartlog.locator("#commit-subject").fill("feat(trim): extend");
+
+  // Empty is the ordinary answer here, and the form says what it means rather than leaving
+  // the reader to find out by committing.
+  await expect(smartlog.locator("#commit-branch-hint")).toContainText(
+    "Empty adds the commit to trim-utils."
+  );
+  await expect(smartlog.locator("#btn-commit-do")).toBeEnabled();
+
+  await smartlog.locator("#commit-branch").fill("kres/side-branch");
+  await smartlog.locator("#btn-commit-do").click();
+  await expectToast(smartlog, "Committed 1 change on kres/side-branch");
+
+  // The branch HEAD was on stays put: a name forks rather than extending the stack.
+  expect(await demoRepository.git(["branch", "--show-current"])).toBe(
+    "kres/side-branch"
+  );
+  expect(await demoRepository.git(["rev-parse", "trim-utils"])).toBe(
+    branchBefore
+  );
+  expect(await demoRepository.git(["log", "-1", "--format=%s"])).toBe(
+    "feat(trim): extend"
+  );
+});
+
 test("discarding one file restores it and leaves the change beside it alone", async ({
   demoRepository,
   smartlog,

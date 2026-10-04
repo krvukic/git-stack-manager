@@ -46,13 +46,17 @@ Run `just init-repo` once, then pick a host:
   here rather than to the command log above.
 - **Legend** explains every pill and badge with a live sample of each, drawn by the same code as
   the tree.
-- **Config** sets where the branch pills sit, whether long rows wrap, and how large the text is.
-  With the pills *after* the subject, every commit message lines up on one left edge, which turns
-  the tree into a list you can read down; each row's pills follow its own subject, so they stay next
-  to the commit they describe. **Long rows** keep to one line or wrap. One line truncates what will
-  not fit, so every row is the same height; wrapping grows the row to match, which matters most once
-  the commit panel has taken most of the width. Text and pill sizes scale independently, and the row
-  height follows the text. Choices persist per repository.
+- **Config** sets where the branch pills sit, whether long rows wrap, and how large and how long
+  the text is. With the pills *after* the subject, every commit message lines up on one left edge,
+  which turns the tree into a list you can read down; each row's pills follow its own subject, so
+  they stay next to the commit they describe. **Long rows** keep to one line or wrap. One line
+  truncates what will not fit, so every row is the same height; wrapping grows the row to match,
+  which matters most once the commit panel has taken most of the width. Text and pill sizes scale
+  independently, and the row height follows the text. Choices persist per repository.
+- **Branch pill and badge length**, also in **Config**, caps how many characters a pill or badge
+  shows. A thirty-character branch name and the `diverged` badge repeating it can take a narrow row
+  entirely, leaving nothing for the commit message; the cap clips both and keeps the full name on
+  hover. Pull request badges are never clipped, since their glyphs are the point of them.
 - **Auto-remove merged commits**, also in **Config**, can delete a local branch once its pull
   request merges, which takes its commits out of the tree. The removal takes only a branch still at
   the commit that merged, so one you amended or added to afterwards stays, and so does the
@@ -111,7 +115,11 @@ Every one of these is conflict-free and leaves your working copy alone, except w
 [DESIGN_NOTES.md](DESIGN_NOTES.md) for why.
 
 - **Commit** the changes you tick in the working-copy row, with the message written inline. The rest
-  stay uncommitted, so one dirty tree can become several commits.
+  stay uncommitted, so one dirty tree can become several commits. The form's **Branch** field starts
+  a branch for the commit, suggesting a name from the summary. Leave it empty to add the commit to
+  the branch you are on, which is what a stack wants. On trunk, or on a detached HEAD, a name is
+  required: a commit otherwise moves `main` itself, and a remote that protects `main` then refuses
+  the push.
 - **Choose lines** of a file from the **±** on its row, which opens its change in the overlay with
   a box beside every changed line, as Sapling's selection does. Every line starts chosen: untick
   what stays behind, shift-click to set a range, and use a hunk's or the file's box for all of its

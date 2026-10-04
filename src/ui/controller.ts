@@ -283,17 +283,26 @@ const ACTIONS: Record<string, ActionHandler> = {
     return { ok: true, data: model, log };
   },
 
-  /** `lines` names what was left out of each partly chosen file; absent, every path goes whole. */
+  /**
+   * `lines` names what was left out of each partly chosen file; absent, every path goes whole.
+   * `branch` starts a branch for the commit, which trunk and a detached HEAD require.
+   */
   async commit(controller, payload) {
     const paths = readStringList(payload, "paths");
     const message = requireString(payload, "message");
     const lines = readLineSelections(payload, "lines");
+    const branch = optionalString(payload, "branch");
     const { value, log, model } = await controller.edit("Commit", () =>
-      controller.repository.commit(paths, message, lines)
+      controller.repository.commit(paths, message, lines, branch)
     );
     return {
       ok: true,
-      data: { newSha: value.newSha, committed: value.committed, model },
+      data: {
+        newSha: value.newSha,
+        committed: value.committed,
+        branch: value.branch,
+        model,
+      },
       log,
     };
   },

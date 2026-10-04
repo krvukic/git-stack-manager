@@ -377,3 +377,160 @@ test("a commit with a blank message is refused", async t => {
   );
   assert.equal(statusOf(repo), "?? new.txt");
 });
+
+/**
+ * A commit made while HEAD is on trunk.
+ *
+ * The protected-branch case: a commit advances whatever branch HEAD is on, so one made on
+ * `main` leaves work on a branch the remote refuses a push to, and getting it off again is a
+ * reset this extension deliberately offers no button for. The refusal is what the commit form
+ * reads to insist on a name, through `RenderModel.commitNeedsBranch`.
+ */
+test("a commit on trunk is refused until it is given a branch", async t => {
+  const { repo, repository } = trunkRepository(t, "gsm-commit-trunk-");
+  writeFileSync(join(repo, "new.txt"), "new\n");
+  const before = shaOf(repo, "main");
+
+  await assert.rejects(
+    () => repository.commit(["new.txt"], "feat: on trunk"),
+    /name a branch for this commit: main is the trunk/i
+  );
+  // Nothing moved and nothing was staged, so a second attempt starts from the same place.
+  assert.equal(shaOf(repo, "main"), before);
+  assert.equal(statusOf(repo), "?? new.txt");
+});
+
+test("a branch takes the commit, and trunk stays where it was", async t => {
+  const { repo, repository } = trunkRepository(t, "gsm-commit-branch-");
+  writeFileSync(join(repo, "new.txt"), "new\n");
+  const trunkBefore = shaOf(repo, "main");
+
+  const result = await repository.commit(
+    ["new.txt"],
+    "feat: off trunk",
+    [],
+    "kres/off-trunk"
+  );
+
+  assert.equal(result.branch, "kres/off-trunk");
+  assert.equal(shaOf(repo, "kres/off-trunk"), result.newSha);
+  assert.equal(shaOf(repo, "HEAD"), result.newSha);
+  assert.equal(shaOf(repo, "main"), trunkBefore);
+  assert.equal(
+    run(repo, "git", ["branch", "--show-current"]),
+    "kres/off-trunk"
+  );
+  assert.equal(filesIn(repo, "HEAD").includes("new.txt"), true);
+});
+
+test("a branch forks the stack even where the commit needed none", async t => {
+  const { repo, repository } = buildFixture(t, "gsm-commit-branch-opt-");
+  writeFileSync(join(repo, "new.txt"), "new\n");
+  const topBefore = shaOf(repo, "top");
+
+  const result = await repository.commit(
+    ["new.txt"],
+    "feat: fork here",
+    [],
+    "side"
+  );
+
+  // The branch HEAD was on stays put: this forks rather than extending the stack.
+  assert.equal(shaOf(repo, "top"), topBefore);
+  assert.equal(shaOf(repo, "side"), result.newSha);
+});
+
+/**
+ * A commit that fails after its branch exists, which is the rollback `withNewBranch` owns.
+ *
+ * Every other refusal here lands before any ref moves. Reaching the rollback therefore needs
+ * git itself to refuse once the branch exists, and a rejecting `pre-commit` hook is how a real
+ * repository does that.
+ */
+test("a commit that fails after its branch exists takes the branch away again", async t => {
+  const { repo, repository } = trunkRepository(t, "gsm-commit-rollback-");
+  const hook = join(repo, ".git", "hooks", "pre-commit");
+  writeFileSync(hook, "#!/bin/sh\necho refusing\nexit 1\n", { mode: 0o755 });
+  writeFileSync(join(repo, "new.txt"), "new\n");
+  const trunkBefore = shaOf(repo, "main");
+
+  await assert.rejects(
+    () => repository.commit(["new.txt"], "feat: doomed", [], "kres/doomed"),
+    /refusing/
+  );
+
+  assert.equal(run(repo, "git", ["branch", "--show-current"]), "main");
+  assert.equal(shaOf(repo, "main"), trunkBefore);
+  assert.equal(run(repo, "git", ["branch", "--list", "kres/doomed"]), "");
+  // With the hook removed the same commit succeeds, so the rollback left a repository that
+  // works rather than one that only looks right.
+  rmSync(hook);
+  const result = await repository.commit(
+    ["new.txt"],
+    "feat: doomed",
+    [],
+    "kres/doomed"
+  );
+  assert.equal(shaOf(repo, "kres/doomed"), result.newSha);
+});
+
+test("a commit that fails on a detached HEAD leaves HEAD where it was", async t => {
+  const { repo, repository } = buildFixture(t, "gsm-commit-rollback-detach-");
+  run(repo, "git", ["switch", "--detach", "HEAD"]);
+  const detachedAt = shaOf(repo, "HEAD");
+  writeFileSync(
+    join(repo, ".git", "hooks", "pre-commit"),
+    "#!/bin/sh\nexit 1\n",
+    {
+      mode: 0o755,
+    }
+  );
+  writeFileSync(join(repo, "new.txt"), "new\n");
+
+  await assert.rejects(
+    () => repository.commit(["new.txt"], "feat: doomed", [], "doomed"),
+    /./
+  );
+
+  // Detached as before, rather than parked on the branch the rollback removed.
+  assert.equal(run(repo, "git", ["branch", "--show-current"]), "");
+  assert.equal(shaOf(repo, "HEAD"), detachedAt);
+  assert.equal(run(repo, "git", ["branch", "--list", "doomed"]), "");
+});
+
+test("a branch name that git or the tree would reject is refused", async t => {
+  const { repo, repository } = trunkRepository(t, "gsm-commit-badname-");
+  writeFileSync(join(repo, "new.txt"), "new\n");
+
+  /** @param {string} branch */
+  const commitOnto = branch => () =>
+    repository.commit(["new.txt"], "feat: named badly", [], branch);
+  // `..` is what `check-ref-format` rejects, and a leading dash is what it accepts while
+  // `switch` reads it as an option — two different checks, so both are named.
+  await assert.rejects(commitOnto("feature..x"), /not a valid branch name/i);
+  await assert.rejects(commitOnto("--force"), /starts with a dash/i);
+  await assert.rejects(commitOnto("main"), /already exists here/i);
+  // Every refusal happened before the commit, so trunk is untouched and the file is still
+  // dirty — the state a second attempt with a good name needs.
+  assert.equal(run(repo, "git", ["branch", "--show-current"]), "main");
+  assert.equal(statusOf(repo), "?? new.txt");
+});
+
+test("a commit on a detached HEAD is refused until it is given a branch", async t => {
+  const { repo, repository } = buildFixture(t, "gsm-commit-detached-");
+  run(repo, "git", ["switch", "--detach", "HEAD"]);
+  writeFileSync(join(repo, "new.txt"), "new\n");
+
+  await assert.rejects(
+    () => repository.commit(["new.txt"], "feat: nowhere"),
+    /head is detached/i
+  );
+
+  const result = await repository.commit(
+    ["new.txt"],
+    "feat: somewhere",
+    [],
+    "rescued"
+  );
+  assert.equal(shaOf(repo, "rescued"), result.newSha);
+});

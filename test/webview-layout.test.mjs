@@ -22,6 +22,8 @@ import {
   clamp,
   CONFIG_DEFAULTS,
   parseConfig,
+  PILL_MAX_CHARS_RANGE,
+  pillMaxWidth,
 } from "../src/webview/model/config.mts";
 import {
   clampMessageHeight,
@@ -50,6 +52,7 @@ test("a stored config is adopted field by field", () => {
     fileClick: "diff",
     textFont: 16,
     pillFont: 14,
+    pillMaxChars: 20,
     deleteMergedBranches: true,
   });
   assert.deepEqual(config, {
@@ -58,6 +61,7 @@ test("a stored config is adopted field by field", () => {
     fileClick: "diff",
     textFont: 16,
     pillFont: 14,
+    pillMaxChars: 20,
     deleteMergedBranches: true,
   });
 });
@@ -118,6 +122,35 @@ test("a fractional size is rounded, not merely bounded", () => {
 test("badge text tracks the pill size, with a floor of its own", () => {
   assert.equal(badgeFontFor(11), 10, "the ratio the fixed sizes had");
   assert.equal(badgeFontFor(8), 7);
+});
+
+test("a stored pill length outside the slider's range is pulled back into it", () => {
+  assert.equal(parseConfig({ pillMaxChars: 2 }).pillMaxChars, 12);
+  assert.equal(parseConfig({ pillMaxChars: 500 }).pillMaxChars, 48);
+  assert.equal(
+    parseConfig({ pillMaxChars: "24" }).pillMaxChars,
+    CONFIG_DEFAULTS.pillMaxChars
+  );
+});
+
+/**
+ * The cap reaches CSS in `ch`, not pixels.
+ *
+ * A pill is monospace at one size and a badge proportional at another, and `1ch` is resolved
+ * against the element the property is read on rather than the `:root` it is written to — so
+ * one number caps each at its own characters. Pixels would need two values and would not
+ * follow the pill slider.
+ */
+test("the pill cap reaches CSS as characters, and the top of the range turns it off", () => {
+  assert.equal(pillMaxWidth(24), "24ch");
+  assert.equal(pillMaxWidth(12), "12ch");
+  assert.equal(pillMaxWidth(PILL_MAX_CHARS_RANGE.max), "none");
+  // A stored value above the range clamps to the off position rather than to a wide cap,
+  // so an upgrade that lowers the ceiling cannot start clipping what was unclipped.
+  assert.equal(
+    pillMaxWidth(parseConfig({ pillMaxChars: 500 }).pillMaxChars),
+    "none"
+  );
 });
 
 test("a sidebar width inside the bounds is kept", () => {

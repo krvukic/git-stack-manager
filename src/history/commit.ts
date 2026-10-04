@@ -26,11 +26,15 @@
  * which takes each path whole from the working tree. When any such file is in the
  * selection, the commit is made from a scratch index instead; `chosenChanges`
  * describes how.
+ *
+ * A new commit can also start a branch. `createBranch` owns both the branch creation and
+ * the rule for when a commit needs one.
  */
 import { GitError, GitRunner } from "#git/runner";
 import { RawData } from "#git/snapshot";
 import { amendIntoAncestor } from "#history/amendIntoAncestor";
 import { stageChosenChanges } from "#history/chosenChanges";
+import { commitBranchRefusal, withNewBranch } from "#history/createBranch";
 import { withScratchIndex } from "#history/objects";
 import { LineSelection } from "#history/partialSelection";
 
@@ -45,6 +49,8 @@ export type CommitResult = {
   newSha: string;
   /** Paths that went into the commit, in the order they were given. */
   committed: string[];
+  /** Branch created to carry the commit, or null when it extended the one HEAD was on. */
+  branch: string | null;
 };
 
 export type AmendResult = {
@@ -57,34 +63,60 @@ export type AmendResult = {
 /**
  * Stage `paths` and commit them as a new child of HEAD.
  *
+ * `branch` starts a branch at HEAD first, so the commit lands there instead of advancing
+ * whatever HEAD was on. It is required when `commitBranchRefusal` names a reason — trunk, or
+ * a detached HEAD — and optional otherwise, where an absent one extends the current branch.
+ *
  * The message is passed on stdin rather than as `-m`, so a subject containing
  * quotes or newlines needs no escaping and never reaches a shell.
  */
 export async function commitPaths(
   git: GitRunner,
   snapshot: RawData,
-  { paths, lines = [], message }: ChosenChanges & { message: string }
+  {
+    paths,
+    lines = [],
+    message,
+    branch,
+  }: ChosenChanges & { message: string; branch?: string }
 ): Promise<CommitResult> {
   const selected = requireSelection(snapshot, paths, "commit");
   requireMessage(message, "commit");
   const partial = requireLines(selected, lines, "commit");
-
-  if (partial.length) {
-    await commitFromScratchIndex(
-      git,
-      { paths: selected, lines: partial },
-      ["commit", "--file=-"],
-      message
-    );
-  } else {
-    await stage(git, selected);
-    // `--only` makes the pathspec authoritative even when other paths are staged:
-    // without it git commits the whole index whenever a merge is in progress.
-    await git.run(["commit", "--only", "--file=-", "--", ...selected], {
-      input: message,
-    });
+  // Before the branch is created, so a refused selection changes no refs.
+  const refusal = commitBranchRefusal(snapshot);
+  if (!branch && refusal) {
+    throw new GitError(`Name a branch for this commit: ${refusal}.`, "commit");
   }
-  return { newSha: await git.run(["rev-parse", "HEAD"]), committed: selected };
+
+  const writeCommit = async () => {
+    if (partial.length) {
+      await commitFromScratchIndex(
+        git,
+        { paths: selected, lines: partial },
+        ["commit", "--file=-"],
+        message
+      );
+    } else {
+      await stage(git, selected);
+      // `--only` makes the pathspec authoritative even when other paths are staged:
+      // without it git commits the whole index whenever a merge is in progress.
+      await git.run(["commit", "--only", "--file=-", "--", ...selected], {
+        input: message,
+      });
+    }
+  };
+
+  if (branch) {
+    await withNewBranch(git, snapshot, branch, writeCommit);
+  } else {
+    await writeCommit();
+  }
+  return {
+    newSha: await git.run(["rev-parse", "HEAD"]),
+    committed: selected,
+    branch: branch ?? null,
+  };
 }
 
 /**

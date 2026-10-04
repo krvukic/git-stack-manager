@@ -30,8 +30,14 @@
     display: flex;
     align-items: center;
     flex-wrap: nowrap;
-    gap: 8px;
+    /* Column only, so the wrapping block below is the one place that decides how far apart
+       two lines of the same row sit. `gap` set both, which made a wrapped row's own lines
+       8px apart while neighbouring rows touched — the grouping a reader needs, inverted. */
+    column-gap: 8px;
     padding: 0 6px;
+    /* Takes the width the trailing slot leaves. `min-width: 0` is what lets it shrink past
+       its content and clip rather than pushing that slot off the row. */
+    flex: 1 1 auto;
     min-width: 0;
     height: var(--row-height, 26px);
     /* Indent past this row's own rightmost rail, so a branch pill hugs its own dot rather
@@ -51,29 +57,100 @@
     flex: 0 1 auto;
     min-width: 0;
   }
-  body.wrap-rows .row {
-    /* Vertical padding keeps a two-line row from touching its neighbours; on a single
-       line the min-height already covers it, so nothing moves in the common case. */
-    align-items: stretch;
-    padding: 2px 0;
+  /* The one marker saying which row you are on, so it has to survive a tree too narrow for
+     the row. Pinned to the clipped edge rather than carried out to Goto's slot, because it
+     describes the commit and reads as part of the row's text; the pills clip under it.
+     `overflow: hidden` on the content is itself the scrollport this sticks to, which is why
+     it needs no positioned ancestor of its own. */
+  .row .content .youarehere {
+    position: sticky;
+    right: 0;
   }
   /**
-   * Both halves of the one-line rule are lifted here, and both are needed.
+   * Goto's own slot, outside the clipped content.
    *
-   * `height: auto` alone does not grow the box: a flex container's cross size comes from its
-   * flex *lines*, and with `flex-wrap: nowrap` the container has exactly one line however tall
-   * its items get — so a subject that broke into two lines was laid out at 26px and the second
-   * line clipped by the `overflow: hidden` that keeps a starved row on its own line.
+   * Goto is an action rather than part of the commit's description, and it is reached by
+   * hovering the row — so it has to be *there* to hover. Inside `.content` it was the last
+   * flex item behind pills that cannot shrink, which cost it both ways: a 433px tree clipped
+   * it away on 7 rows of 21, and the wrapping mode gave it a flex line of its own on 12,
+   * growing those rows by a row-height of blank strip for an invisible button.
    *
-   * That clipping was live before this row centred its items, on 25 of 28 rows. `baseline`
-   * had resolved `auto` about 3px taller than `center` does, which was enough for three rows
-   * to fit and for the test asserting "some row grew" to pass on those three.
+   * One row tall and top-aligned, so a wrapped row keeps it beside its first line and its own
+   * dot instead of floating it down the middle of three.
    */
+  .row .trailing {
+    display: flex;
+    align-items: center;
+    align-self: flex-start;
+    flex: none;
+    height: var(--row-height, 26px);
+    padding-right: 6px;
+  }
+  /**
+   * How many characters a pill or badge may show.
+   *
+   * A 30-character branch name and the `diverged 1↑1↓ vs origin/<same name>` badge beside it
+   * can take a narrow tree's whole row, leaving no room for the subject the row is about. The
+   * cap is set as a number of characters, not pixels, because the limit a reader wants is
+   * "about this many letters" at whatever size the pill slider is on.
+   *
+   * `1ch` is resolved against the element that *uses* the property, not the `:root` that
+   * declares it, so one number caps the monospace pill and the proportional badge each at its
+   * own characters. The pull request badge is left out: `#206 ✓ ✓` has nothing to clip but the
+   * glyphs that are the point of it.
+   */
+  .row .pill,
+  .row .badge {
+    max-width: var(--pill-max-width, none);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rail {
+    position: absolute;
+    left: 0;
+    top: 0;
+    pointer-events: none;
+  }
+  /**
+   * Wrapping, in one block.
+   *
+   * Every rule the mode changes lives here, because the last bug in it was a rule left behind
+   * somewhere else: `flex-wrap: nowrap` and `overflow: hidden` stayed in force while `height`
+   * went to `auto`, so 25 of 28 rows laid their second line out *outside* their own box and
+   * painted it over the row below. `LEARNINGS.md` carries that investigation. A reader can now
+   * check the mode by reading one block rather than by finding five.
+   *
+   * The two gaps are what makes a wrapped row readable, and they have to disagree: lines of
+   * one row sit tighter than two rows do, or nothing reads as grouped. They used to be the
+   * other way round — 8px within a row, 4px between two. The first-line pin supplies the
+   * within-row air, so `row-gap` adds none, and the separation between rows is a quarter of a
+   * row, which follows the text size.
+   */
+  body.wrap-rows .row {
+    /* Bottom only. Padding at the top would push the content down the row while the rail SVG
+       stayed at its top edge, which put every dot 2px above its own subject. */
+    padding-bottom: calc(var(--row-height, 26px) / 4);
+  }
   body.wrap-rows .row .content {
     flex-wrap: wrap;
     height: auto;
     min-height: var(--row-height, 26px);
     overflow: visible;
+    row-gap: 0;
+  }
+  /**
+   * Hold the first line at a full row, whatever is on it.
+   *
+   * A zero-width flex item is the only way to state a flex line's height. Without it the first
+   * line is as tall as its tallest pill — about 17px — so `align-items: center` put the pills
+   * 4px above the dot the rail draws at the row's own middle, and a subject that wrapped left
+   * the dot stranded between two lines. It also gives the second line the leading it needs,
+   * which is why `row-gap` above is zero.
+   */
+  body.wrap-rows .row .content::before {
+    content: "";
+    width: 0;
+    height: var(--row-height, 26px);
   }
   /* Wrapping is pointless if the subject still ellipses at one line's worth: let it use
      the full width and break, which is the whole reason to turn this on. */
@@ -83,11 +160,9 @@
     text-overflow: clip;
     overflow-wrap: anywhere;
   }
-  .rail {
-    position: absolute;
-    left: 0;
-    top: 0;
-    pointer-events: none;
+  body.wrap-rows .basehint {
+    white-space: normal;
+    overflow: visible;
   }
   /* A wrapped row is taller than the SVG was drawn for, which would leave its vertical
      rail stopping partway down and a visible gap before the next row's. The extra height
@@ -200,12 +275,6 @@
   body.pills-right .row .content .youarehere {
     order: 4;
   }
-  /* Goto is the one thing that still belongs at the far right: it is an action, not part
-     of the commit's description, and `margin-left: auto` is what pushes it there. */
-  body.pills-right .row .content .goto-btn {
-    order: 5;
-    margin-left: auto;
-  }
   /* The base hint describes the subject, so it stays beside it. */
   body.pills-right .row .content .basehint {
     order: 2;
@@ -231,10 +300,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
-  }
-  body.wrap-rows .basehint {
-    white-space: normal;
-    overflow: visible;
   }
   .ellipsis-row .content {
     color: var(--color-muted);
