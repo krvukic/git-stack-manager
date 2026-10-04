@@ -18,6 +18,7 @@ import {
 export type CommitMenuActions = {
   onGoto: (commit: UICommit) => void;
   onCopySha: (commit: UICommit) => void;
+  onCopyBranchName: (branch: string) => void;
   onCheckoutBranch: (branch: string) => void;
   onGhStack: (payload: Record<string, unknown>, label: string) => void;
   onAdoptRemote: (branch: string) => void;
@@ -96,6 +97,29 @@ function fromHeadItems(
 }
 
 /**
+ * One **Copy branch name** entry per branch on the commit, or none when it carries no branch.
+ *
+ * Absent rather than dimmed when the commit carries no branch, as Submit is. The refused
+ * **Delete branch** entries below are the other case, and `deleteItems` says why they stay.
+ *
+ * `copyBranchItems` appends the name only when the commit carries more than one branch, where
+ * the entries would otherwise be identical. With one branch the label stays bare and the
+ * description carries the name, as Copy commit hash does with its sha.
+ */
+function copyBranchItems(
+  commit: UICommit,
+  actions: CommitMenuActions
+): MenuItem[] {
+  const branches = (commit.branchDetails ?? []).map(branch => branch.name);
+  return branches.map(name => ({
+    label:
+      branches.length > 1 ? `Copy branch name ${name}` : "Copy branch name",
+    description: `Copy ${name} to the clipboard`,
+    run: () => actions.onCopyBranchName(name),
+  }));
+}
+
+/**
  * One **Delete branch** entry per branch on the commit, each carrying its own refusal.
  *
  * Each refused branch keeps its entry, which names the reason, as the rebase and `gh stack` entries
@@ -150,11 +174,14 @@ export function commitMenuItems(
   }
   // Above the conflict return, because reading a sha off a stopped rebase is as safe as
   // reading one off any other commit, and it is the state a reader most wants to quote.
-  items.push({
-    label: "Copy commit hash",
-    description: `Copy the full sha, ${commit.sha}, to the clipboard`,
-    run: () => actions.onCopySha(commit),
-  });
+  items.push(
+    {
+      label: "Copy commit hash",
+      description: `Copy the full sha, ${commit.sha}, to the clipboard`,
+      run: () => actions.onCopySha(commit),
+    },
+    ...copyBranchItems(commit, actions)
+  );
 
   if (model.conflict) {
     // A rebase already holds the working copy; starting another would fail deep inside git

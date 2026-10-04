@@ -173,22 +173,73 @@ test("Copy commit hash puts the whole sha on the clipboard", async ({
 });
 
 /**
+ * Copy branch name, which is one entry per branch the commit carries.
+ *
+ * Three cases, one per branch count: no branch offers nothing to copy, one leaves the label
+ * bare, and two would be identical without their names.
+ */
+test("Copy branch name offers one entry per branch, and none without", async ({
+  context,
+  demoRepository,
+  smartlog,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const menu = smartlog.locator("#menu");
+
+  // One branch: the label stays clean and the description names it.
+  await smartlog
+    .getByText("feat(pad): add padStart")
+    .click({ button: "right" });
+  await expect(
+    menu.locator(".item", { hasText: /^Copy branch name$/ })
+  ).toHaveAttribute("title", "Copy pad-utils to the clipboard");
+  await menu.getByText("Copy branch name", { exact: true }).click();
+  await expectToast(smartlog, "Copied pad-utils ✓");
+  expect(await smartlog.evaluate(() => navigator.clipboard.readText())).toBe(
+    "pad-utils"
+  );
+
+  // No branch: nothing to copy, so no entry — the way Submit treats the same commit.
+  await smartlog
+    .getByText("feat(case): add camelCase")
+    .click({ button: "right" });
+  await expect(menu).toContainText("Copy commit hash");
+  await expect(menu).not.toContainText("Copy branch name");
+
+  // Two branches on one commit: each entry carries its own name.
+  await demoRepository.git(["branch", "second-name", "pad-utils"]);
+  await reopen(smartlog);
+  await smartlog
+    .getByText("feat(pad): add padStart")
+    .click({ button: "right" });
+  await expect(
+    menu.locator(".item", { hasText: /^Copy branch name / })
+  ).toHaveText(["Copy branch name pad-utils", "Copy branch name second-name"]);
+
+  await menu.getByText("Copy branch name second-name").click();
+  await expectToast(smartlog, "Copied second-name ✓");
+  expect(await smartlog.evaluate(() => navigator.clipboard.readText())).toBe(
+    "second-name"
+  );
+});
+
+/**
  * The two rows where the rest of the menu is not what it usually is.
  *
- * On the HEAD row there is no Goto, so Copy is what opens the first section; a separator
- * there instead would put a hairline straight under the heading. Mid-conflict the menu stops
- * after one entry and explains itself, and reading a sha is as safe then as at any other
- * time — which is when a reader most wants to quote one.
+ * The HEAD row offers no Goto, so Copy opens the first section; a separator there instead
+ * would put a hairline straight under the heading. Mid-conflict `commitMenuItems` returns one
+ * entry plus a refusal naming the conflict, and reading a sha is as safe then as at any other
+ * time — which is when a reader most often needs to quote one.
  */
 test("Copy commit hash is offered on the HEAD row and mid-conflict", async ({
   demoRepository,
   smartlog,
 }) => {
   const menu = smartlog.locator("#menu");
-  // Tall enough that the tree never scrolls, which keeps a dismissal out of the way rather
-  // than being incidental: the conflict banner shortens the tree, and a right-click that
-  // opens the commit panel then re-clamps the tree's scroll — which this menu closes on. That
-  // is a real defect and predates this entry; it is not what these assertions are about.
+  // A defect this test steps around, and one that predates this entry: the conflict banner
+  // shortens the tree, a right-click that opens the commit panel re-clamps the tree's scroll,
+  // and `ContextMenu` closes on that scroll. A viewport tall enough never to scroll keeps it
+  // out of assertions that are about something else.
   await smartlog.setViewportSize({ width: 1400, height: 1400 });
   await demoRepository.git(["checkout", "case-utils"]);
   await reopen(smartlog);

@@ -348,7 +348,9 @@ export function App({ settings }: { settings: HostSettings }) {
                   y: event.clientY,
                   items: commitMenuItems(model, commit, {
                     onGoto: c => void commitActions.gotoCommit(c),
-                    onCopySha: c => void commitActions.copySha(c),
+                    onCopySha: commit => void commitActions.copySha(commit),
+                    onCopyBranchName: branch =>
+                      void commitActions.copyBranchName(branch),
                     onCheckoutBranch: branch =>
                       void repository.gotoBranch(branch),
                     onGhStack: (payload, label) =>

@@ -1,7 +1,7 @@
 /**
  * Everything the tree's context menu and the commit panel can do to one commit: check it out,
- * copy its sha, rebase it, fold it, split it, reword it, submit it, or hand its stack to
- * `gh stack`.
+ * copy its sha or a branch name off it, rebase it, fold it, split it, reword it, submit it, or
+ * hand its stack to `gh stack`.
  *
  * The split panel's state lives here rather than in the component that draws it, because the
  * two halves of a split belong together: the preview is a read that only exists to be applied,
@@ -58,34 +58,64 @@ export function useCommitActions(smartlog: Smartlog) {
   );
 
   /**
-   * Put the commit's full sha on the clipboard.
+   * Put `value` on the clipboard and report either outcome.
    *
    * Written from the webview rather than through a host action, unlike *Open file* and its
    * neighbours. Only one side can do this in both hosts: the extension has
    * `vscode.env.clipboard`, but the web host is a Node server with no clipboard of its own, so
    * routing it would mean the browser doing it anyway — through two code paths instead of one.
    *
-   * The full sha, where the row prints eight characters. Eight is enough to read and to type
-   * at a prompt; what a reader cannot get off the screen is the rest of it, and that is what a
-   * pull request body or a `git` argument elsewhere wants.
+   * A clipboard write needs a focused document and the browser's permission, and neither is
+   * this code's to guarantee. So a failure raises a toast carrying the value, rather than
+   * returning silently and leaving the reader to paste whatever was there before. `noun` names
+   * the value in that sentence; `shown` is what the success toast echoes, for a value too long
+   * to read back.
    *
-   * The failure is reported rather than swallowed. A clipboard write needs a focused document
-   * and the browser's permission, and neither is this code's to guarantee — a silent no-op
-   * would leave the reader pasting whatever was on the clipboard before.
+   * The parameters are named, because three strings in a row read as interchangeable.
    */
-  const copySha = useCallback(
-    async (commit: UICommit) => {
+  const copyToClipboard = useCallback(
+    async ({
+      value,
+      noun,
+      shown = value,
+    }: {
+      value: string;
+      noun: string;
+      shown?: string;
+    }) => {
       try {
-        await navigator.clipboard.writeText(commit.sha);
+        await navigator.clipboard.writeText(value);
       } catch {
-        showToast(
-          `Could not reach the clipboard. The full sha is ${commit.sha}.`
-        );
+        showToast(`Could not reach the clipboard. The ${noun} is ${value}.`);
         return;
       }
-      showToast(`Copied ${commit.shortSha} ✓`, false);
+      showToast(`Copied ${shown} ✓`, false);
     },
     [showToast]
+  );
+
+  /**
+   * The full sha, where the row prints eight characters. Eight is enough to read and to type
+   * at a prompt; the rest is what a reader cannot get off the screen and has to paste into a
+   * pull request body or a `git` command elsewhere.
+   */
+  const copySha = useCallback(
+    (commit: UICommit) =>
+      copyToClipboard({
+        value: commit.sha,
+        noun: "full sha",
+        shown: commit.shortSha,
+      }),
+    [copyToClipboard]
+  );
+
+  /**
+   * A branch name, which is short enough to read on the row and still worth copying: every
+   * `git` command and every pull request URL has to spell it exactly.
+   */
+  const copyBranchName = useCallback(
+    (branch: string) => copyToClipboard({ value: branch, noun: "branch name" }),
+    [copyToClipboard]
   );
 
   const runRebase = useCallback(
@@ -398,6 +428,7 @@ export function useCommitActions(smartlog: Smartlog) {
     split,
     gotoCommit,
     copySha,
+    copyBranchName,
     runRebase,
     runGhStack,
     adoptRemote,

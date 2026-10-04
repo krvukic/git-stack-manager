@@ -3,6 +3,14 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-10-04
+
+### Added
+
+- **Copy branch name** under Copy commit hash in a commit's right-click menu, with one entry
+  per branch the commit carries. A commit with no branch offers none. With two branches, each
+  entry carries its own name, since the labels would otherwise be identical.
+
 ## [0.20.0] - 2026-10-04
 
 ### Added
@@ -11,7 +19,7 @@ numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
   the last day reads as an age — *20 seconds ago*, *5 minutes ago*, *2 hours ago* — and
   anything older as its date, `2026-10-04`: the two questions are different, and a count of
   months is a number nobody can turn back into a day. Off by default. Only commit rows carry
-  one, since the trunk and base rows are drawn for position rather than for their contents.
+  a date, since the trunk and base rows are drawn for position rather than for their contents.
 
 ## [0.19.0] - 2026-10-04
 
@@ -19,15 +27,16 @@ numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Copy commit hash** in a commit's right-click menu, beside Goto, puts the full
   forty-character sha on the clipboard. A row prints eight characters, which is enough to read
-  and to type; the rest is what a pull request body or a `git` command elsewhere wants. The
-  entry works on every row and during a stopped rebase, where the rest of the menu waits.
+  and to type; the rest is what you paste into a pull request body or a `git` command. The
+  entry works on every row and during a stopped rebase, where the menu refuses its other
+  entries.
 
 ## [0.18.0] - 2026-10-04
 
 ### Added
 
 - The commit form has a **Branch** field that starts a branch for the commit, with a name
-  suggested from the summary. Leaving it empty adds the commit to the branch you are on, as
+  suggested from the summary. An empty field adds the commit to the branch you are on, as
   before. On trunk, or on a detached HEAD, a name is now required: a commit there moved `main`
   itself, and a remote that protects `main` then refuses the push, leaving the work on the one
   branch that cannot carry it.
