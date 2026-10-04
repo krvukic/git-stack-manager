@@ -53,6 +53,7 @@ test("a stored config is adopted field by field", () => {
     textFont: 16,
     pillFont: 14,
     pillMaxChars: 20,
+    showDate: true,
     deleteMergedBranches: true,
   });
   assert.deepEqual(config, {
@@ -62,6 +63,7 @@ test("a stored config is adopted field by field", () => {
     textFont: 16,
     pillFont: 14,
     pillMaxChars: 20,
+    showDate: true,
     deleteMergedBranches: true,
   });
 });
@@ -124,7 +126,7 @@ test("badge text tracks the pill size, with a floor of its own", () => {
   assert.equal(badgeFontFor(8), 7);
 });
 
-test("a stored pill length outside the slider's range is pulled back into it", () => {
+test("parseConfig clamps a stored pill length into the slider's range", () => {
   assert.equal(parseConfig({ pillMaxChars: 2 }).pillMaxChars, 12);
   assert.equal(parseConfig({ pillMaxChars: 500 }).pillMaxChars, 48);
   assert.equal(
@@ -133,14 +135,7 @@ test("a stored pill length outside the slider's range is pulled back into it", (
   );
 });
 
-/**
- * The cap reaches CSS in `ch`, not pixels.
- *
- * A pill is monospace at one size and a badge proportional at another, and `1ch` is resolved
- * against the element the property is read on rather than the `:root` it is written to — so
- * one number caps each at its own characters. Pixels would need two values and would not
- * follow the pill slider.
- */
+/** Covers the `ch` contract `pillMaxWidth` documents, including its off position. */
 test("the pill cap reaches CSS as characters, and the top of the range turns it off", () => {
   assert.equal(pillMaxWidth(24), "24ch");
   assert.equal(pillMaxWidth(12), "12ch");

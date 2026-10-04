@@ -438,6 +438,97 @@ test("a Config choice survives a reload", async ({ smartlog }) => {
 });
 
 /**
+ * The commit date, which only commit rows carry.
+ *
+ * The fixture's commits are all years old, so every row here shows a date rather than an age.
+ * `commitDate.mts` says why the format caps at a day, and `webview-commit-date.test.mjs`
+ * covers each boundary of the relative half against an explicit `now`.
+ */
+test("the date setting prints each commit's date beside its hash", async ({
+  smartlog,
+  snapshot,
+}) => {
+  await expect(smartlog.locator("#tree .commitdate")).toHaveCount(0);
+
+  await smartlog.locator("#btn-config").click();
+  await smartlog.locator('#seg-showdate button[data-showdate="on"]').click();
+  await smartlog.locator("#btn-config-close").click();
+
+  const dates = smartlog.locator("#tree .commitdate");
+  // One per commit row, and none on the trunk tip, the bases, or the hidden-commit rows.
+  await expect(dates).toHaveCount(
+    await smartlog.locator("#tree .row[data-sha]").count()
+  );
+  for (const text of await dates.allInnerTexts()) {
+    expect(text).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  }
+
+  // Beside the hash rather than anywhere else on the row, which is what was asked for.
+  const row = smartlog.locator("#tree .row", {
+    hasText: "feat(pad): add padStart",
+  });
+  const sha = present(await row.locator(".sha").boundingBox(), "the sha's box");
+  const date = present(
+    await row.locator(".commitdate").boundingBox(),
+    "the date's box"
+  );
+  expect(date.x).toBeGreaterThan(sha.x + sha.width);
+  // Beside it rather than under it, which a wrapped row would otherwise satisfy.
+  expect(Math.abs(date.y - sha.y)).toBeLessThan(2);
+  await snapshot("commit-dates");
+});
+
+/**
+ * The other half of the format, which the fixture's own commits can never show.
+ *
+ * A commit made during the test is the only way to reach the relative form end to end. The
+ * assertion allows either wording a commit under a minute old can carry, so the machine's own
+ * speed cannot fail it. It still pins the behaviour: recent work reads as an age, not as
+ * today's date.
+ */
+test("a commit made moments ago reads as an age, not a date", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  await smartlog.locator("#btn-config").click();
+  await smartlog.locator('#seg-showdate button[data-showdate="on"]').click();
+  await smartlog.locator("#btn-config-close").click();
+
+  await demoRepository.git(["checkout", "trim-utils"]);
+  await writeFile(join(demoRepository.path, "NOW.md"), "fresh\n");
+  await demoRepository.git(["add", "NOW.md"]);
+  // `--date=now` against the fixture's pinned `GIT_AUTHOR_DATE`, which every other git call
+  // here uses: a wall-clock date changes the sha, and a baseline that recorded one drifted
+  // until it failed. This test records no snapshot, and a pinned date is the one thing it
+  // cannot use, because the row reads the author date and an age needs a current one.
+  await demoRepository.git([
+    "commit",
+    "--date=now",
+    "-m",
+    "test: a commit from just now",
+  ]);
+  await reopen(smartlog);
+
+  const row = smartlog.locator("#tree .row", {
+    hasText: "test: a commit from just now",
+  });
+  await expect(row.locator(".commitdate")).toHaveText(
+    /^(just now|\d+ seconds ago)$/
+  );
+});
+
+test("the date setting survives a reload", async ({ smartlog }) => {
+  await smartlog.locator("#btn-config").click();
+  await smartlog.locator('#seg-showdate button[data-showdate="on"]').click();
+  await expect(smartlog.locator("#tree .commitdate").first()).toBeVisible();
+
+  await smartlog.reload();
+  await smartlog.waitForSelector(".row");
+
+  await expect(smartlog.locator("#tree .commitdate").first()).toBeVisible();
+});
+
+/**
  * Rows that overlap their neighbour, or whose content spills out of their own box.
  *
  * The bug behind this measurement is invisible to a unit test and easy to miss in a
@@ -575,8 +666,8 @@ test("the wrap choice survives a reload", async ({ smartlog }) => {
   await expect(smartlog.locator("body")).toHaveClass(/wrap-rows/);
 });
 
-/** Thirty-one characters, which is the length the complaint about clipping was about. */
-const LONG_BRANCH = "feature/a-thirty-character-name";
+/** Thirty-one characters, well past the cap's 24-character default. */
+const LONG_BRANCH = "feature/a-branch-name-this-long";
 
 /**
  * The narrowest tree there is, holding a branch long enough to fill a row on its own.
@@ -598,11 +689,11 @@ async function starveTreeWithLongBranch(page, repository) {
 }
 
 /**
- * Rows whose content wants more width than the row gives it.
+ * Rows whose content overflows the width the row gives it.
  *
- * Every assertion below is about what a *starved* row does, so each one checks this first.
- * Without it they all pass on a tree with room to spare, which is the state the default
- * viewport is in.
+ * Every assertion below is about what a *starved* row does, so each test calls
+ * `starvedRowCount` first. On a tree with room to spare every one of them passes regardless,
+ * and the default viewport is that tree.
  *
  * @param {import("@playwright/test").Page} page
  */
@@ -652,11 +743,11 @@ test("a starved tree keeps every Goto inside its own row", async ({
 /**
  * Where a wrapped row's extra height came from.
  *
- * The Goto button is invisible until the row is hovered but laid out either way, and it used
- * to be the last item inside the wrapping content — so on 12 rows of 21 it took a flex line
- * to itself and grew the row by a band of nothing. Counting lines that hold no visible item
- * names that exactly, and needs no tolerance: a row's own height is a bad proxy, because a
- * subject wrapping inside one flex line makes that line legitimately taller than a row.
+ * The Goto button is invisible until the row is hovered, and laid out either way. As the last
+ * item inside the wrapping content it took a flex line to itself on 12 rows of 21, growing
+ * each by one row-height of empty space. This test counts lines holding no visible item, which
+ * needs no tolerance. A row's own height is a bad proxy, because a subject wrapping inside one
+ * flex line makes that line legitimately taller than a row.
  */
 test("wrapping gives no row a line that holds nothing visible", async ({
   demoRepository,
@@ -706,9 +797,11 @@ test("wrapping gives no row a line that holds nothing visible", async ({
  * The rail dot against the pills beside it.
  *
  * The dot is drawn at the middle of the row's first `--row-height`, so that is where the
- * first line of content has to be. Wrapping broke both halves of that: 2px of top padding
- * pushed every row's content down, and a first flex line only as tall as its tallest pill
- * left the dot 4px low — up to 40px adrift on a row whose subject wrapped away from it.
+ * first line of content has to be. **Wrap onto more lines** broke both halves:
+ *
+ *   - 2px of top padding pushed every row's content down.
+ *   - A first flex line only as tall as its tallest pill left the dot 4px low, and up to 40px
+ *     away on a row whose subject wrapped off the first line.
  */
 test("a wrapped row keeps its dot on the line its pills are on", async ({
   demoRepository,
@@ -742,9 +835,9 @@ test("a wrapped row keeps its dot on the line its pills are on", async ({
  * The character cap, which is the only thing that keeps a long branch name from taking the
  * row its commit message needed.
  *
- * Checked both ways round. Clipping alone would also be produced by the row's own overflow,
- * so the same pill is measured with the cap at its off position: unclipped there, clipped at
- * the default, which is the cap doing it and not the width.
+ * Checked both ways round, because the row's own overflow clips a pill too. This measures the
+ * same pill twice: unclipped with the cap off, clipped at the default. The cap is doing it, not
+ * the width.
  */
 test("the character cap clips a long branch pill, and the top of its range does not", async ({
   demoRepository,

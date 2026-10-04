@@ -26,6 +26,8 @@ export type Config = {
   pillMaxChars: number;
   wrapRows: boolean;
   fileClick: FileClick;
+  /** Print when each commit was made, beside its hash. `commitDate.mts` owns the wording. */
+  showDate: boolean;
   /** Delete a local branch once its pull request merges at the branch's tip. */
   deleteMergedBranches: boolean;
 };
@@ -40,14 +42,15 @@ export const CONFIG_DEFAULTS: Config = {
   pillMaxChars: 24,
   wrapRows: false,
   fileClick: "file",
+  showDate: false,
   deleteMergedBranches: false,
 };
 
 export const TEXT_FONT_RANGE = { min: 10, max: 20 } as const;
 export const PILL_FONT_RANGE = { min: 8, max: 18 } as const;
 /**
- * The cap's range. Twelve characters is about two words, which is the least that tells one
- * branch from another; the ceiling is the off position rather than a wide cap.
+ * The cap's range. Twelve characters is about two words, which is the least that distinguishes
+ * one branch from another; the ceiling is the off position rather than a wide cap.
  */
 export const PILL_MAX_CHARS_RANGE = { min: 12, max: 48 } as const;
 
@@ -73,6 +76,9 @@ export function parseConfig(stored: unknown): Config {
   }
   if (typeof fields.wrapRows === "boolean") {
     config.wrapRows = fields.wrapRows;
+  }
+  if (typeof fields.showDate === "boolean") {
+    config.showDate = fields.showDate;
   }
   if (typeof fields.deleteMergedBranches === "boolean") {
     config.deleteMergedBranches = fields.deleteMergedBranches;

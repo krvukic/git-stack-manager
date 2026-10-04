@@ -3,6 +3,16 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-10-04
+
+### Added
+
+- **Commit date** in **Config** prints when each commit was made, beside its hash. Work from
+  the last day reads as an age — *20 seconds ago*, *5 minutes ago*, *2 hours ago* — and
+  anything older as its date, `2026-10-04`: the two questions are different, and a count of
+  months is a number nobody can turn back into a day. Off by default. Only commit rows carry
+  one, since the trunk and base rows are drawn for position rather than for their contents.
+
 ## [0.19.0] - 2026-10-04
 
 ### Added

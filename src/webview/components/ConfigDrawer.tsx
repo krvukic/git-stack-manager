@@ -1,10 +1,9 @@
 /**
- * The Config drawer: where the pills sit, how large and how long they are, what a file name
- * click does, whether rows wrap, and whether merged branches are deleted.
+ * The Config drawer: every preference the reader can set over the tree.
  *
- * Every choice here is a preference rather than a repository fact, which is why they live in
- * stored webview state and not in VS Code's settings — `model/config.mjs` owns the shape and
- * says why it outlives the page.
+ * Each choice is a preference rather than a repository fact, so `storage.ts` keeps it in
+ * webview state rather than in VS Code's settings. `model/config.mjs` owns the shape, and says
+ * why a choice has to outlive the page.
  */
 import { classes } from "../classes";
 import {
@@ -76,9 +75,9 @@ function Segmented<T extends string>({
 /**
  * A slider and the value it is on.
  *
- * The caller formats that value rather than the slider appending a unit, because the
- * character cap has an off position: at the top of its range it reads *No limit*, which is
- * what the slider is actually set to and not a number of anything.
+ * `readout` arrives formatted, and `Slider` appends no unit of its own. The character cap is
+ * why: at the top of its range it reads *No limit* rather than a number, which no appended
+ * unit could produce.
  */
 function Slider({
   id,
@@ -199,6 +198,25 @@ export function ConfigDrawer({
           this view opens and when Refresh PRs runs — not on its own while it
           sits open. Clear merged in the top bar sweeps on demand, whichever way
           this is set, and names every branch it kept.
+        </Hint>
+      </Group>
+      <Group>
+        <GroupLabel>Commit date</GroupLabel>
+        <Segmented
+          id="seg-showdate"
+          attribute="showdate"
+          value={config.showDate ? "on" : "off"}
+          options={[
+            { value: "off", label: "Hide" },
+            { value: "on", label: "Show beside the hash" },
+          ]}
+          onChange={choice => onChange({ showDate: choice === "on" })}
+        />
+        <Hint>
+          Work from the last day reads as an age — 20 seconds ago, 5 minutes
+          ago, 2 hours ago — and anything older as its date, because a count of
+          months is a number nobody can turn back into a day. Only commit rows
+          carry a date; the trunk and base rows are drawn for position.
         </Hint>
       </Group>
       <Group>

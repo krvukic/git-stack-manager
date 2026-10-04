@@ -53,6 +53,10 @@ Run `just init-repo` once, then pick a host:
   truncates what will not fit, so every row is the same height; wrapping grows the row to match,
   which matters most once the commit panel has taken most of the width. Text and pill sizes scale
   independently, and the row height follows the text. Choices persist per repository.
+- **Commit date**, also in **Config**, prints when each commit was made beside its hash. Work from
+  the last day reads as an age — *20 seconds ago*, *5 minutes ago*, *2 hours ago* — and anything
+  older as its date, `2026-10-04`, because a count of months is a number nobody can turn back into
+  a day. Only commit rows carry one; the trunk and base rows are there for position.
 - **Branch pill and badge length**, also in **Config**, caps how many characters a pill or badge
   shows. A thirty-character branch name and the `diverged` badge repeating it can take a narrow row
   entirely, leaving nothing for the commit message; the cap clips both and keeps the full name on

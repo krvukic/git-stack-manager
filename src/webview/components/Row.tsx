@@ -34,6 +34,22 @@ function Sha({ value }: { value: string }) {
   );
 }
 
+/**
+ * When the commit was made, beside its hash, while the Config setting asks for it.
+ *
+ * The text arrives finished rather than being formatted here, because `CommitRow` is memoised
+ * and the age depends on the clock as well as on the commit: a `now` prop would change on
+ * every render and cost every row its rails. `Tree` holds the one clock read and passes a
+ * string, which is stable for the years-old commits that are most of a tree.
+ */
+function CommitDate({ label }: { label: string }) {
+  return (
+    <span className="commitdate flex-none font-[monospace] text-sha leading-none text-muted">
+      {label}
+    </span>
+  );
+}
+
 type RowShellProps = {
   layout: GraphLayout;
   rowIndex: number;
@@ -45,10 +61,8 @@ type RowShellProps = {
   onClick?: () => void;
   onContextMenu?: (event: React.MouseEvent) => void;
   /**
-   * The row's action, kept out of `children` so it sits beside the content rather than in
-   * it. A control inside the content competes with pills that cannot shrink: the stylesheet
-   * clips whatever does not fit on one line, and wraps it onto a line of its own when the
-   * reader asks for wrapping. Neither is survivable for the only way to check a branch out.
+   * The row's action, rendered beside the content rather than inside it. `graph.css` says
+   * what the clipped content does to a control placed in it.
    */
   trailing?: React.ReactNode;
   children: React.ReactNode;
@@ -123,6 +137,8 @@ type CommitRowProps = {
   isSelected: boolean;
   /** `gsm.onlyMyCommits`: dim a commit somebody else wrote. */
   dimForeign: boolean;
+  /** When the commit was made, or empty while the Config setting hides it. */
+  dateLabel: string;
   onSelect: (commit: UICommit) => void;
   onContextMenu: (event: React.MouseEvent, commit: UICommit) => void;
   onGoto: (commit: UICommit) => void;
@@ -144,6 +160,7 @@ export const CommitRow = memo(function CommitRow({
   rowHeight,
   isSelected,
   dimForeign,
+  dateLabel,
   onSelect,
   onContextMenu,
   onGoto,
@@ -204,6 +221,7 @@ export const CommitRow = memo(function CommitRow({
         {commit.subject}
       </span>
       <Sha value={commit.shortSha} />
+      {dateLabel ? <CommitDate label={dateLabel} /> : null}
       {commit.isHead ? <YouAreHere /> : null}
     </RowShell>
   );

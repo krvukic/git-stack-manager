@@ -30,7 +30,7 @@
     display: flex;
     align-items: center;
     flex-wrap: nowrap;
-    /* Column only, so the wrapping block below is the one place that decides how far apart
+    /* Column only, so the wrapping block below is the one place that sets how far apart
        two lines of the same row sit. `gap` set both, which made a wrapped row's own lines
        8px apart while neighbouring rows touched — the grouping a reader needs, inverted. */
     column-gap: 8px;
@@ -57,8 +57,8 @@
     flex: 0 1 auto;
     min-width: 0;
   }
-  /* The one marker saying which row you are on, so it has to survive a tree too narrow for
-     the row. Pinned to the clipped edge rather than carried out to Goto's slot, because it
+  /* The one marker that names the row you are on, so it has to survive a tree too narrow
+     for the row. Pinned to the clipped edge rather than carried out to Goto's slot, because it
      describes the commit and reads as part of the row's text; the pills clip under it.
      `overflow: hidden` on the content is itself the scrollport this sticks to, which is why
      it needs no positioned ancestor of its own. */
@@ -69,14 +69,16 @@
   /**
    * Goto's own slot, outside the clipped content.
    *
-   * Goto is an action rather than part of the commit's description, and it is reached by
-   * hovering the row — so it has to be *there* to hover. Inside `.content` it was the last
-   * flex item behind pills that cannot shrink, which cost it both ways: a 433px tree clipped
-   * it away on 7 rows of 21, and the wrapping mode gave it a flex line of its own on 12,
-   * growing those rows by a row-height of blank strip for an invisible button.
+   * Goto is an action rather than part of the commit's description, and hovering the row is
+   * how a reader reaches it. Inside `.content` it was the last flex item behind pills that
+   * cannot shrink, which broke it two ways:
    *
-   * One row tall and top-aligned, so a wrapped row keeps it beside its first line and its own
-   * dot instead of floating it down the middle of three.
+   *   - A 433px tree clipped it away, on 7 rows of 21.
+   *   - **Wrap onto more lines** gave it a flex line of its own, on 12 of 21, growing those
+   *     rows by a row-height of empty space for an invisible button.
+   *
+   * One row tall and top-aligned, so on a wrapped row it stays beside the first line and
+   * that row's own dot rather than floating down the middle of three.
    */
   .row .trailing {
     display: flex;
@@ -94,10 +96,8 @@
    * cap is set as a number of characters, not pixels, because the limit a reader wants is
    * "about this many letters" at whatever size the pill slider is on.
    *
-   * `1ch` is resolved against the element that *uses* the property, not the `:root` that
-   * declares it, so one number caps the monospace pill and the proportional badge each at its
-   * own characters. The pull request badge is left out: `#206 ✓ ✓` has nothing to clip but the
-   * glyphs that are the point of it.
+   * `pillMaxWidth` emits the value and says why its unit is `ch`. This rule skips the pull
+   * request badge: `#206 ✓ ✓` has nothing to clip but the glyphs that are the point of it.
    */
   .row .pill,
   .row .badge {
@@ -115,16 +115,14 @@
    * Wrapping, in one block.
    *
    * Every rule the mode changes lives here, because the last bug in it was a rule left behind
-   * somewhere else: `flex-wrap: nowrap` and `overflow: hidden` stayed in force while `height`
-   * went to `auto`, so 25 of 28 rows laid their second line out *outside* their own box and
-   * painted it over the row below. `LEARNINGS.md` carries that investigation. A reader can now
-   * check the mode by reading one block rather than by finding five.
+   * somewhere else. `flex-wrap: nowrap` and `overflow: hidden` stayed set while `height` became
+   * `auto`, so 25 of 28 rows laid their second line out *outside* their own box and painted it
+   * over the row below. `LEARNINGS.md` carries that investigation.
    *
-   * The two gaps are what makes a wrapped row readable, and they have to disagree: lines of
-   * one row sit tighter than two rows do, or nothing reads as grouped. They used to be the
-   * other way round — 8px within a row, 4px between two. The first-line pin supplies the
-   * within-row air, so `row-gap` adds none, and the separation between rows is a quarter of a
-   * row, which follows the text size.
+   * The two gaps have to differ, or a wrapped row stops reading as one group. The gap inside a
+   * row used to be the larger of the two, at 8px against 4px between rows. The first-line pin
+   * now supplies the leading inside a row, so `row-gap` adds none, and a quarter of a row
+   * separates two rows — which follows the text size.
    */
   body.wrap-rows .row {
     /* Bottom only. Padding at the top would push the content down the row while the rail SVG
@@ -269,7 +267,10 @@
     flex: 0 1 auto;
     min-width: 0;
   }
-  body.pills-right .row .content .sha {
+  /* The date takes the sha's own order, and document order then places it second.
+     Without one it would default to 0 and jump ahead of the subject. */
+  body.pills-right .row .content .sha,
+  body.pills-right .row .content .commitdate {
     order: 2;
   }
   body.pills-right .row .content .youarehere {

@@ -36,8 +36,8 @@ export type LogEntry = CommandLog & { id: number };
  * What the commit form holds between keystrokes.
  *
  * `branch` is a branch to start for the commit. Empty means "extend the branch HEAD is on",
- * which is what a stack wants; the form insists on a name only where the host would refuse
- * the commit without one, and `model.commitNeedsBranch` says when that is.
+ * which is what building a stack does; the form insists on a name only where the host would
+ * refuse the commit without one, which `model.commitNeedsBranch` reports.
  */
 export type CommitDraft = { subject: string; body: string; branch: string };
 
@@ -51,6 +51,15 @@ export type SmartlogState = {
   /** Paths the next commit or amend takes. */
   pickedPaths: Set<string>;
   commitDraft: CommitDraft;
+  /**
+   * When the model on screen was read, as a timestamp, or 0 before the first one arrives.
+   *
+   * Recorded on adoption rather than read where it is used: a commit's age belongs to the
+   * data it describes, and `Date.now()` in a render would make that render impure. The
+   * enrichment paths below leave it alone — a pull request status arriving does not make the
+   * commits any younger.
+   */
+  modelReadAt: number;
   pullRequestsLoading: boolean;
   /** How far a fetch in progress has gotten, for a stack with enough branches to show it. */
   pullRequestProgress: { done: number; total: number } | null;
@@ -68,6 +77,7 @@ export function useSmartlog() {
     body: "",
     branch: "",
   });
+  const [modelReadAt, setModelReadAt] = useState(0);
   const [pullRequestsLoading, setPullRequestsLoading] = useState(false);
   const [pullRequestProgress, setPullRequestProgress] = useState<{
     done: number;
@@ -146,6 +156,7 @@ export function useSmartlog() {
   const adoptModel = useCallback(
     (next: RenderModel) => {
       syncSelection(next.uncommitted);
+      setModelReadAt(Date.now());
       setModel(next);
     },
     [syncSelection]
@@ -361,6 +372,7 @@ export function useSmartlog() {
     toggleAllPicked,
     commitDraft,
     setCommitDraft,
+    modelReadAt,
     pullRequestsLoading,
     pullRequestProgress,
     loadModel,

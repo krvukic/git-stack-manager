@@ -262,6 +262,7 @@ export default typescriptEslint.config(
             "^chip$",
             "^chooselines$",
             "^code$",
+            "^commitdate$",
             "^content$",
             "^dffile$",
             "^dfhunk$",

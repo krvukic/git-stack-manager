@@ -9,6 +9,7 @@ import type { RenderModel, UICommit } from "#ui/renderModel";
 import { useLayoutEffect, useMemo } from "react";
 import { layoutGraph } from "../graph/layout.mjs";
 import { LANE_WIDTH } from "../graph/rails.mjs";
+import { commitDateLabel } from "../model/commitDate.mjs";
 import { EmptyState } from "./Field";
 import { BaseRow, CommitRow, EllipsisRow, TrunkTipRow } from "./Row";
 
@@ -17,6 +18,8 @@ export function Tree({
   rowHeight,
   selectedSha,
   dimForeign,
+  showDate,
+  readAt,
   onSelect,
   onContextMenu,
   onGoto,
@@ -28,6 +31,13 @@ export function Tree({
   rowHeight: number;
   selectedSha: string | null;
   dimForeign: boolean;
+  /** Print when each commit was made, beside its hash. */
+  showDate: boolean;
+  /**
+   * When the model on screen was read, which every commit's age is measured against.
+   * `useSmartlog` records it, and says why it is not read here.
+   */
+  readAt: number;
   onSelect: (commit: UICommit) => void;
   onContextMenu: (event: React.MouseEvent, commit: UICommit) => void;
   onGoto: (commit: UICommit) => void;
@@ -74,6 +84,9 @@ export function Tree({
               rowHeight={rowHeight}
               isSelected={row.commit.sha === selectedSha}
               dimForeign={dimForeign}
+              dateLabel={
+                showDate ? commitDateLabel(row.commit.date, readAt) : ""
+              }
               onSelect={onSelect}
               onContextMenu={onContextMenu}
               onGoto={onGoto}

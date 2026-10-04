@@ -337,6 +337,8 @@ export function App({ settings }: { settings: HostSettings }) {
               rowHeight={rowHeight}
               selectedSha={selectedSha}
               dimForeign={settings.onlyMyCommits}
+              showDate={config.showDate}
+              readAt={smartlog.modelReadAt}
               onSelect={commit => setSelectedSha(commit.sha)}
               onContextMenu={(event, commit) => {
                 event.preventDefault();
