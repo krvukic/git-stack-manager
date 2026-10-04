@@ -9,7 +9,7 @@
  * The split panel is here because the menu is the only way in. These cover the choosing;
  * applying a split, and the two commits it leaves behind, is in `operations.spec.mjs`.
  */
-import { expect, test } from "./fixtures/demoRepo.mjs";
+import { expect, reopen, test } from "./fixtures/demoRepo.mjs";
 import { expectToast, selectCommit } from "./fixtures/interactions.mjs";
 
 test("right-clicking a stacked commit lists its rebase destinations", async ({
@@ -140,6 +140,92 @@ test("Escape closes the menu before the panel underneath it", async ({
   // Only once the menu is gone does Escape reach the selection it was covering.
   await smartlog.keyboard.press("Escape");
   await expect(smartlog.locator("#sidebar.open")).toBeHidden();
+});
+
+/**
+ * Copy commit hash, and what lands on the clipboard.
+ *
+ * The full forty characters, where the row prints eight. Asserting the clipboard rather than
+ * the toast is the point: a toast naming the short sha would read identically whether the
+ * write carried the whole thing, the eight characters on screen, or nothing at all.
+ *
+ * Playwright withholds clipboard access until it is granted, which the real hosts have by
+ * default — a VS Code webview and a page served from localhost are both permitted.
+ */
+test("Copy commit hash puts the whole sha on the clipboard", async ({
+  context,
+  demoRepository,
+  smartlog,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const sha = await demoRepository.git(["rev-parse", "case-utils"]);
+
+  await smartlog
+    .getByText("feat(case): add snakeCase")
+    .click({ button: "right" });
+  await smartlog.getByText("Copy commit hash").click();
+
+  await expectToast(smartlog, `Copied ${sha.slice(0, 8)} ✓`);
+  expect(await smartlog.evaluate(() => navigator.clipboard.readText())).toBe(
+    sha
+  );
+  expect(sha).toHaveLength(40);
+});
+
+/**
+ * The two rows where the rest of the menu is not what it usually is.
+ *
+ * On the HEAD row there is no Goto, so Copy is what opens the first section; a separator
+ * there instead would put a hairline straight under the heading. Mid-conflict the menu stops
+ * after one entry and explains itself, and reading a sha is as safe then as at any other
+ * time — which is when a reader most wants to quote one.
+ */
+test("Copy commit hash is offered on the HEAD row and mid-conflict", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  const menu = smartlog.locator("#menu");
+  // Tall enough that the tree never scrolls, which keeps a dismissal out of the way rather
+  // than being incidental: the conflict banner shortens the tree, and a right-click that
+  // opens the commit panel then re-clamps the tree's scroll — which this menu closes on. That
+  // is a real defect and predates this entry; it is not what these assertions are about.
+  await smartlog.setViewportSize({ width: 1400, height: 1400 });
+  await demoRepository.git(["checkout", "case-utils"]);
+  await reopen(smartlog);
+
+  await smartlog
+    .getByText("feat(case): add snakeCase")
+    .click({ button: "right" });
+  await expect(
+    menu.locator(".item", { hasText: "Copy commit hash" })
+  ).toHaveAttribute("title", /Copy the full sha, [0-9a-f]{40},/);
+  // Anchored, because `Delete branch case-utils — you have it checked out — Goto another
+  // commit first` carries the word too, and a substring match passes on that.
+  await expect(menu.locator(".item", { hasText: /^Goto$/ })).toHaveCount(0);
+  await smartlog.keyboard.press("Escape");
+
+  // truncate-words and trunk both rewrite the same line of src/truncate.js.
+  await smartlog
+    .getByText("feat(truncate): break at word boundaries")
+    .click({ button: "right" });
+  await smartlog.getByText(/^Rebase this commit onto origin\/main$/).click();
+  await smartlog.waitForSelector("#conflict.open");
+  // The toast, not just the banner. The banner appears with the model the rebase returned,
+  // and the tree re-laying out under an open menu scrolls it — which this menu closes on, by
+  // design. Waiting for the action to have fully landed is what stops that racing the click.
+  await expectToast(smartlog, "Rebase stopped on a conflict");
+  await smartlog
+    .getByText("feat(truncate): break at word boundaries")
+    .click({ button: "right" });
+
+  // One retrying assertion for both entries rather than two in sequence: a read taken
+  // between them can catch the menu either before React has filled it or after something
+  // dismissed it, and both were flaky. Anchored labels and a count of two name the pair.
+  await expect(
+    menu.locator(".item", {
+      hasText: /^(Copy commit hash|Rebase — finish the conflict first)$/,
+    })
+  ).toHaveCount(2);
 });
 
 test("the split panel lists a commit's changes as selectable hunks", async ({

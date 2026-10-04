@@ -1,6 +1,7 @@
 /**
  * Everything the tree's context menu and the commit panel can do to one commit: check it out,
- * rebase it, fold it, split it, reword it, submit it, or hand its stack to `gh stack`.
+ * copy its sha, rebase it, fold it, split it, reword it, submit it, or hand its stack to
+ * `gh stack`.
  *
  * The split panel's state lives here rather than in the component that draws it, because the
  * two halves of a split belong together: the preview is a read that only exists to be applied,
@@ -54,6 +55,37 @@ export function useCommitActions(smartlog: Smartlog) {
       );
     },
     [runAction, showToast]
+  );
+
+  /**
+   * Put the commit's full sha on the clipboard.
+   *
+   * Written from the webview rather than through a host action, unlike *Open file* and its
+   * neighbours. Only one side can do this in both hosts: the extension has
+   * `vscode.env.clipboard`, but the web host is a Node server with no clipboard of its own, so
+   * routing it would mean the browser doing it anyway — through two code paths instead of one.
+   *
+   * The full sha, where the row prints eight characters. Eight is enough to read and to type
+   * at a prompt; what a reader cannot get off the screen is the rest of it, and that is what a
+   * pull request body or a `git` argument elsewhere wants.
+   *
+   * The failure is reported rather than swallowed. A clipboard write needs a focused document
+   * and the browser's permission, and neither is this code's to guarantee — a silent no-op
+   * would leave the reader pasting whatever was on the clipboard before.
+   */
+  const copySha = useCallback(
+    async (commit: UICommit) => {
+      try {
+        await navigator.clipboard.writeText(commit.sha);
+      } catch {
+        showToast(
+          `Could not reach the clipboard. The full sha is ${commit.sha}.`
+        );
+        return;
+      }
+      showToast(`Copied ${commit.shortSha} ✓`, false);
+    },
+    [showToast]
   );
 
   const runRebase = useCallback(
@@ -365,6 +397,7 @@ export function useCommitActions(smartlog: Smartlog) {
     splitting: busy.has("split"),
     split,
     gotoCommit,
+    copySha,
     runRebase,
     runGhStack,
     adoptRemote,

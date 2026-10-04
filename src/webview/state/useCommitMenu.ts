@@ -17,6 +17,7 @@ import {
 
 export type CommitMenuActions = {
   onGoto: (commit: UICommit) => void;
+  onCopySha: (commit: UICommit) => void;
   onCheckoutBranch: (branch: string) => void;
   onGhStack: (payload: Record<string, unknown>, label: string) => void;
   onAdoptRemote: (branch: string) => void;
@@ -140,8 +141,20 @@ export function commitMenuItems(
   ];
 
   if (!commit.isHead) {
-    items.push({ label: "Goto", run: () => actions.onGoto(commit) });
+    // The separator closes Goto's section rather than opening Copy's, so the HEAD row — which
+    // has no Goto — does not get a hairline directly under the heading.
+    items.push(
+      { label: "Goto", run: () => actions.onGoto(commit) },
+      { separator: true }
+    );
   }
+  // Above the conflict return, because reading a sha off a stopped rebase is as safe as
+  // reading one off any other commit, and it is the state a reader most wants to quote.
+  items.push({
+    label: "Copy commit hash",
+    description: `Copy the full sha, ${commit.sha}, to the clipboard`,
+    run: () => actions.onCopySha(commit),
+  });
 
   if (model.conflict) {
     // A rebase already holds the working copy; starting another would fail deep inside git

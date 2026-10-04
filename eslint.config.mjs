@@ -89,6 +89,7 @@ const pageEvaluationGlobals = /** @type {const} */ ({
   window: "readonly",
   getComputedStyle: "readonly",
   HTMLElement: "readonly",
+  navigator: "readonly",
 });
 
 export default typescriptEslint.config(

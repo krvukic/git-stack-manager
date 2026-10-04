@@ -80,6 +80,9 @@ Run `just init-repo` once, then pick a host:
   such as `origin/main`, so its Goto carries the *local* branch tracking that ref: `git switch
   origin/main` would detach HEAD instead of putting you on main. Goto picks the branch that tracks
   trunk over one that only shares its name, so a local trunk under another name still works.
+- **Copy commit hash**, from the right-click menu beside Goto, puts the full forty-character sha
+  on the clipboard — the part a row cannot print. It works on every row, a stopped rebase
+  included.
 - The local trunk branch always has a place on the graph. While the branch is level with the trunk
   ref, the trunk row carries its pill. Once a fetch moves the ref on, the branch gets a row of its
   own on trunk, so "You are here" stays visible while you are on it.
