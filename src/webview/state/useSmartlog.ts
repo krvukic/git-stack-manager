@@ -100,22 +100,15 @@ export function useSmartlog() {
   /**
    * An error stays up longer than a success: a failure has to be readable after the eye
    * has left the button, and a confirmation does not.
-   *
-   * `milliseconds` overrides that for a success carrying more than a confirmation — the
-   * report *Clear merged* leaves behind names a branch per sentence, which three seconds
-   * is not enough to read.
    */
-  const showToast = useCallback(
-    (text: string, isError = true, milliseconds?: number) => {
-      setToast({ text, isError });
-      clearTimeout(toastTimer.current);
-      toastTimer.current = setTimeout(
-        () => setToast(null),
-        milliseconds ?? (isError ? 8_000 : 3_000)
-      );
-    },
-    []
-  );
+  const showToast = useCallback((text: string, isError = true) => {
+    setToast({ text, isError });
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(
+      () => setToast(null),
+      isError ? 8_000 : 3_000
+    );
+  }, []);
 
   /** Append the commands an action ran, skipping an action that ran none. */
   const appendLog = useCallback((entry: CommandLog | undefined) => {

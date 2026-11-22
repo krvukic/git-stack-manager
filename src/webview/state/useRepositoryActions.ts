@@ -12,21 +12,16 @@
  * that stopped has already moved refs, so the model on screen is stale whether it succeeded
  * or not.
  */
-import type { MergedBranch } from "#history/pruneMerged";
 import type { RenderModel } from "#ui/renderModel";
 import { useCallback } from "react";
-import { describeMergedDeletion } from "../model/mergedBranches.mjs";
 import { staleStackNote } from "../model/rebaseReport.mjs";
 import { rpc } from "../rpc";
 import { useBusy } from "./useBusy";
 import type { Smartlog } from "./useSmartlog";
 
-/** Long enough to read a branch name and its reason, which a plain confirmation is not. */
-const MERGED_REPORT_MILLISECONDS = 12_000;
-
 export function useRepositoryActions(smartlog: Smartlog) {
   const { appendLog, loadModel, runAction, showToast } = smartlog;
-  const { busy, whileBusy } = useBusy<"pull" | "continue" | "clearMerged">();
+  const { busy, whileBusy } = useBusy<"pull" | "continue">();
 
   const pull = useCallback(
     () =>
@@ -49,42 +44,6 @@ export function useRepositoryActions(smartlog: Smartlog) {
                   ? `Pulled ${data.commits} commit${data.commits > 1 ? "s" : ""} into ${data.branch} ✓`
                   : `${data.branch} is already up to date with ${data.upstream}`,
                 false
-              ),
-          }
-        )
-      ),
-    [runAction, showToast, whileBusy]
-  );
-
-  /**
-   * The top bar's Clear merged.
-   *
-   * Sends no branch names: the host refreshes pull request status, picks what qualifies, and
-   * answers with the branches it kept and why, so the report is phrased from the repository as
-   * the click found it rather than from the model on screen.
-   *
-   * Reports whatever came back, including a sweep that deleted nothing. The reader pressed a
-   * button, and a merged badge still sitting in the tree afterwards needs the sentence that
-   * explains it.
-   */
-  const clearMerged = useCallback(
-    () =>
-      whileBusy("clearMerged", () =>
-        runAction<{
-          deleted: string[];
-          kept: MergedBranch[];
-          model: RenderModel;
-        }>(
-          "clearMergedBranches",
-          {},
-          {
-            modelFrom: data => data.model,
-            reloadOnError: true,
-            onSuccess: data =>
-              showToast(
-                describeMergedDeletion(data.deleted, data.kept),
-                false,
-                MERGED_REPORT_MILLISECONDS
               ),
           }
         )
@@ -215,9 +174,7 @@ export function useRepositoryActions(smartlog: Smartlog) {
   return {
     pulling: busy.has("pull"),
     continuing: busy.has("continue"),
-    clearingMerged: busy.has("clearMerged"),
     pull,
-    clearMerged,
     gotoTrunk,
     gotoBranch,
     undoLast,

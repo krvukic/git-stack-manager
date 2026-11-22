@@ -13,9 +13,8 @@
  * because `update-ref` refuses to delete a ref whose value is not the one it was given.
  *
  * Every branch it keeps carries the reason, because a merged badge next to a branch that
- * stays otherwise reads as a broken setting. The reason is written once here and shown
- * wherever the reader asks: the top bar's *Clear merged* tooltip, and the toast that button
- * leaves behind.
+ * stays otherwise reads as a broken setting. The reason is written once here, on
+ * `RenderModel.mergedBranches`.
  */
 import { errorMessage, shortSha } from "#core/values";
 import { GitRunner } from "#git/runner";
@@ -124,8 +123,7 @@ async function deleteRefs(
  *
  * An explicit name list lets the automatic path skip one Undo brought back: it asks for the
  * branches it has not asked for before, so nothing deletes a hand-restored branch again when the
- * next pull request merges. A null list takes every branch that qualifies, which is what
- * *Clear merged* asks for. Skips a requested branch that no longer qualifies rather than refusing
+ * next pull request merges. Skips a requested branch that no longer qualifies rather than refusing
  * it: the rule is the host's, and the request may predate a commit on it.
  *
  * One `update-ref --stdin` batch in the ordinary case, and one call per branch only after that
@@ -142,13 +140,13 @@ export async function deleteMergedBranches(
   git: GitRunner,
   snapshot: RawData,
   pullRequests: Map<string, PullRequestStatus>,
-  requested: string[] | null
+  requested: string[]
 ): Promise<MergedDeletion> {
   const merged = mergedBranches(snapshot, pullRequests);
   const kept = merged.filter(branch => branch.keptReason);
-  const wanted = requested ? new Set(requested) : null;
+  const wanted = new Set(requested);
   const targets = merged.filter(
-    branch => !branch.keptReason && (!wanted || wanted.has(branch.name))
+    branch => !branch.keptReason && wanted.has(branch.name)
   );
   const deleted: string[] = [];
   if (targets.length) {

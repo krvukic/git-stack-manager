@@ -3,6 +3,16 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-11-22
+
+### Removed
+
+- **Clear merged** in the top bar. **Auto-remove merged commits** in **Config** deletes the same
+  branches when the view opens and when **Refresh** runs, so a Refresh with that setting on does
+  what the button did. With the setting off, **Delete branch** in a commit's right-click menu
+  removes one branch at a time. Nothing lists the merged branches that stay, or the reason each
+  one stays, which the button's tooltip did.
+
 ## [1.2.0] - 2026-11-22
 
 ### Added

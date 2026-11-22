@@ -214,8 +214,7 @@ export function ConfigDrawer({
         <Hint>
           Removal runs when the tree learns a pull request merged, which is when
           this view opens and when Refresh runs — not on its own while it sits
-          open. Clear merged in the top bar sweeps on demand, whichever way this
-          is set, and names every branch it kept.
+          open.
         </Hint>
       </Group>
       <Group>

@@ -74,11 +74,8 @@ Run `just init-repo` once, then pick a host:
   or a fast-forward is already on trunk, so the tree never drew it and the removal skips it. The
   removal runs on the reads that bring pull request status in: when the view opens, and when
   **Refresh** runs — never on a timer of its own while the panel sits open.
-- **Clear merged** removes merged branches on demand, whichever way that setting stands. It
-  re-reads pull request status, deletes every branch that qualifies, and then names each branch it
-  kept with the reason: amended past the commit that merged, checked out here, held by another
-  worktree, or a stopped rebase. The button is absent until a branch in the tree carries a merged
-  pull request, and its count names only the branches the click would delete.
+  With the setting off, **Delete branch** in a commit's right-click menu removes one branch at a
+  time.
 - Double-click the bottom-right corner of the sidebar's **description** box to fit it to the
   message, and double-click again to restore its starting height. Dragging that corner still resizes
   by hand, and double-clicking anywhere else still selects a word. The box keeps whatever height you

@@ -258,9 +258,7 @@ export function App({ settings }: { settings: HostSettings }) {
         pullRequestsLoading={smartlog.pullRequestsLoading}
         pullRequestProgress={smartlog.pullRequestProgress}
         pulling={repository.pulling}
-        clearingMerged={repository.clearingMerged}
         onPull={() => void repository.pull()}
-        onClearMerged={() => void repository.clearMerged()}
         onUndo={() => void repository.undoLast()}
         onRefresh={() => void smartlog.refresh()}
         onToggleLog={toggleLog}

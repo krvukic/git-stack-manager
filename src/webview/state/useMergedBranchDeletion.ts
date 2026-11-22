@@ -5,8 +5,8 @@
  * and only for the ones the host reports as deletable. Each branch is asked for once at each
  * commit, and that memory is stored, so it holds across reloads: a branch the host then keeps
  * is not asked for again on every poll, and a branch Undo brought back stays, because the
- * reader who pressed Undo wanted it. Turning the setting off clears that memory; the top bar's
- * *Clear merged* ignores it outright, which is the other way to ask a second time.
+ * reader who pressed Undo wanted it. Turning the setting off clears that memory, which is the
+ * way to ask a second time.
  *
  * The memory is written when the request answers, not before it. Written first, a request that
  * failed left every branch in it remembered and therefore never retried — the branch stayed in
@@ -75,11 +75,10 @@ export function useMergedBranchDeletion(smartlog: Smartlog, enabled: boolean) {
             memory.add(askedKey(branch));
           }
           storeAskedMergedBranches(memory);
-          // No kept branches passed, so this reports only what went. Automatic removal is
-          // not the place to name a branch the reader did not ask about; *Clear merged*,
-          // which they pressed, is.
+          // Only what went. Automatic removal is not the place to name a branch the reader
+          // did not ask about.
           if (data.deleted.length) {
-            showToast(describeMergedDeletion(data.deleted, []), false);
+            showToast(describeMergedDeletion(data.deleted), false);
           }
         },
       }
