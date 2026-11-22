@@ -706,52 +706,6 @@ test("rebasing a stack onto trunk moves every branch in it", async ({
   await snapshot("after-rebase-stack");
 });
 
-test("Restack all stacks onto trunk lands every local stack on the trunk tip", async ({
-  demoRepository,
-  smartlog,
-  snapshot,
-}) => {
-  // truncate-words is built to conflict with trunk, which is the next test.
-  // Dropping it here isolates the all-clean path.
-  await demoRepository.git(["branch", "-D", "truncate-words"]);
-  const trunkTip = await demoRepository.git(["rev-parse", "origin/main"]);
-  await reopen(smartlog);
-  await smartlog.locator("#btn-restack").click();
-  await expectToast(smartlog, "Restacked:");
-
-  // Every stack bottom now sits directly on the tip, so nothing is hidden between
-  // the trunk row and the stacks above it.
-  for (const bottom of [
-    "case-utils~1",
-    "mask-utils",
-    "parse-utils",
-    "escape-html",
-    "wip-titlecase~1",
-    "fix-slugify-unicode~1",
-  ]) {
-    expect(await demoRepository.git(["rev-parse", `${bottom}^`])).toBe(
-      trunkTip
-    );
-  }
-  expect(await demoRepository.git(["status", "--porcelain"])).toBe("");
-  await snapshot("after-restack");
-});
-
-test("Restack stops on the branch that conflicts with trunk", async ({
-  demoRepository,
-  smartlog,
-  snapshot,
-}) => {
-  await smartlog.locator("#btn-restack").click();
-  await smartlog.waitForSelector("#conflict.open");
-  await expectToast(smartlog, "Restack stopped on a conflict");
-
-  expect(await demoRepository.git(["status", "--porcelain"])).toContain(
-    "UU src/truncate.js"
-  );
-  await snapshot("restack-conflict");
-});
-
 test("a conflicting rebase stops with the banner, and aborting restores the commits", async ({
   demoRepository,
   smartlog,
@@ -858,7 +812,7 @@ test("every working-copy action is dead while a conflict is unresolved", async (
   );
 });
 
-test("Refresh local state re-reads local git state and logs the commands it ran", async ({
+test("Refresh re-reads local git state and logs the commands it ran", async ({
   demoRepository,
   smartlog,
   snapshot,
@@ -872,7 +826,7 @@ test("Refresh local state re-reads local git state and logs the commands it ran"
     "chore: added behind the UI's back",
   ]);
   await smartlog.locator("#btn-refresh").click();
-  await expectLogEntry(smartlog, "Refresh local state");
+  await expectLogEntry(smartlog, "Refresh");
   await expect(
     smartlog.getByText("chore: added behind the UI's back")
   ).toBeVisible();
@@ -911,7 +865,7 @@ test("a re-read keeps a half-typed message and the ticks the reader set", async 
   // ticked, which is the other half of the same reconcile.
   await writeFile(join(demoRepository.path, "NEW.md"), "arrived late\n");
   await smartlog.locator("#btn-refresh").click();
-  await expectLogEntry(smartlog, "Refresh local state");
+  await expectLogEntry(smartlog, "Refresh");
   await expect(smartlog.locator("#wc .file")).toHaveCount(3);
 
   await expect(smartlog.locator("#commit-subject")).toHaveValue(

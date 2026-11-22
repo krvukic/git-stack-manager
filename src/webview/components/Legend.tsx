@@ -1,5 +1,5 @@
 /**
- * The Legend drawer: every pill and badge the tree can draw, and what each one means.
+ * The legend: every pill and badge the tree can draw, and what each one means.
  *
  * The components that draw the tree build each sample, from a real branch detail, so a badge
  * whose colour, glyph, or wording changes cannot go on being explained the old way here. The
@@ -9,7 +9,6 @@
 import type { UIBranch } from "#ui/renderModel";
 import { trunkBehindBadge } from "../model/badges.mjs";
 import { legendGroups, type LegendRow } from "../model/legend.mjs";
-import { Drawer } from "./Drawer";
 import { Badge, BranchPills, Pill } from "./Pills";
 import { TableSection } from "./TableSection";
 
@@ -44,35 +43,27 @@ function LegendSample({
  * have no URL, so `onOpenUrl` is a no-op — left unwired on purpose rather than opening
  * nothing.
  */
-export function LegendDrawer({
-  isOpen,
-  onClose,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-}) {
+export function Legend() {
   const noop = () => {};
   return (
-    <Drawer name="legend" title="Legend" isOpen={isOpen} onClose={onClose}>
-      <div id="legend-body">
-        {legendGroups().map(group => (
-          <TableSection
-            heading={group.heading}
-            cellGap="[&_td]:pr-2"
-            key={group.heading}
-          >
-            {group.rows.map(row => (
-              <tr key={row.what}>
-                <td className="whitespace-nowrap">
-                  <LegendSample row={row} onOpenUrl={noop} />
-                </td>
-                <td className="text-body">{row.what}</td>
-                <td className="text-meta text-muted">{row.why}</td>
-              </tr>
-            ))}
-          </TableSection>
-        ))}
-      </div>
-    </Drawer>
+    <div id="legend-body">
+      {legendGroups().map(group => (
+        <TableSection
+          heading={group.heading}
+          cellGap="[&_td]:pr-2"
+          key={group.heading}
+        >
+          {group.rows.map(row => (
+            <tr key={row.what}>
+              <td className="whitespace-nowrap">
+                <LegendSample row={row} onOpenUrl={noop} />
+              </td>
+              <td className="text-body">{row.what}</td>
+              <td className="text-meta text-muted">{row.why}</td>
+            </tr>
+          ))}
+        </TableSection>
+      ))}
+    </div>
   );
 }

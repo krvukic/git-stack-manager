@@ -57,7 +57,7 @@ export function describeFreshness(
     return {
       text: `PRs ${age || "up to date"}`,
       failed: false,
-      description: "The last Refresh PRs succeeded.",
+      description: "The last Refresh read pull request status.",
     };
   }
   return {

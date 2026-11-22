@@ -15,6 +15,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { REFRESH_WINDOW_MS } from "#app/refresh";
+import { present } from "./present.mjs";
 import { scratchRoot } from "./repoFixture.mjs";
 import { openHostPanel } from "./vscodeStub.mjs";
 
@@ -212,4 +213,20 @@ test("closing the panel stops the signals", t => {
   panel.fire.terminalCommandEnded();
   panel.fire.windowFocus(true);
   assert.equal(panel.refreshes().length, 1);
+});
+
+/**
+ * The palette's Refresh is the top bar's button under another name, so it asks for pull request
+ * status too. A git state change asks for the local read alone: it fires on every save, and a
+ * network round trip per save is what the one-minute cache exists to prevent.
+ */
+test("the palette's Refresh asks for pull request status, and a save does not", async t => {
+  const panel = openPanel(t);
+  panel.fire.save(join(panel.repositoryPath, "src/app.ts"));
+  await present(panel.commands.get("gsm.refresh"), "the gsm.refresh command")();
+
+  assert.deepEqual(panel.refreshes(), [
+    { type: "refresh" },
+    { type: "refresh", full: true },
+  ]);
 });

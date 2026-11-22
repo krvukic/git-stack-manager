@@ -1,5 +1,5 @@
 /**
- * The legend drawer, which explains every badge the tree can draw.
+ * The legend, which explains every badge the tree can draw.
  *
  * Its samples are real branch details rendered through the same component the rows use, so a
  * badge whose wording changes cannot go on being explained the old way. What these tests

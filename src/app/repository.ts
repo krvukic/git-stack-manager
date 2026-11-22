@@ -8,7 +8,6 @@ import {
   PREVIEW_BYTE_LIMIT,
   toDataUri,
 } from "#core/media";
-import { uniqueSorted } from "#core/values";
 import { CommitDiff, readCommitDiff, readWorkingCopyDiff } from "#git/diff";
 import { readRawData } from "#git/reader";
 import { GitError, GitRunner } from "#git/runner";
@@ -631,57 +630,6 @@ export class Repository {
     const plan = planRebase(snapshot, sha, destinationSha);
     const outcome = await runRebase(this.git, snapshot, plan);
     return this.recordStackBases(outcome);
-  }
-
-  /**
-   * Rebase every local stack onto the current trunk tip — the bulk form of
-   * `rebase`, applied to each stack bottom in turn.
-   */
-  async restackAll(): Promise<RebaseOutcome> {
-    // Check the working copy before fetching: a dirty tree blocks every rebase
-    // below, so reporting it up front beats a network round trip first.
-    const initial = await this.read();
-    requireCleanWorkingCopy(initial, "restack");
-    const snapshot = await this.fetchTrunk(initial);
-    if (!snapshot.trunkTip) {
-      throw new GitError("No trunk detected — cannot restack.", "restack");
-    }
-    const trunkTip = snapshot.trunkTip.sha;
-
-    // Stack bottoms are the local commits whose parent is not local. Rebasing a
-    // bottom carries its whole stack, so these are the only roots needed.
-    const localShas = new Set(snapshot.commits.map(commit => commit.sha));
-    const bottoms = snapshot.commits.filter(
-      commit =>
-        !commit.parents.some(parent => localShas.has(parent)) &&
-        commit.parents[0] !== trunkTip
-    );
-    if (!bottoms.length) {
-      return { moved: [], conflict: false };
-    }
-
-    const moved: string[] = [];
-    let current = snapshot;
-    for (const [index, bottom] of bottoms.entries()) {
-      // Each rebase rewrites shas, so every stack after the first needs a fresh
-      // snapshot; the first reuses the one taken above.
-      if (index > 0) {
-        current = await this.read();
-      }
-      if (!current.commits.some(commit => commit.sha === bottom.sha)) {
-        continue;
-      }
-      const plan = planRebase(current, bottom.sha, trunkTip);
-      const outcome = await runRebase(this.git, current, plan);
-      moved.push(...outcome.moved);
-      if (outcome.conflict) {
-        return { moved: uniqueSorted(moved), conflict: true };
-      }
-    }
-    return this.recordStackBases({
-      moved: uniqueSorted(moved),
-      conflict: false,
-    });
   }
 
   /**

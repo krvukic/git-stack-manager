@@ -22,7 +22,7 @@ export type ShortcutAction =
   | "undo"
   | "refresh"
   | "toggleLog"
-  | "toggleShortcuts";
+  | "toggleHelp";
 
 export type Shortcut = {
   /** Keys that trigger it. A display-only glyph is paired with its `event.key`. */
@@ -88,7 +88,7 @@ export const SHORTCUTS: ShortcutGroup[] = [
       },
       {
         keys: ["r"],
-        what: "Refresh local state — re-read branches, commits, working copy",
+        what: "Refresh — re-read local git state, then pull request status",
         action: "refresh",
       },
     ],
@@ -103,8 +103,8 @@ export const SHORTCUTS: ShortcutGroup[] = [
       },
       {
         keys: ["?"],
-        what: "Show or hide this list",
-        action: "toggleShortcuts",
+        what: "Show or hide this help",
+        action: "toggleHelp",
       },
     ],
   },

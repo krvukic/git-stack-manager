@@ -92,7 +92,7 @@ async function main() {
     // Two paints, not one: the model first, then the pull request badges the `gh` call
     // fills in. Shooting after the first leaves every badge blank.
     await page.waitForSelector("#tree .row");
-    await page.waitForSelector("#btn-prs:not([disabled])");
+    await page.waitForSelector("#btn-refresh:not([disabled])");
     await page.getByText(SUBJECT).click();
     await page.waitForSelector("#sidebar.open #filelist .file");
     await page.getByRole("button", { name: "Hide log" }).click();

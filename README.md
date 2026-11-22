@@ -44,8 +44,8 @@ Run `just init-repo` once, then pick a host:
   webview) logs every pull request fetch's duration and outcome. Branch badges fetch on a timer
   with no action to blame a failure on, so a stale "PRs stale — never loaded" indicator sends you
   here rather than to the command log above.
-- **Legend** explains every pill and badge with a live sample of each, drawn by the same code as
-  the tree.
+- **Help** opens a legend that explains every pill and badge with a live sample of each, drawn by
+  the same code as the tree. The keyboard shortcuts are beside the legend.
 - **Config** sets where the branch pills sit, whether long rows wrap, and how large and how long
   the text is. With the pills *after* the subject, every commit message lines up on one left edge,
   which turns the tree into a list you can read down; each row's pills follow its own subject, so
@@ -67,7 +67,7 @@ Run `just init-repo` once, then pick a host:
   checked-out branch. Undo brings a deleted branch back for good. A branch merged by a merge commit
   or a fast-forward is already on trunk, so the tree never drew it and the removal skips it. The
   removal runs on the reads that bring pull request status in: when the view opens, and when
-  **Refresh PRs** runs — never on a timer of its own while the panel sits open.
+  **Refresh** runs — never on a timer of its own while the panel sits open.
 - **Clear merged** removes merged branches on demand, whichever way that setting stands. It
   re-reads pull request status, deletes every branch that qualifies, and then names each branch it
   kept with the reason: amended past the commit that merged, checked out here, held by another
@@ -105,14 +105,14 @@ Run `just init-repo` once, then pick a host:
   those reads to at most one per quarter second, so a formatter run over forty files costs two
   rather than forty, and a panel off screen reads nothing at all — coming back to it is itself a
   refresh.
-- **Refresh local state** re-reads local git state, meaning branches, commits, and the working copy,
-  in a handful of local commands. It is cheap and always current, and it covers the cases no event
-  reports: a repository moved by another program while you were looking at the panel.
-- **Refresh PRs** runs a `gh pr list` that refreshes the cached pull request data, which otherwise
-  holds for a minute. It syncs the number, the CI status, and the review decision. The query names
-  the branches on screen and searches each one by name and by tip commit, which keeps it inside
+- **Refresh** re-reads both halves of what the panel shows, local state first. The local half,
+  meaning branches, commits, and the working copy, takes a handful of local commands, and covers
+  the cases no event reports: a repository moved by another program while you were looking at the
+  panel. The pull request half refreshes the cached pull request data, which otherwise holds for a
+  minute. It syncs the number, the CI status, and the review decision. The query names the
+  branches on screen and searches each one by name and by tip commit, which keeps it inside
   GitHub's time budget on a large repository and still finds pull requests pushed under a different
-  branch name.
+  branch name. *Git Stack: Refresh* in the command palette runs the same Refresh.
 - The header reports how the last refresh went: how long ago it succeeded, or that it failed and how
   stale the badges are as a result. A failed refresh keeps the previous badges, so the age is the
   measure of how much to trust them.
@@ -159,7 +159,7 @@ Every one of these is conflict-free and leaves your working copy alone, except w
   including mid-chain ones. An entry that cannot run stays dimmed and gives the reason: the
   destination would move too, or the commits are already on it. A rebase onto a commit further
   down the same stack skips the commits between, and a skipped commit that no branch reaches
-  leaves the tree until Undo. **Restack** is the bulk form: fetch, then rebase every local stack.
+  leaves the tree until Undo.
 - **Undo** reverses the last edit by restoring the refs it moved.
 - **A conflict** is the one case that touches files. The rebase stops in place and raises a banner
   listing the unmerged files, with a button for your configured merge tool and *Continue* / *Abort*.
@@ -199,8 +199,8 @@ reads the first workspace folder, so open a git repository first:
 
 ## Keyboard
 
-`?` opens the same list inside the app, next to *Show legend*. That list comes from the same table
-the key handler reads, so the list and the keys never disagree.
+`?` opens the same list inside the app, in **Help**, beside the legend. That list comes from the
+same table the key handler reads, so the list and the keys never disagree.
 
 | Key       | Action                                                  |
 | --------- | ------------------------------------------------------- |
@@ -209,9 +209,9 @@ the key handler reads, so the list and the keys never disagree.
 | `Enter`   | Goto the selected commit                                |
 | `a`       | Absorb the working-copy changes                         |
 | `u`       | Undo the last history edit                              |
-| `r`       | Refresh local state                                     |
+| `r`       | Refresh local state and pull request status             |
 | `l`       | Show or hide the command log                            |
-| `?`       | Show or hide the keyboard shortcuts                     |
+| `?`       | Show or hide the help                                   |
 | `Escape`  | Close the open diff, then the panel, then the selection |
 
 Navigation skips the trunk tip, bases, and ellipsis rows, since only commits have actions. The key

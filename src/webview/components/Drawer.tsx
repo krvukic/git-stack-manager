@@ -1,7 +1,7 @@
 /**
- * The shell the config, legend, and shortcuts drawers share.
+ * The shell the config and help drawers share.
  *
- * All three drop from the top bar over the tree rather than taking a column: each is
+ * Both drop from the top bar over the tree rather than taking a column: each is
  * consulted briefly and dismissed, and stealing width would reflow the graph the reader is
  * trying to compare against. Only one is open at a time — they share the same strip of
  * screen, so opening the second on top of the first would bury it, which is what
@@ -11,7 +11,7 @@ import { classes } from "../classes";
 import { Button } from "./Button";
 import { FieldLabel } from "./Field";
 
-export const DRAWERS = ["config", "legend", "keys"] as const;
+export const DRAWERS = ["config", "help"] as const;
 export type DrawerName = (typeof DRAWERS)[number];
 
 export function Drawer({

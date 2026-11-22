@@ -73,11 +73,11 @@ test("a shortcut key typed into a message stays text", async ({
   await expect(smartlog.locator("#commit-subject")).toHaveValue(SUMMARY);
   await expect(smartlog.locator("#commit-body")).toHaveValue(DESCRIPTION);
   // Each key named by what it would have left on screen: `a` opens the absorb preview, `j`
-  // and `k` move the selection, `l` collapses the command log, `?` opens the shortcuts list.
+  // and `k` move the selection, `l` collapses the command log, `?` opens the help drawer.
   await expect(smartlog.locator("#btn-absorb-apply")).toHaveCount(0);
   await expect(smartlog.locator("#sidebar h3")).toHaveText(String(showing));
   await expect(smartlog.locator("#btn-log")).toHaveText("Hide log");
-  await expect(smartlog.locator("#keys.open")).toBeHidden();
+  await expect(smartlog.locator("#help.open")).toBeHidden();
   // `u` and the newline are the two that reach git — an undo of whatever the session last
   // did, and a checkout of the selected commit.
   expect(await stateOf(demoRepository)).toEqual(before);

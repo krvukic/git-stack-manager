@@ -130,23 +130,21 @@ test("the top bar prints the version from the manifest", async ({
   await expect(smartlog.locator("#version")).toHaveText(`v${MANIFEST_VERSION}`);
 });
 
-test("the shortcuts drawer lists the keys, and ? opens it", async ({
-  smartlog,
-  snapshot,
-}) => {
+test("the help drawer lists the keys, and ? opens it", async ({ smartlog }) => {
   await smartlog.keyboard.press("?");
-  await expect(smartlog.locator("#keys.open")).toBeVisible();
+  await expect(smartlog.locator("#help.open")).toBeVisible();
   // Every key the handler answers appears, which is the drawer's whole purpose. Matched by
   // exact text rather than a built regex: `\?` needs escaping and `\k` is not a valid
   // escape, so constructing the pattern per key is a trap.
-  const caps = await smartlog.locator("#keys kbd").allTextContents();
+  const caps = await smartlog.locator("#keys-body kbd").allTextContents();
   for (const key of ["k", "j", "Enter", "Escape", "a", "u", "r", "l", "?"]) {
     expect(caps).toContain(key);
   }
-  await snapshot("shortcuts", { locator: smartlog.locator("#keys") });
 
+  // The legend shares the drawer, so the one key answers both questions.
+  await expect(smartlog.locator("#legend-body")).toBeVisible();
   // Drawers share a strip of screen, so opening another closes this one.
-  await smartlog.locator("#btn-legend").click();
-  await expect(smartlog.locator("#keys.open")).toBeHidden();
-  await expect(smartlog.locator("#legend.open")).toBeVisible();
+  await smartlog.locator("#btn-config").click();
+  await expect(smartlog.locator("#help.open")).toBeHidden();
+  await expect(smartlog.locator("#config.open")).toBeVisible();
 });

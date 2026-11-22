@@ -26,7 +26,7 @@ export type KeyboardActions = {
   onUndo: () => void;
   onRefresh: () => void;
   onToggleLog: () => void;
-  onToggleShortcuts: () => void;
+  onToggleHelp: () => void;
   onCloseTopmost: () => void;
 };
 
@@ -122,9 +122,9 @@ export function useKeyboard(actions: KeyboardActions) {
           event.preventDefault();
           actions.onToggleLog();
           return;
-        case "toggleShortcuts":
+        case "toggleHelp":
           event.preventDefault();
-          actions.onToggleShortcuts();
+          actions.onToggleHelp();
           return;
         case "closeTopmost":
           actions.onCloseTopmost();

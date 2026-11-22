@@ -27,7 +27,7 @@ export type RpcResult<T = unknown> =
  * without a `in` test that a stray non-object message would throw on.
  */
 type HostMessage =
-  | { type: "refresh"; id?: undefined }
+  | { type: "refresh"; full?: boolean; id?: undefined }
   | {
       type: "pullRequestProgress";
       done: number;
@@ -66,7 +66,7 @@ if (vscode) {
     const message = event.data as HostMessage | undefined;
     if (message?.type === "refresh") {
       for (const listener of refreshListeners) {
-        listener();
+        listener(message.full === true);
       }
       return;
     }
@@ -91,10 +91,13 @@ if (vscode) {
  * The host asking the UI to re-read, which the extension sends when git state changes —
  * HEAD moves, refs update, the index changes. Listeners rather than a single callback so
  * a component can subscribe and unsubscribe with its own lifetime.
+ *
+ * `full` is true for the palette's Refresh, which re-reads pull request status as well, as the
+ * top bar's button does. A git state change asks for the local read alone.
  */
-const refreshListeners = new Set<() => void>();
+const refreshListeners = new Set<(full: boolean) => void>();
 
-export function onHostRefresh(listener: () => void): () => void {
+export function onHostRefresh(listener: (full: boolean) => void): () => void {
   refreshListeners.add(listener);
   return () => refreshListeners.delete(listener);
 }

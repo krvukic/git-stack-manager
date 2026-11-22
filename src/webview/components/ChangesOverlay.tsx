@@ -11,7 +11,7 @@
  * tree those actions otherwise start from.
  *
  * Modal and near-full-screen: a diff is the thing being read, so it gets the room, unlike
- * the Config and legend drawers which are consulted beside the tree. How much room is the
+ * the Config and Help drawers which are consulted beside the tree. How much room is the
  * reader's, through either edge — a diff is read at whatever column the code is written to,
  * and that is a property of the repository rather than of the commit being read, so the width
  * is remembered rather than asked for again.

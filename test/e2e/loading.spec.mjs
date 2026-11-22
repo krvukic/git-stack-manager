@@ -19,7 +19,7 @@ import { expect, reopen, test } from "./fixtures/demoRepo.mjs";
  * cache and spawns no subprocess. Counting `gh` reported one call either way — it measures the
  * cache, not the UI.
  */
-test("pull request status is fetched once, and a repository re-read does not re-fetch it", async ({
+test("pull request status is fetched once per load, and once more per Refresh", async ({
   smartlog,
 }) => {
   let fetches = 0;
@@ -34,14 +34,14 @@ test("pull request status is fetched once, and a repository re-read does not re-
   await smartlog.waitForTimeout(500);
   expect(fetches).toBe(1);
 
-  // The load-bearing half. *Refresh local state* re-reads local git state, which adopts a new
-  // model — and a fetch hung off model adoption rather than off the first one fires again
-  // here, spending a network round trip on every refresh. Counting only the first load
-  // cannot see that: there is one load either way.
+  // The load-bearing half. *Refresh* re-reads local git state, which adopts a new model, and
+  // then asks for pull request status itself. A fetch hung off model adoption rather than off
+  // the first one fires as well, spending a second round trip on every refresh. Counting only
+  // the first load cannot see that: there is one load either way.
   await smartlog.locator("#btn-refresh").click();
-  await expect(smartlog.locator("#tree .row").first()).toBeVisible();
+  await expect(smartlog.locator("#btn-refresh")).toHaveText("Refresh");
   await smartlog.waitForTimeout(500);
-  expect(fetches).toBe(1);
+  expect(fetches).toBe(2);
 });
 
 /**
@@ -68,8 +68,8 @@ test("a malformed pull request response leaves the rendered tree intact", async 
       }),
     });
   });
-  await smartlog.locator("#btn-prs").click();
-  await expect(smartlog.locator("#btn-prs")).toBeEnabled();
+  await smartlog.locator("#btn-refresh").click();
+  await expect(smartlog.locator("#btn-refresh")).toBeEnabled();
 
   expect(await smartlog.locator("#tree .row").count()).toBe(rowsBefore);
 });

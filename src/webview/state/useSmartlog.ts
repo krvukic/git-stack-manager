@@ -246,6 +246,17 @@ export function useSmartlog() {
   );
 
   /**
+   * The top bar's Refresh: re-read local state, then pull request status past its cache.
+   *
+   * In that order, so the tree repaints from the local read, which takes milliseconds, without
+   * waiting for the network.
+   */
+  const refresh = useCallback(async () => {
+    await loadModel(false, true);
+    await loadPullRequests(true);
+  }, [loadModel, loadPullRequests]);
+
+  /**
    * First paint, then keep up with the host. The browser polls; in the webview the extension's
    * file watcher drives the re-read, which is cheaper and immediate.
    *
@@ -266,11 +277,11 @@ export function useSmartlog() {
       void loadModel();
     }
     if (inWebview) {
-      return onHostRefresh(() => void loadModel());
+      return onHostRefresh(full => void (full ? refresh() : loadModel()));
     }
     const timer = setInterval(() => void loadModel(true), POLL_INTERVAL);
     return () => clearInterval(timer);
-  }, [loadModel]);
+  }, [loadModel, refresh]);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
 
@@ -377,6 +388,7 @@ export function useSmartlog() {
     pullRequestProgress,
     loadModel,
     loadPullRequests,
+    refresh,
     runAction,
   };
 }

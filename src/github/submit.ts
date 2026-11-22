@@ -222,7 +222,7 @@ async function findStaleBase(
   base: string
 ): Promise<StaleBase | null> {
   // Everyone maintains trunk, so trailing it is a rebase question rather than a submit
-  // one, and the rebase and restack actions already cover it.
+  // one, and the rebase actions already cover it.
   if (base === trunkParts(snapshot).branch) {
     return null;
   }
@@ -251,7 +251,7 @@ async function findStaleBase(
 /**
  * Push with both leases. `--force-with-lease` on its own compares against the
  * remote-tracking ref, which any earlier `git fetch` has already advanced — and
- * this extension fetches on every rebase and restack. Reproduced against a live
+ * this extension fetches on every rebase onto trunk. Reproduced against a live
  * remote: a teammate pushed, a local rebase fetched, and the next
  * `--force-with-lease` reported "forced update" and destroyed their commit.
  * `--force-if-includes` additionally requires that the commits being replaced are

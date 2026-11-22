@@ -1,5 +1,5 @@
 /**
- * The actions that move the whole repository: the top bar's Pull, Restack, and Undo, the Goto
+ * The actions that move the whole repository: the top bar's Pull and Undo, the Goto
  * on the trunk row and on the row the trunk branch was left on, and the controls the banner
  * shows while a rebase is stopped on a conflict.
  *
@@ -26,9 +26,7 @@ const MERGED_REPORT_MILLISECONDS = 12_000;
 
 export function useRepositoryActions(smartlog: Smartlog) {
   const { appendLog, loadModel, runAction, showToast } = smartlog;
-  const { busy, whileBusy } = useBusy<
-    "pull" | "restack" | "continue" | "clearMerged"
-  >();
+  const { busy, whileBusy } = useBusy<"pull" | "continue" | "clearMerged">();
 
   const pull = useCallback(
     () =>
@@ -52,38 +50,6 @@ export function useRepositoryActions(smartlog: Smartlog) {
                   : `${data.branch} is already up to date with ${data.upstream}`,
                 false
               ),
-          }
-        )
-      ),
-    [runAction, showToast, whileBusy]
-  );
-
-  const restack = useCallback(
-    () =>
-      whileBusy("restack", () =>
-        runAction<{
-          model: RenderModel;
-          conflict: unknown;
-          moved: string[];
-          staleStacks?: string[];
-        }>(
-          "restack",
-          {},
-          {
-            modelFrom: data => data.model,
-            reloadOnError: true,
-            onSuccess: data => {
-              if (data.conflict) {
-                showToast(
-                  "Restack stopped on a conflict — resolve it below.",
-                  true
-                );
-                return;
-              }
-              const note = staleStackNote(data.staleStacks);
-              const done = `Restacked: ${data.moved.join(", ") || "nothing to do"} ✓`;
-              showToast(`${done}${note}`, Boolean(note));
-            },
           }
         )
       ),
@@ -248,11 +214,9 @@ export function useRepositoryActions(smartlog: Smartlog) {
 
   return {
     pulling: busy.has("pull"),
-    restacking: busy.has("restack"),
     continuing: busy.has("continue"),
     clearingMerged: busy.has("clearMerged"),
     pull,
-    restack,
     clearMerged,
     gotoTrunk,
     gotoBranch,

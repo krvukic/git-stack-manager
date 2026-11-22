@@ -3,6 +3,25 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0] - 2026-11-22
+
+### Changed
+
+- **Refresh** in the top bar replaces **Refresh local state** and **Refresh PRs**. It re-reads
+  local git state first, so the tree repaints at once, and then pull request status, past its
+  one-minute cache. The panel still re-reads local state by itself on every save and ref move, and
+  still keeps pull request status for a minute, so one button costs no more network than two did.
+  The `r` key runs the same Refresh, and so does the command palette, where *Git Stack: Refresh
+  Local State* is now *Git Stack: Refresh*.
+- **Help** in the top bar replaces **Show legend** and **Shortcuts**. One drawer shows the legend
+  and the keyboard shortcuts side by side, and `?` opens it.
+
+### Removed
+
+- **Restack all stacks onto trunk**. To catch a stack up with trunk, use **Rebase this commit and
+  its descendants onto latest trunk** in its bottom commit's right-click menu, one stack at a
+  time.
+
 ## [0.23.0] - 2026-11-22
 
 ### Added

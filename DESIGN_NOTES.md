@@ -121,7 +121,7 @@ because two buttons can disagree and that disagreement is the bug.
 
 Its push uses `--force-with-lease` **and** `--force-if-includes`. The lease alone is not enough
 here: it compares against the remote-tracking ref, which this extension's own fetch (every rebase
-and restack does one) has already moved past a teammate's commit. With only the lease, that push
+onto trunk does one) has already moved past a teammate's commit. With only the lease, that push
 reports "forced update" and their work is gone. `--force-if-includes` also requires that this
 checkout has seen the commits being replaced, which makes git reject that push. Submit names the
 refspec explicitly and passes `-u`, because the branch it submits is usually not the checked-out

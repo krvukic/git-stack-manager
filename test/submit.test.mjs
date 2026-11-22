@@ -401,7 +401,7 @@ test("a base that is current but rewritten out from under the branch still warns
 });
 
 test("a branch based on trunk never reports a stale base", async t => {
-  // Being behind trunk is a rebase question, which restack already answers; it is
+  // Being behind trunk is a rebase question, which a rebase onto trunk already answers; it is
   // not something submitting should complain about.
   const { repo, repository } = scratchRepository(t);
   commitFile(repo, "later.txt", "later\n", "trunk moved on", OTHER);
@@ -416,8 +416,8 @@ test("a branch based on trunk never reports a stale base", async t => {
 
 test("the push refuses to clobber a commit this checkout has never seen", async t => {
   // `--force-with-lease` alone is not enough here: it compares against the
-  // remote-tracking ref, which this extension's own fetch (every rebase and
-  // restack does one) has already advanced past the teammate's commit. Reproduced
+  // remote-tracking ref, which this extension's own fetch (every rebase onto
+  // trunk does one) has already advanced past the teammate's commit. Reproduced
   // against a live remote, that push reported "forced update" and destroyed the
   // commit. `--force-if-includes` is what rejects it.
   const { root, repo, origin, repository } = scratchRepository(t);

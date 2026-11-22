@@ -3,7 +3,7 @@
  * re-read. The view controls sit apart on the right, because they change what you see
  * rather than what the repository contains.
  *
- * `Refresh PRs` carries its own freshness note, rather than that note floating beside the
+ * `Refresh` carries its own freshness note, rather than that note floating beside the
  * repository name where it read as a property of the repository. The two are one thing —
  * a button and the outcome of the last time it ran — so they are one group.
  */
@@ -65,7 +65,7 @@ function Freshness({ model }: { model: RenderModel }) {
  * The count names what would actually go, so a bar reading *Clear merged* with nothing ready
  * never promises a deletion it will then refuse.
  *
- * Dead while a rebase is stopped, like Pull and Restack beside it, since the deletion would
+ * Dead while a rebase is stopped, like Pull beside it, since the deletion would
  * move a ref the rebase is about to. The tooltip still carries the reason, which is what a
  * reader hovering a dead button is asking for.
  */
@@ -114,14 +114,11 @@ export type TopBarProps = {
    */
   pullRequestProgress: { done: number; total: number } | null;
   pulling: boolean;
-  restacking: boolean;
   clearingMerged: boolean;
   onPull: () => void;
-  onRestack: () => void;
   onClearMerged: () => void;
   onUndo: () => void;
   onRefresh: () => void;
-  onRefreshPullRequests: () => void;
   onToggleLog: () => void;
   onToggleDrawer: (name: string) => void;
 };
@@ -135,14 +132,11 @@ export function TopBar({
   pullRequestsLoading,
   pullRequestProgress,
   pulling,
-  restacking,
   clearingMerged,
   onPull,
-  onRestack,
   onClearMerged,
   onUndo,
   onRefresh,
-  onRefreshPullRequests,
   onToggleLog,
   onToggleDrawer,
 }: TopBarProps) {
@@ -150,9 +144,8 @@ export function TopBar({
   return (
     <div
       id="topbar"
-      // The bar scrolls sideways rather than wrapping. A narrow window used to break
-      // "Restack all stacks onto trunk" across two lines and double the bar's height, which
-      // reads as a rendering fault; scrolling keeps every label on one line.
+      // The bar scrolls sideways rather than wrapping. A wrapped bar doubles its height in a
+      // narrow window, which reads as a rendering fault; scrolling keeps every label on one line.
       className="flex flex-none items-center gap-2 overflow-x-auto overflow-y-hidden border-b border-b-edge px-3.5 py-2"
     >
       {/* Which build you are looking at, first thing on the row — the question a bug report
@@ -192,14 +185,6 @@ export function TopBar({
       >
         {pulling ? "Pulling…" : "Pull"}
       </Button>
-      <Button
-        id="btn-restack"
-        disabled={conflicted || restacking}
-        title="Fetch trunk, then rebase every local stack onto its tip. One rebase per stack, carrying all the branches in it."
-        onClick={onRestack}
-      >
-        {restacking ? "Restacking…" : "Restack all stacks onto trunk"}
-      </Button>
       <ClearMergedButton
         model={model}
         clearing={clearingMerged}
@@ -208,7 +193,7 @@ export function TopBar({
       <Button
         id="btn-undo"
         // `canUndo` is shared with the `u` shortcut, and explains why a conflict leaves this
-        // one alone while Pull and Restack above are dead.
+        // one alone while Pull above is dead.
         disabled={!canUndo(model)}
         title={
           model.undoLabel
@@ -220,28 +205,24 @@ export function TopBar({
         {model.undoLabel ? `Undo ${truncate(model.undoLabel, 22)}` : "Undo"}
       </Button>
       <Separator />
-      <Button
-        id="btn-refresh"
-        title="Re-read local git state: branches, commits, working copy. A handful of local git commands, so it is cheap and always current. Pull request status is not part of it — that is Refresh PRs."
-        onClick={onRefresh}
-      >
-        Refresh local state
-      </Button>
-      {/* Refresh PRs and its freshness note are one unit: a button plus the outcome of the
-          last time it ran. The gap is tighter than the bar's own, so the pair groups visually
-          before the eye reaches the next button. */}
+      {/* Refresh and its freshness note are one unit: a button plus the outcome of the last
+          time it ran. The gap is tighter than the bar's own, so the pair groups visually before
+          the eye reaches the next button. */}
       <span className="inline-flex items-center gap-1.5">
         <Button
-          id="btn-prs"
+          id="btn-refresh"
+          // Dead only while pull request status loads, which the label names: the local read
+          // has landed by then, and every file save and ref move already runs it without the
+          // button.
           disabled={pullRequestsLoading}
-          title="Re-read pull request status through the gh CLI, a handful of network calls, then cached for a minute — this button bypasses that cache. Local git state comes from Refresh local state instead."
-          onClick={onRefreshPullRequests}
+          title="Re-read local git state — branches, commits, working copy — and then pull request status through the gh CLI. The panel re-reads local state by itself and keeps pull request status for a minute; this button reads both now."
+          onClick={onRefresh}
         >
           {pullRequestsLoading
             ? pullRequestProgress
-              ? `Loading PRs… ${pullRequestProgress.done}/${pullRequestProgress.total}`
-              : "Loading PRs…"
-            : "Refresh PRs"}
+              ? `Refreshing PRs… ${pullRequestProgress.done}/${pullRequestProgress.total}`
+              : "Refreshing PRs…"
+            : "Refresh"}
         </Button>
         <Freshness model={model} />
       </span>
@@ -264,18 +245,11 @@ export function TopBar({
           : "Hide log"}
       </Button>
       <Button
-        id="btn-legend"
-        title="Show or hide the legend: every pill and badge the tree can draw, with a live sample and what it means."
-        onClick={() => onToggleDrawer("legend")}
+        id="btn-help"
+        title="Show or hide the help: a legend of every pill and badge the tree can draw, with a live sample of each, and the keyboard shortcuts this view responds to."
+        onClick={() => onToggleDrawer("help")}
       >
-        {openDrawer === "legend" ? "Hide legend" : "Show legend"}
-      </Button>
-      <Button
-        id="btn-keys"
-        title="Show or hide the list of keyboard shortcuts this view responds to."
-        onClick={() => onToggleDrawer("keys")}
-      >
-        Shortcuts
+        {openDrawer === "help" ? "Hide help" : "Help"}
       </Button>
       <Button
         id="btn-config"

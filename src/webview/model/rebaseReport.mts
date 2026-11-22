@@ -1,8 +1,8 @@
 /**
  * The `gh stack` warning shared by every rebase toast.
  *
- * Three surfaces start a rebase — a commit's rebase entries, Restack all, and Continue after a
- * conflict — each with its own success line. Only this warning is common to all three, so only it
+ * Two surfaces start a rebase — a commit's rebase entries, and Continue after a
+ * conflict — each with its own success line. Only this warning is common to both, so only it
  * lives here. The host re-records the bases itself; the warning covers the rebase where that
  * repair failed.
  */

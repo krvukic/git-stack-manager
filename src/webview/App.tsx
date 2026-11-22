@@ -26,8 +26,7 @@ import { ContextMenu, type MenuState } from "./components/ContextMenu";
 import { type DrawerName } from "./components/Drawer";
 import { EmptyState } from "./components/Field";
 import { Hairline } from "./components/Hairline";
-import { LegendDrawer } from "./components/LegendDrawer";
-import { ShortcutsDrawer } from "./components/ShortcutsDrawer";
+import { HelpDrawer } from "./components/HelpDrawer";
 import { SplitPanel } from "./components/SplitPanel";
 import { Splitter } from "./components/Splitter";
 import { Toast } from "./components/Toast";
@@ -228,9 +227,9 @@ export function App({ settings }: { settings: HostSettings }) {
     onGoto: commit => void commitActions.gotoCommit(commit),
     onAbsorb: () => void workingCopy.previewAbsorb(),
     onUndo: () => void repository.undoLast(),
-    onRefresh: () => void smartlog.loadModel(false, true),
+    onRefresh: () => void smartlog.refresh(),
     onToggleLog: toggleLog,
-    onToggleShortcuts: () => toggleDrawer("keys"),
+    onToggleHelp: () => toggleDrawer("help"),
     onCloseTopmost: closeTopmost,
   });
 
@@ -257,14 +256,11 @@ export function App({ settings }: { settings: HostSettings }) {
         pullRequestsLoading={smartlog.pullRequestsLoading}
         pullRequestProgress={smartlog.pullRequestProgress}
         pulling={repository.pulling}
-        restacking={repository.restacking}
         clearingMerged={repository.clearingMerged}
         onPull={() => void repository.pull()}
-        onRestack={() => void repository.restack()}
         onClearMerged={() => void repository.clearMerged()}
         onUndo={() => void repository.undoLast()}
-        onRefresh={() => void smartlog.loadModel(false, true)}
-        onRefreshPullRequests={() => void smartlog.loadPullRequests(true)}
+        onRefresh={() => void smartlog.refresh()}
         onToggleLog={toggleLog}
         onToggleDrawer={toggleDrawer}
       />
@@ -287,13 +283,9 @@ export function App({ settings }: { settings: HostSettings }) {
             onReset={resetConfig}
             onClose={() => toggleDrawer("config")}
           />
-          <LegendDrawer
-            isOpen={openDrawer === "legend"}
-            onClose={() => toggleDrawer("legend")}
-          />
-          <ShortcutsDrawer
-            isOpen={openDrawer === "keys"}
-            onClose={() => toggleDrawer("keys")}
+          <HelpDrawer
+            isOpen={openDrawer === "help"}
+            onClose={() => toggleDrawer("help")}
           />
           {/* Bottom padding well past the last row, so the deepest stack is not flush
               against the log panel and can still be scrolled clear of it. */}

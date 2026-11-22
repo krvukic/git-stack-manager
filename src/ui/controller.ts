@@ -110,17 +110,15 @@ export class Controller {
  */
 const ACTIONS: Record<string, ActionHandler> = {
   /**
-   * Polling and the refresh signals also call this; only an explicit *Refresh local
-   * state* sets `log`, so the command panel is not flooded by background reads. The
-   * entry's title repeats the button's own label, so a reader tracing an entry back
-   * to what they pressed is not left matching "Refresh" against two buttons that
-   * both say it.
+   * Polling and the refresh signals also call this; only an explicit *Refresh* sets `log`,
+   * so the command panel is not flooded by background reads. The entry's title repeats the
+   * button's own label, so a reader can trace an entry back to what they pressed.
    */
   async model(controller, payload) {
     if (!readFlag(payload, "log")) {
       return { ok: true, data: await controller.model() };
     }
-    const { value, log } = await controller.logged("Refresh local state", () =>
+    const { value, log } = await controller.logged("Refresh", () =>
       controller.repository.read()
     );
     return { ok: true, data: controller.buildFrom(value), log };
@@ -391,14 +389,6 @@ const ACTIONS: Record<string, ActionHandler> = {
     return { ok: true, data: { ...value, model }, log };
   },
 
-  async restack(controller) {
-    const { value, log, model } = await controller.edit(
-      "Restack all onto trunk",
-      () => controller.repository.restackAll()
-    );
-    return { ok: true, data: { ...value, model }, log };
-  },
-
   async deleteBranch(controller, payload) {
     const branch = requireString(payload, "branch");
     const { value, log, model } = await controller.edit(
@@ -465,7 +455,7 @@ const ACTIONS: Record<string, ActionHandler> = {
    * qualifies and report the rest.
    *
    * Forces the fetch rather than reading the cache, which fills once per load and then only
-   * when *Refresh PRs* runs. A reader pressing this seconds after a merge would otherwise be
+   * when *Refresh* runs. A reader pressing this seconds after a merge would otherwise be
    * told that nothing merged, which is the cache's age talking, not the repository's state.
    *
    * The branches are chosen here rather than sent, which is the difference from the automatic

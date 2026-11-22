@@ -97,7 +97,7 @@ export function activate(context: vscode.ExtensionContext) {
       openPanel(context, pullRequestLog)
     ),
     vscode.commands.registerCommand("gsm.refresh", () =>
-      panel?.webview.postMessage({ type: "refresh" })
+      panel?.webview.postMessage({ type: "refresh", full: true })
     ),
     vscode.commands.registerCommand("gsm.submitStack", () => {
       const command =

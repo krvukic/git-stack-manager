@@ -376,13 +376,16 @@ test("the legend explains the badges the tree is drawing", async ({
   smartlog,
   snapshot,
 }) => {
-  await smartlog.locator("#btn-legend").click();
-  await expect(smartlog.locator("#legend")).toHaveClass(/open/);
-  await snapshot("legend", { locator: smartlog.locator("#legend") });
+  await smartlog.locator("#btn-help").click();
+  await expect(smartlog.locator("#help")).toHaveClass(/open/);
+  await expect(smartlog.locator("#btn-help")).toHaveText("Hide help");
+  // The drawer, not the legend's own box: the drawer scrolls, so the legend's box runs on
+  // behind the tree below it. The shortcuts beside the legend are in the same picture.
+  await snapshot("help", { locator: smartlog.locator("#help") });
 
   // Opening the Config drawer has to close this one: both drop from the same edge.
   await smartlog.locator("#btn-config").click();
-  await expect(smartlog.locator("#legend")).not.toHaveClass(/open/);
+  await expect(smartlog.locator("#help")).not.toHaveClass(/open/);
   await expect(smartlog.locator("#config")).toHaveClass(/open/);
 });
 

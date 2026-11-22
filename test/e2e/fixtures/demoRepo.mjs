@@ -263,7 +263,7 @@ export async function serveRepository(
  */
 async function settle(page) {
   await page.waitForSelector("#tree .row");
-  await page.waitForSelector("#btn-prs:not([disabled])");
+  await page.waitForSelector("#btn-refresh:not([disabled])");
 }
 
 /**

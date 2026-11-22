@@ -13,7 +13,7 @@
  * the tree, and turning the setting off and on again was the only way back.
  *
  * "As they appear" runs only as fast as the host learns: two reads bring pull request status in,
- * one per load and one on *Refresh PRs*, so a merge that lands while this view stands open reaches
+ * one per load and one on *Refresh*, so a merge that lands while this view stands open reaches
  * the model at the next of those rather than within seconds.
  *
  * An effect, because the trigger is a model arriving from the host rather than a click.

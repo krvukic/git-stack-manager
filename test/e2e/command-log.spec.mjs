@@ -11,9 +11,8 @@ import { expectLogEntry, expectToast } from "./fixtures/interactions.mjs";
 /**
  * The command log toggle.
  *
- * Both refresh buttons keep their resting label across a click — `loadPullRequests`
- * rewrites *Refresh PRs* to "Loading PRs…" and back, and a mismatch there renames the
- * button permanently on first use — so these assert the label as well as the panel.
+ * The toggle keeps its resting label across a click, so these assert the label as well as the
+ * panel.
  */
 test("hiding the command log gives the tree its height back, and showing it returns", async ({
   smartlog,
@@ -77,7 +76,7 @@ test("an action that logs while the log is hidden counts the entry instead of re
   // panel measures zero, so the scroll each append performed moved nothing.
   await smartlog.locator("#btn-log").click();
   await expect(smartlog.locator("#btn-log")).toHaveText("Hide log");
-  await expectLogEntry(smartlog, "Refresh local state");
+  await expectLogEntry(smartlog, "Refresh");
   const scrolledToBottom = await smartlog
     .locator("#log-body")
     .evaluate(

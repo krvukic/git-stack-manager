@@ -215,7 +215,7 @@ test("a file changed on disk after its lines were chosen goes back to whole", as
   // An edit shifts the numbers the choice names, so keeping it would leave out another line.
   await writeFile(trimPath, `// a new first line\n${TRIM_AFTER}`);
   await smartlog.locator("#btn-refresh").click();
-  await expectLogEntry(smartlog, "Refresh local state");
+  await expectLogEntry(smartlog, "Refresh");
   await expectToast(
     smartlog,
     "src/trim.js changed on disk, so every line of it is chosen again."
