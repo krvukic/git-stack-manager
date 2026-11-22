@@ -2,7 +2,7 @@
   "name": "git-stack-manager",
   "displayName": "Git Stack Manager",
   "description": "Sapling ISL-style smartlog for plain Git: compact tree of your local branches/stacks, amend, checkout, restack.",
-  "version": "0.24.0",
+  "version": "1.0.0",
   "publisher": "krvukic",
   "author": "Kresimir Vukic",
   "private": true,
@@ -59,11 +59,6 @@
         "command": "gsm.refresh",
         "title": "Git Stack: Refresh",
         "icon": "$(refresh)"
-      },
-      {
-        "command": "gsm.submitStack",
-        "title": "Git Stack: Submit Stack (gh)",
-        "icon": "$(git-pull-request)"
       }
     ],
     "viewsContainers": {
@@ -106,16 +101,6 @@
           "type": "string",
           "default": "",
           "description": "Trunk ref (e.g. origin/main). Auto-detected when empty."
-        },
-        "gsm.submitCommand": {
-          "type": "string",
-          "default": "gh stack",
-          "description": "Command run in a terminal by 'Submit Stack'. Uses your gh CLI stack extension."
-        },
-        "gsm.onlyMyCommits": {
-          "type": "boolean",
-          "default": false,
-          "description": "Dim commits in the tree whose author email differs from git config user.email."
         }
       }
     }

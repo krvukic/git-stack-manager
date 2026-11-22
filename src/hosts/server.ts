@@ -125,7 +125,6 @@ async function handleRequest(
         // absolute `vscode-webview://` URI here instead.
         baseUri: "/dist",
         version: VERSION,
-        onlyMyCommits: false,
       });
       response.writeHead(200, { "Content-Type": "text/html" });
       response.end(html);

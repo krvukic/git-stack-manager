@@ -54,6 +54,7 @@ test("a stored config is adopted field by field", () => {
     pillFont: 14,
     pillMaxChars: 20,
     showDate: true,
+    dimOtherAuthors: true,
     deleteMergedBranches: true,
   });
   assert.deepEqual(config, {
@@ -64,6 +65,7 @@ test("a stored config is adopted field by field", () => {
     pillFont: 14,
     pillMaxChars: 20,
     showDate: true,
+    dimOtherAuthors: true,
     deleteMergedBranches: true,
   });
 });

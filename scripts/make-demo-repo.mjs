@@ -385,7 +385,7 @@ commitFile(
 // A shared branch a teammate also pushes to.
 // wrap-lines is the one branch here that is not solo work, and it carries the two
 // states that needs: someone else authors its middle commit, the fixture's only
-// non-mine commit outside trunk and the one `gsm.onlyMyCommits` dims; and the
+// non-mine commit outside trunk and the one *Other authors' commits* dims; and the
 // teammate's newest commit is on origin/wrap-lines but not here, so the branch reads
 // "1 behind".
 checkout("main");
@@ -528,7 +528,7 @@ console.log(
     "                normalize-quotes (upstream gone), and several never pushed",
     "  branches:     escape-html, mask-utils, redact-utils, wip-titlecase, local-experiment",
     "                parse-utils → parse-numbers / parse-dates (a stack that forks mid-chain)",
-    "                wrap-lines (carries a teammate's commit — try gsm.onlyMyCommits)",
+    "                wrap-lines (carries a teammate's commit — try Config, Other authors' commits)",
     "                truncate-words (conflicts with trunk on purpose — try rebasing it onto trunk)",
     "",
     `Serve it:  just web ${repo}`,

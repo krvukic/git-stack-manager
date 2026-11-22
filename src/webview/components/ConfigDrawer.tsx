@@ -220,6 +220,24 @@ export function ConfigDrawer({
         </Hint>
       </Group>
       <Group>
+        <GroupLabel>Other authors&apos; commits</GroupLabel>
+        <Segmented
+          id="seg-dimothers"
+          attribute="dimothers"
+          value={config.dimOtherAuthors ? "on" : "off"}
+          options={[
+            { value: "off", label: "Show as usual" },
+            { value: "on", label: "Dim" },
+          ]}
+          onChange={choice => onChange({ dimOtherAuthors: choice === "on" })}
+        />
+        <Hint>
+          Dims a commit whose author email differs from git config user.email,
+          and adds the author to its tooltip. Off by default, so a shared branch
+          does not look broken.
+        </Hint>
+      </Group>
+      <Group>
         <GroupLabel>Long rows</GroupLabel>
         <Segmented
           id="seg-wraprows"

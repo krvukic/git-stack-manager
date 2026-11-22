@@ -24,6 +24,7 @@ import { expect, reopen, test } from "./fixtures/demoRepo.mjs";
 import {
   boxOf,
   changesWidth,
+  descriptionOf,
   dragChangesEdge,
   dragGrip,
   dragHandle,
@@ -438,6 +439,34 @@ test("a Config choice survives a reload", async ({ smartlog }) => {
       document.documentElement.style.getPropertyValue("--row-height")
     )
   ).toBe("34px");
+});
+
+/**
+ * Dimming other authors' commits, which the web host could not turn on while the choice was a
+ * VS Code setting.
+ *
+ * The demo's `wrap-lines` branch has its one commit by a teammate, and the count is the
+ * assertion: every row dimmed would read the same in a picture of that one row.
+ */
+test("the other-authors setting dims exactly the commits somebody else wrote", async ({
+  smartlog,
+}) => {
+  const dimmed = smartlog.locator("#tree .subject.foreign");
+  await expect(dimmed).toHaveCount(0);
+
+  await smartlog.locator("#btn-config").click();
+  await smartlog.locator('#seg-dimothers button[data-dimothers="on"]').click();
+  await smartlog.locator("#btn-config-close").click();
+
+  await expect(dimmed).toHaveText(["test(wrap): cover the column limit"]);
+  // The author is the reason for the dimming, so the row's description names them.
+  expect(await descriptionOf(dimmed)).toBe(
+    "test(wrap): cover the column limit — Other Dev"
+  );
+
+  // Kept across a reload, as every other Config choice is.
+  await reopen(smartlog);
+  await expect(dimmed).toHaveCount(1);
 });
 
 /**

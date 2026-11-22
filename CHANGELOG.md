@@ -3,6 +3,30 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-11-22
+
+The major number marks two VS Code settings and one command that stop working, as the next two
+sections list. Nothing else about the version is a milestone.
+
+### Changed
+
+- **Other authors' commits** in **Config** dims commits whose author email differs from
+  `git config user.email`. It replaces the VS Code setting `gsm.onlyMyCommits`, which the web
+  host could not set. The extension does not copy a value out of that setting, so turn the
+  dimming on again in **Config**.
+
+### Removed
+
+- The command *Git Stack: Submit Stack (gh)* and its setting `gsm.submitCommand`. The setting's
+  default was `gh stack` with no subcommand, which prints that tool's help and submits nothing.
+  **Submit stack**, in a commit's right-click menu and in the commit panel, submits a stack.
+- The VS Code setting `gsm.onlyMyCommits`, for the reason above.
+
+### Fixed
+
+- The **Config** button's tooltip describes the whole drawer. It named the pill side and the
+  text sizes, which left out most of the settings.
+
 ## [0.24.0] - 2026-11-22
 
 ### Changed

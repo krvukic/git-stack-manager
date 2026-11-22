@@ -22,7 +22,7 @@ const GH_STACK_SCHEMA_VERSION = 1;
 /**
  * The two identities a fixture commits under.
  *
- * `ME` is what `gsm.onlyMyCommits` compares against, so the pair has to differ in the
+ * `ME` is what the *Other authors' commits* setting compares against, so the pair has to differ in the
  * email rather than only in the name. Both use `example.com`, which RFC 2606 reserves,
  * so no fixture can address mail to a real person.
  */

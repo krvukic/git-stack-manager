@@ -57,6 +57,9 @@ Run `just init-repo` once, then pick a host:
   the last day reads as an age — *20 seconds ago*, *5 minutes ago*, *2 hours ago* — and anything
   older as its date, `2026-10-04`, because a count of months is a number nobody can turn back into
   a day. Only commit rows carry a date; the trunk and base rows are drawn for position.
+- **Other authors' commits**, also in **Config**, dims a commit whose author email differs from
+  `git config user.email`, and adds the author's name to its tooltip. It is off by default, so a
+  shared branch does not look broken.
 - **Branch pill and badge length**, also in **Config**, caps how many characters a pill or badge
   shows. A 30-character branch name and the `diverged` badge repeating it can take a narrow row
   entirely, leaving nothing for the commit message; the cap clips both and keeps the full name on
@@ -182,8 +185,6 @@ Every one of these is conflict-free and leaves your working copy alone, except w
 - The right-click menu offers `gh stack rebase`, `push`, `submit`, and `sync --prune`, and launches
   `gh stack modify` for drop, reorder, insert, and rename. That terminal interface already covers
   restructuring, so this extension does not rebuild it.
-- `Git Stack: Submit Stack (gh)` runs your stack command in a terminal, configurable through
-  `gsm.submitCommand`.
 
 ## Opening it
 
@@ -238,9 +239,8 @@ a stored height cuts it back rather than pushing the buttons below the box off s
 
 - `gsm.trunk` names the trunk ref, and auto-detects `origin/HEAD`, then `origin/main`,
   `origin/master`, `main`, `master`.
-- `gsm.submitCommand` is the terminal command behind *Submit Stack*, defaulting to `gh stack`.
-- `gsm.onlyMyCommits` dims commits whose author differs from `git config user.email`. It is off by
-  default, so a shared branch does not look broken.
+
+Every preference is in the **Config** drawer instead, where both hosts can set it.
 
 ## Requirements
 

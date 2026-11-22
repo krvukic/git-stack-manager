@@ -253,7 +253,7 @@ export function TopBar({
       </Button>
       <Button
         id="btn-config"
-        title="Choose which side the branch pills sit on, and scale the text and pill sizes. Choices are remembered."
+        title="Set how the tree reads: where the branch pills go, what each row shows, and how large the text is. Choices are remembered."
         onClick={() => onToggleDrawer("config")}
       >
         Config

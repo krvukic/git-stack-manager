@@ -135,7 +135,7 @@ type CommitRowProps = {
   rowIndex: number;
   rowHeight: number;
   isSelected: boolean;
-  /** `gsm.onlyMyCommits`: dim a commit somebody else wrote. */
+  /** The Config drawer's *Other authors' commits*: dim a commit somebody else wrote. */
   dimForeign: boolean;
   /** When the commit was made, or empty while the Config setting hides it. */
   dateLabel: string;

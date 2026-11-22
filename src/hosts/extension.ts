@@ -98,15 +98,7 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand("gsm.refresh", () =>
       panel?.webview.postMessage({ type: "refresh", full: true })
-    ),
-    vscode.commands.registerCommand("gsm.submitStack", () => {
-      const command =
-        vscode.workspace.getConfiguration("gsm").get<string>("submitCommand") ||
-        "gh stack";
-      const terminal = vscode.window.createTerminal("Git Stack: submit");
-      terminal.show();
-      terminal.sendText(command);
-    })
+    )
   );
 }
 
@@ -191,7 +183,6 @@ function openPanel(
       cspSource: panel.webview.cspSource,
       baseUri: baseUri.toString(),
       version: typeof version === "string" ? version : "",
-      onlyMyCommits: configuration.get<boolean>("onlyMyCommits") === true,
     }
   );
 

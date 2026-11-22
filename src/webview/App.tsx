@@ -330,7 +330,7 @@ export function App({ settings }: { settings: HostSettings }) {
               model={model}
               rowHeight={rowHeight}
               selectedSha={selectedSha}
-              dimForeign={settings.onlyMyCommits}
+              dimForeign={config.dimOtherAuthors}
               showDate={config.showDate}
               readAt={smartlog.modelReadAt}
               onSelect={commit => setSelectedSha(commit.sha)}
