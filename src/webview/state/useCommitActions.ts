@@ -8,6 +8,7 @@
  * and applying it closes the panel. That also keeps the sha out of the render — `applySplit`
  * takes what the panel collected and reads the commit from the state it opened with.
  */
+import type { RebaseDestination } from "#history/rebase";
 import type { RenderModel, UICommit } from "#ui/renderModel";
 import { useCallback, useState } from "react";
 import type { SplitHunk, SplitState } from "../components/SplitPanel";
@@ -119,7 +120,7 @@ export function useCommitActions(smartlog: Smartlog) {
   );
 
   const runRebase = useCallback(
-    async (commit: UICommit, destination: "trunk" | "base") => {
+    async (rootSha: string, destination: RebaseDestination) => {
       showToast("Rebasing…", false);
       await runAction<{
         model: RenderModel;
@@ -128,7 +129,13 @@ export function useCommitActions(smartlog: Smartlog) {
         staleStacks?: string[];
       }>(
         "rebase",
-        { sha: commit.sha, destination },
+        {
+          sha: rootSha,
+          destination: destination.kind,
+          ...(destination.kind === "commit"
+            ? { destinationSha: destination.sha }
+            : {}),
+        },
         {
           modelFrom: data => data.model,
           reloadOnError: true,

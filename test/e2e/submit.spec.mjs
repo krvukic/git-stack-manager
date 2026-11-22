@@ -10,7 +10,11 @@
  * GitHub, while the pushes are real against the copy's own bare origin.
  */
 import { expect, test } from "./fixtures/demoRepo.mjs";
-import { expectToast, selectCommit } from "./fixtures/interactions.mjs";
+import {
+  expectToast,
+  REBASE_ONTO_TRUNK,
+  selectCommit,
+} from "./fixtures/interactions.mjs";
 
 test("submitting a never-pushed branch opens a pull request from the commit message", async ({
   demoRepository,
@@ -158,7 +162,7 @@ test("submit stays disabled while a conflict is unresolved", async ({
   await smartlog
     .getByText("feat(truncate): break at word boundaries")
     .click({ button: "right" });
-  await smartlog.getByText(/^Rebase this commit onto origin\/main$/).click();
+  await smartlog.getByText(REBASE_ONTO_TRUNK, { exact: true }).click();
   await smartlog.waitForSelector("#conflict.open");
 
   await selectCommit(smartlog, "feat(redact): add redactEmails on top of mask");
@@ -180,7 +184,7 @@ test("a conflict that starts with the sidebar open disables submit too", async (
   await smartlog
     .getByText("feat(truncate): break at word boundaries")
     .click({ button: "right" });
-  await smartlog.getByText(/^Rebase this commit onto origin\/main$/).click();
+  await smartlog.getByText(REBASE_ONTO_TRUNK, { exact: true }).click();
   await smartlog.waitForSelector("#conflict.open");
 
   await expect(smartlog.locator("#btn-submit")).toBeDisabled();

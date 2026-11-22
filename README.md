@@ -153,9 +153,13 @@ Every one of these is conflict-free and leaves your working copy alone, except w
   first.
 - **Split** separates a commit into two, choosing per hunk which changes go first.
 - **Fold** combines a commit with the one below, keeping both messages.
-- **Rebase** a commit *and its descendants* onto the trunk tip or the stack's own fork base, as
-  Sapling's menu does. Every branch pointer in the moving set follows, including mid-chain ones.
-  **Restack** is the bulk form: fetch, then rebase every local stack.
+- **Rebase** a commit *and its descendants* onto the trunk tip, the stack's own fork base, or the
+  checked-out commit, as Sapling's menu does. The menu also rebases the checked-out commit and
+  its descendants onto the commit you clicked. Every branch pointer in the moving set follows,
+  including mid-chain ones. An entry that cannot run stays dimmed and gives the reason: the
+  destination would move too, or the commits are already on it. A rebase onto a commit further
+  down the same stack skips the commits between, and a skipped commit that no branch reaches
+  leaves the tree until Undo. **Restack** is the bulk form: fetch, then rebase every local stack.
 - **Undo** reverses the last edit by restoring the refs it moved.
 - **A conflict** is the one case that touches files. The rebase stops in place and raises a banner
   listing the unmerged files, with a button for your configured merge tool and *Continue* / *Abort*.

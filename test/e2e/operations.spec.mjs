@@ -11,8 +11,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, reopen, stateOf, test } from "./fixtures/demoRepo.mjs";
 import {
+  descriptionOf,
   expectLogEntry,
   expectToast,
+  REBASE_ONTO_TRUNK,
   selectCommit,
 } from "./fixtures/interactions.mjs";
 
@@ -674,10 +676,12 @@ test("rebasing a stack onto trunk moves every branch in it", async ({
     .getByText("feat(case): add camelCase")
     .click({ button: "right" });
   // The whole case-utils → pad-utils → trim-utils chain plus the local-experiment
-  // fork moves with it, which the menu label counts out.
-  await smartlog
-    .getByText(/^Rebase this commit \+ 6 above onto origin\/main$/)
-    .click();
+  // fork moves with it, which the entry's description counts out.
+  const entry = smartlog.getByText(REBASE_ONTO_TRUNK, { exact: true });
+  expect(await descriptionOf(entry)).toContain(
+    "Fetch origin/main, then replay this commit + 6 above on its tip"
+  );
+  await entry.click();
   await expectToast(smartlog, "Rebased case-utils");
 
   // One rebase per linear chain, and local-experiment forks off pad-utils — so
@@ -758,7 +762,7 @@ test("a conflicting rebase stops with the banner, and aborting restores the comm
   await smartlog
     .getByText("feat(truncate): break at word boundaries")
     .click({ button: "right" });
-  await smartlog.getByText(/^Rebase this commit onto origin\/main$/).click();
+  await smartlog.getByText(REBASE_ONTO_TRUNK, { exact: true }).click();
   await smartlog.waitForSelector("#conflict.open");
   expect(await demoRepository.git(["status", "--porcelain"])).toContain(
     "UU src/truncate.js"
@@ -784,7 +788,7 @@ test("resolving a conflict and continuing finishes the rebase", async ({
   await smartlog
     .getByText("feat(truncate): break at word boundaries")
     .click({ button: "right" });
-  await smartlog.getByText(/^Rebase this commit onto origin\/main$/).click();
+  await smartlog.getByText(REBASE_ONTO_TRUNK, { exact: true }).click();
   await smartlog.waitForSelector("#conflict.open");
 
   await writeFile(
@@ -809,7 +813,7 @@ test("a continue git refuses re-arms the button for a second attempt", async ({
   await smartlog
     .getByText("feat(truncate): break at word boundaries")
     .click({ button: "right" });
-  await smartlog.getByText(/^Rebase this commit onto origin\/main$/).click();
+  await smartlog.getByText(REBASE_ONTO_TRUNK, { exact: true }).click();
   await smartlog.waitForSelector("#conflict.open");
 
   // Continue with the markers git wrote still in the file, which is what pressing the button
@@ -839,7 +843,7 @@ test("every working-copy action is dead while a conflict is unresolved", async (
   await smartlog
     .getByText("feat(truncate): break at word boundaries")
     .click({ button: "right" });
-  await smartlog.getByText(/^Rebase this commit onto origin\/main$/).click();
+  await smartlog.getByText(REBASE_ONTO_TRUNK, { exact: true }).click();
   await smartlog.waitForSelector("#conflict.open");
 
   // The unmerged file is listed as an uncommitted change, so the working-copy actions are

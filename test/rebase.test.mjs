@@ -286,3 +286,79 @@ test("aborting a conflicting rebase restores the original commits", async () => 
   assert.equal(statusOf(repo), "");
   assert.equal(markerRefs(repo), "");
 });
+
+test("rebasing onto a named commit of another stack carries every branch above the root", async () => {
+  // The menu's "onto current commit": one stack moved onto a commit of another.
+  run(repo, "git", ["switch", "-q", "feature-c"]);
+  const before = await repository.read();
+  const destination = commitOn(before, "feature-c");
+  const bottom = commitOn(before, "fork-base");
+
+  const outcome = await repository.rebase(bottom.sha, {
+    kind: "commit",
+    sha: destination.sha,
+  });
+  assert.equal(outcome.conflict, false);
+
+  const after = await repository.read();
+  const rebasedBottom = commitOn(after, "fork-base");
+  assert.equal(rebasedBottom.parents[0], destination.sha);
+  // Both leaves of the fork followed their bottom.
+  assert.equal(commitOn(after, "fork-left").parents[0], rebasedBottom.sha);
+  assert.equal(commitOn(after, "fork-right").parents[0], rebasedBottom.sha);
+  assert.equal(
+    shaOf(repo, "feature-c"),
+    destination.sha,
+    "the destination stays"
+  );
+  assert.equal(shaOf(repo, "HEAD"), destination.sha);
+  assert.equal(statusOf(repo), "");
+  assert.equal(markerRefs(repo), "");
+});
+
+test("rebasing the checked-out commit onto a named commit keeps HEAD on its branch", async () => {
+  // The menu's "current commit onto this commit": HEAD is the root of what moves.
+  run(repo, "git", ["switch", "-q", "abortable"]);
+  const before = await repository.read();
+  const current = commitOn(before, "abortable");
+  const destination = commitOn(before, "conflicting");
+
+  const outcome = await repository.rebase(current.sha, {
+    kind: "commit",
+    sha: destination.sha,
+  });
+  assert.equal(outcome.conflict, false);
+
+  const after = await repository.read();
+  assert.equal(commitOn(after, "abortable").parents[0], destination.sha);
+  assert.equal(after.headBranch, "abortable");
+  assert.equal(shaOf(repo, "HEAD"), shaOf(repo, "abortable"));
+  assert.equal(statusOf(repo), "");
+  assert.equal(markerRefs(repo), "");
+});
+
+test("rebasing onto an ancestor skips the commits between, which keep their branch", async () => {
+  // feature-c is on feature-b, which is on feature-a. Landing feature-c on feature-a
+  // leaves feature-b beside it rather than dropping it.
+  const before = await repository.read();
+  const top = commitOn(before, "feature-c");
+  const middle = commitOn(before, "feature-b");
+  const bottom = commitOn(before, "feature-a");
+  assert.equal(top.parents[0], middle.sha);
+
+  const outcome = await repository.rebase(top.sha, {
+    kind: "commit",
+    sha: bottom.sha,
+  });
+  assert.equal(outcome.conflict, false);
+
+  const after = await repository.read();
+  assert.equal(commitOn(after, "feature-c").parents[0], bottom.sha);
+  assert.equal(
+    shaOf(repo, "feature-b"),
+    middle.sha,
+    "the skipped commit stays"
+  );
+  assert.equal(commitOn(after, "feature-b").parents[0], bottom.sha);
+  assert.equal(statusOf(repo), "");
+});

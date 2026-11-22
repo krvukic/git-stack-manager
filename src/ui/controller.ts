@@ -8,7 +8,7 @@
  * handled by each host before it reaches here.
  */
 import { Repository } from "#app/repository";
-import { errorMessage } from "#core/values";
+import { errorMessage, shortSha } from "#core/values";
 import { RawData } from "#git/snapshot";
 import { ghStackArguments, GhStackCommand } from "#github/ghStack";
 import { BranchTip } from "#github/pullRequests";
@@ -609,26 +609,30 @@ function ghStackTitle(command: GhStackCommand): string {
 }
 
 /**
- * The two destinations the menu offers. `Repository.rebase` also takes a named commit, which
- * nothing reaches it with: dragging one commit onto another is not a gesture the tree has, so
- * accepting the kind here would be a payload shape no reader can produce.
+ * The destinations the menu offers: trunk, the stack base, and a named commit, which is how a
+ * rebase onto or from the checked-out commit arrives.
  */
-type MenuDestination = Exclude<RebaseDestination, { kind: "commit" }>;
-
-function parseDestination(payload: ActionPayload): MenuDestination {
+function parseDestination(payload: ActionPayload): RebaseDestination {
   const destination = payload.destination;
   switch (destination) {
     case "trunk":
       return { kind: "trunk" };
     case "base":
       return { kind: "base" };
+    case "commit":
+      return { kind: "commit", sha: requireString(payload, "destinationSha") };
     default:
       throw new Error(`Unknown rebase destination: ${String(destination)}`);
   }
 }
 
-function rebaseTitle(destination: MenuDestination): string {
-  return destination.kind === "trunk"
-    ? "Rebase onto trunk"
-    : "Rebase onto stack base";
+function rebaseTitle(destination: RebaseDestination): string {
+  switch (destination.kind) {
+    case "trunk":
+      return "Rebase onto trunk";
+    case "base":
+      return "Rebase onto stack base";
+    case "commit":
+      return `Rebase onto ${shortSha(destination.sha)}`;
+  }
 }

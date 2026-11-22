@@ -60,8 +60,8 @@ export function amendTargets(model: RenderModel): UICommit[] {
   return targets;
 }
 
-/** Local commits at or above `sha`, matching what a rebase would move. */
-export function countDescendants(model: RenderModel, sha: string): number {
+/** Local commits at or above `sha`: the set a rebase rooted there moves. */
+export function descendantShas(model: RenderModel, sha: string): Set<string> {
   const childrenOf = new Map<string, string[]>();
   for (const row of model.rows) {
     if (row.type !== "commit") {
@@ -86,7 +86,69 @@ export function countDescendants(model: RenderModel, sha: string): number {
     seen.add(current);
     queue.push(...(childrenOf.get(current) ?? []));
   }
-  return seen.size;
+  return seen;
+}
+
+/** How many commits a rebase rooted at `sha` moves, the root included. */
+export function countDescendants(model: RenderModel, sha: string): number {
+  return descendantShas(model, sha).size;
+}
+
+/**
+ * Why a rebase cannot run, when the model already shows that it cannot.
+ *
+ * `moves-destination`: the destination is one of the commits that would move, so the rebase
+ * would put a commit on top of itself. `already-there`: the root's parent is the destination,
+ * so nothing would move.
+ */
+export type RebaseRefusal = "moves-destination" | "already-there";
+
+/**
+ * Whether rebasing `root` and its descendants onto `destinationSha` would be refused.
+ *
+ * `planRebase` on the host refuses the same two cases after the click. Answering from the model
+ * lets the menu dim the entry and give the reason before it.
+ */
+export function rebaseRefusal(
+  model: RenderModel,
+  root: UICommit,
+  destinationSha: string
+): RebaseRefusal | null {
+  if (descendantShas(model, root.sha).has(destinationSha)) {
+    return "moves-destination";
+  }
+  return root.parents[0] === destinationSha ? "already-there" : null;
+}
+
+/**
+ * The commit that the stack holding `commit` forked from: its first ancestor that is not a
+ * local commit. Null when the walk ends on a root commit. Mirrors `resolveDestination` on the
+ * host.
+ */
+export function stackBaseSha(
+  model: RenderModel,
+  commit: UICommit
+): string | null {
+  const bySha = new Map<string, UICommit>();
+  for (const row of model.rows) {
+    if (row.type === "commit") {
+      bySha.set(row.commit.sha, row.commit);
+    }
+  }
+  const seen = new Set<string>();
+  let current: UICommit | undefined = commit;
+  while (current && !seen.has(current.sha)) {
+    seen.add(current.sha);
+    const [parent] = current.parents;
+    if (parent === undefined) {
+      return null;
+    }
+    current = bySha.get(parent);
+    if (!current) {
+      return parent;
+    }
+  }
+  return null;
 }
 
 /**

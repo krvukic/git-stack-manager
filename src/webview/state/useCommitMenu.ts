@@ -6,13 +6,18 @@
  * Submit, and a stopped rebase replaces the rebase entries with an explanation instead of
  * hiding them.
  */
+import type { RebaseDestination } from "#history/rebase";
 import type { RenderModel, UIBranch, UICommit } from "#ui/renderModel";
 import type { MenuItem } from "../components/ContextMenu";
 import {
   countDescendants,
+  findCommit,
+  rebaseRefusal,
+  stackBaseSha,
   stackBranchesUpTo,
   submitTarget,
   truncate,
+  type RebaseRefusal,
 } from "../model/commits.mjs";
 
 export type CommitMenuActions = {
@@ -28,7 +33,8 @@ export type CommitMenuActions = {
   onSubmitStack: (commit: UICommit) => void;
   onSplit: (commit: UICommit) => void;
   onFold: (commit: UICommit) => void;
-  onRebase: (commit: UICommit, destination: "trunk" | "base") => void;
+  /** Rebase the commit `rootSha` names, and its descendants, onto `destination`. */
+  onRebase: (rootSha: string, destination: RebaseDestination) => void;
 };
 
 /**
@@ -150,16 +156,101 @@ function remoteOf(branch: UIBranch): string | null {
   return branch.sync?.upstream?.split("/")[0] ?? null;
 }
 
+/** "this commit", or "this commit + 2 above": what a rebase rooted at `sha` moves. */
+function movingSet(model: RenderModel, sha: string, root: string): string {
+  const above = countDescendants(model, sha) - 1;
+  return above ? `${root} + ${above} above` : root;
+}
+
+/**
+ * A rebase entry, dimmed with its reason when the model already shows that the host would
+ * refuse it. `stays` names the destination in the two reasons.
+ */
+function rebaseItem(
+  label: string,
+  description: string,
+  refusal: RebaseRefusal | null,
+  stays: string,
+  run: () => void
+): MenuItem {
+  if (refusal === "moves-destination") {
+    return { label: `${label} — ${stays} is one of its descendants` };
+  }
+  if (refusal === "already-there") {
+    return { label: `${label} — already on ${stays}` };
+  }
+  return { label, description, run };
+}
+
+/**
+ * The four rebases: onto and from the checked-out commit, onto trunk, and onto the stack base.
+ *
+ * All four walk the graph, so each carries a fork above its root and branches that no stack
+ * record names. The `gh stack` pair further down moves recorded layers instead, which is why
+ * both families stay.
+ *
+ * The first two need a second commit, so the checked-out commit's own menu leaves them out.
+ */
+function rebaseItems(
+  model: RenderModel,
+  commit: UICommit,
+  actions: CommitMenuActions
+): MenuItem[] {
+  const moving = movingSet(model, commit.sha, "this commit");
+  const recorded = "Re-records the bases of any gh stack layer it moves";
+  const items: MenuItem[] = [];
+
+  if (!commit.isHead && model.headSha) {
+    const head = findCommit(model, model.headSha);
+    items.push(
+      rebaseItem(
+        "Rebase this commit and its descendants onto current commit",
+        `Re-parent ${moving} on the commit you are on, without a fetch. ${recorded}`,
+        rebaseRefusal(model, commit, model.headSha),
+        "the current commit",
+        () =>
+          actions.onRebase(commit.sha, { kind: "commit", sha: model.headSha })
+      ),
+      head
+        ? rebaseItem(
+            "Rebase current commit and its descendants onto this commit",
+            `Re-parent ${movingSet(model, head.sha, "the commit you are on")} on this one, without a fetch. ${recorded}`,
+            rebaseRefusal(model, head, commit.sha),
+            "this commit",
+            () =>
+              actions.onRebase(head.sha, { kind: "commit", sha: commit.sha })
+          )
+        : {
+            // A trunk commit is not this checkout's to move.
+            label:
+              "Rebase current commit and its descendants onto this commit — the current commit is on trunk",
+          }
+    );
+  }
+
+  const base = stackBaseSha(model, commit);
+  items.push(
+    {
+      label: "Rebase this commit and its descendants onto latest trunk",
+      description: `Fetch ${model.trunkRef || "trunk"}, then replay ${moving} on its tip — every commit above this one, stacked or not. ${recorded}`,
+      run: () => actions.onRebase(commit.sha, { kind: "trunk" }),
+    },
+    rebaseItem(
+      "Rebase this commit and its descendants onto stack base",
+      `Re-parent ${moving} on the commit this stack forked from, without pulling in newer trunk commits. ${recorded}`,
+      base ? rebaseRefusal(model, commit, base) : null,
+      "the stack base",
+      () => actions.onRebase(commit.sha, { kind: "base" })
+    )
+  );
+  return items;
+}
+
 export function commitMenuItems(
   model: RenderModel,
   commit: UICommit,
   actions: CommitMenuActions
 ): MenuItem[] {
-  const descendantCount = countDescendants(model, commit.sha);
-  const moving =
-    descendantCount === 1
-      ? "this commit"
-      : `this commit + ${descendantCount - 1} above`;
   const items: MenuItem[] = [
     { head: `${commit.shortSha} ${truncate(commit.subject, 34)}` },
   ];
@@ -192,6 +283,47 @@ export function commitMenuItems(
     );
     return items;
   }
+
+  const submittable = submitTarget(commit);
+  if (submittable) {
+    const existing = submittable.pullRequest;
+    items.push(
+      { separator: true },
+      {
+        label: existing
+          ? `Submit ${submittable.name} → #${existing.number}`
+          : `Submit ${submittable.name} as pull request`,
+        description:
+          "Push the branch and set the pull request title and body from this commit message",
+        run: () => actions.onSubmit(commit),
+      }
+    );
+    const layers = stackBranchesUpTo(model, commit);
+    if (layers.length > 1) {
+      items.push({
+        label: `Submit stack — ${layers.length} branches up to ${submittable.name}`,
+        description:
+          "Submit each branch from the bottom up, so every pull request has its base on GitHub",
+        run: () => actions.onSubmitStack(commit),
+      });
+    }
+  }
+
+  items.push(
+    { separator: true },
+    {
+      label: "Split into two commits…",
+      description: "Choose which changes go in the first commit",
+      run: () => actions.onSplit(commit),
+    },
+    {
+      label: "Fold into the commit below",
+      description: "Combine this commit with its parent, keeping both messages",
+      run: () => actions.onFold(commit),
+    },
+    { separator: true },
+    ...rebaseItems(model, commit, actions)
+  );
 
   const stacked = (commit.branchDetails ?? []).find(detail => detail.stack);
   if (stacked) {
@@ -241,60 +373,6 @@ export function commitMenuItems(
       }
     );
   }
-
-  const submittable = submitTarget(commit);
-  if (submittable) {
-    const existing = submittable.pullRequest;
-    items.push(
-      { separator: true },
-      {
-        label: existing
-          ? `Submit ${submittable.name} → #${existing.number}`
-          : `Submit ${submittable.name} as pull request`,
-        description:
-          "Push the branch and set the pull request title and body from this commit message",
-        run: () => actions.onSubmit(commit),
-      }
-    );
-    const layers = stackBranchesUpTo(model, commit);
-    if (layers.length > 1) {
-      items.push({
-        label: `Submit stack — ${layers.length} branches up to ${submittable.name}`,
-        description:
-          "Submit each branch from the bottom up, so every pull request has its base on GitHub",
-        run: () => actions.onSubmitStack(commit),
-      });
-    }
-  }
-
-  items.push(
-    { separator: true },
-    {
-      label: "Split into two commits…",
-      description: "Choose which changes go in the first commit",
-      run: () => actions.onSplit(commit),
-    },
-    {
-      label: "Fold into the commit below",
-      description: "Combine this commit with its parent, keeping both messages",
-      run: () => actions.onFold(commit),
-    },
-    // These two move commits; the `gh stack` pair above moves layers. Git walks the graph, so
-    // these carry a fork above the commit and branches no stack record names — which is why both
-    // families stay rather than collapsing into one entry.
-    {
-      label: `Rebase ${moving} onto ${model.trunkRef || "trunk"}`,
-      description:
-        "Fetch trunk, then replay these commits on its tip — every commit above this one, stacked or not. Re-records the bases of any gh stack layer it moves",
-      run: () => actions.onRebase(commit, "trunk"),
-    },
-    {
-      label: `Rebase ${moving} onto stack base`,
-      description:
-        "Re-parent these commits on the one this stack forked from, without pulling in newer trunk commits. Re-records the bases of any gh stack layer it moves",
-      run: () => actions.onRebase(commit, "base"),
-    }
-  );
 
   const deletions = deleteItems(commit, actions);
   if (deletions.length) {

@@ -41,6 +41,24 @@ export async function expectLogEntry(page, title) {
   ).toBeVisible();
 }
 
+/** The menu entry most rebase tests click, exactly as the menu prints it. */
+export const REBASE_ONTO_TRUNK =
+  "Rebase this commit and its descendants onto latest trunk";
+
+/**
+ * A control's description, wherever the tooltip layer has left it.
+ *
+ * `Tooltip` moves `title` to `data-tip` the first time the pointer crosses a control, and a menu
+ * opens under the pointer, so which attribute an entry has depends on where the menu landed.
+ *
+ * @param {import("@playwright/test").Locator} locator
+ */
+export async function descriptionOf(locator) {
+  return locator.evaluate(
+    element => element.dataset.tip ?? element.getAttribute("title") ?? ""
+  );
+}
+
 /**
  * Click the commit with this subject and wait for its panel to finish loading.
  *

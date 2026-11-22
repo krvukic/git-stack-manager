@@ -14,7 +14,9 @@ import {
   countDescendants,
   findCommit,
   gotoTarget,
+  rebaseRefusal,
   splitMessage,
+  stackBaseSha,
   stackBranchesUpTo,
   submitTarget,
   truncate,
@@ -96,6 +98,69 @@ test("descendants follow every branch of a fork", () => {
   });
   assert.equal(countDescendants(forked, "bs"), 4);
   assert.equal(countDescendants(forked, "a1"), 2);
+});
+
+/**
+ * A three-commit stack beside a one-commit one, both on the same base:
+ *
+ *   s3 → s2 → s1 → bs      o1 → bs
+ */
+const TWO_STACKS = /** @type {RenderModel} */ ({
+  rows: [
+    commitRow("s3", ["s2"]),
+    commitRow("s2", ["s1"]),
+    commitRow("s1", ["bs"]),
+    commitRow("o1", ["bs"]),
+    { type: "base", sha: "bs" },
+  ],
+});
+
+/** @param {string} sha */
+function inTwoStacks(sha) {
+  return present(findCommit(TWO_STACKS, sha), `the commit ${sha}`);
+}
+
+/** What dims a rebase entry before the click: the host refuses the same two cases after it. */
+test("a rebase onto a commit that would move with it is refused", () => {
+  assert.equal(
+    rebaseRefusal(TWO_STACKS, inTwoStacks("s1"), "s3"),
+    "moves-destination"
+  );
+  assert.equal(
+    rebaseRefusal(TWO_STACKS, inTwoStacks("s2"), "s2"),
+    "moves-destination"
+  );
+});
+
+test("a rebase onto the commit's own parent is refused as already there", () => {
+  assert.equal(
+    rebaseRefusal(TWO_STACKS, inTwoStacks("s2"), "s1"),
+    "already-there"
+  );
+  assert.equal(
+    rebaseRefusal(TWO_STACKS, inTwoStacks("o1"), "bs"),
+    "already-there"
+  );
+});
+
+test("a rebase onto another stack, or onto an ancestor further down, is allowed", () => {
+  assert.equal(rebaseRefusal(TWO_STACKS, inTwoStacks("s1"), "o1"), null);
+  assert.equal(rebaseRefusal(TWO_STACKS, inTwoStacks("o1"), "s3"), null);
+  // Skips s2, which stays on s1 under its own branch.
+  assert.equal(rebaseRefusal(TWO_STACKS, inTwoStacks("s3"), "s1"), null);
+});
+
+test("the stack base is the first ancestor that is not a local commit", () => {
+  assert.equal(stackBaseSha(TWO_STACKS, inTwoStacks("s3")), "bs");
+  assert.equal(stackBaseSha(TWO_STACKS, inTwoStacks("o1")), "bs");
+  const rootless = /** @type {RenderModel} */ ({ rows: [commitRow("r1", [])] });
+  assert.equal(
+    stackBaseSha(
+      rootless,
+      present(findCommit(rootless, "r1"), "the commit r1")
+    ),
+    null
+  );
 });
 
 /** The overlay's amend picker, which may only offer commits the working copy sits on. */

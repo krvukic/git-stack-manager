@@ -10,7 +10,12 @@
  * applying a split, and the two commits it leaves behind, is in `operations.spec.mjs`.
  */
 import { expect, reopen, test } from "./fixtures/demoRepo.mjs";
-import { expectToast, selectCommit } from "./fixtures/interactions.mjs";
+import {
+  descriptionOf,
+  expectToast,
+  REBASE_ONTO_TRUNK,
+  selectCommit,
+} from "./fixtures/interactions.mjs";
 
 test("right-clicking a stacked commit lists its rebase destinations", async ({
   smartlog,
@@ -64,23 +69,139 @@ test("the two rebase families say apart what each one moves", async ({
   await smartlog
     .getByText("feat(pad): add padStart")
     .click({ button: "right" });
-  // Four rebase entries sit on one stacked commit, and only the tooltips separate them: two move
-  // recorded layers, two move commits. A reader picks between them on that sentence alone, so it
-  // is pinned.
+  // Two kinds of rebase entry sit on one stacked commit, and only the tooltips separate them: two
+  // move recorded layers, the rest move commits. A reader picks between them on that sentence
+  // alone, so it is pinned.
   await expect(
     menu.locator(".item", { hasText: "Rebase stack (all layers)" })
   ).toHaveAttribute("title", /every recorded layer/);
   await expect(
     menu.locator(".item", { hasText: "Rebase this layer and above" })
   ).toHaveAttribute("title", /from this layer up/);
-  // The panel's own rebase re-records the bases it moves, so neither entry leaves a stack
-  // recorded against replaced commits. That is the part worth stating where a reader looks.
-  for (const label of ["onto origin/main", "onto stack base"]) {
-    await expect(menu.locator(".item", { hasText: label })).toHaveAttribute(
-      "title",
-      /Re-records the bases of any gh stack layer it moves/
-    );
+  // The panel's own rebase re-records the bases it moves, so no entry leaves a stack recorded
+  // against replaced commits. That is the part worth stating where a reader looks.
+  for (const label of [
+    "onto current commit",
+    "onto latest trunk",
+    "onto stack base",
+  ]) {
+    expect(
+      await descriptionOf(menu.locator(".item", { hasText: label }))
+    ).toContain("Re-records the bases of any gh stack layer it moves");
   }
+});
+
+/**
+ * The two rebases that take the checked-out commit as one end.
+ *
+ * The demo opens on `main`, a trunk commit, so each test checks out the commit it needs first.
+ * Every one asserts the parent git ends up with: a toast reads the same whichever commit the
+ * rebase landed on.
+ */
+test("a commit rebases onto the checked-out commit, with its branch", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  await demoRepository.git(["checkout", "trim-utils"]);
+  await reopen(smartlog);
+
+  // escape-html is one commit in a stack of its own, so nothing else moves with it.
+  await smartlog.getByText("feat: add escapeHtml").click({ button: "right" });
+  await smartlog
+    .getByText("Rebase this commit and its descendants onto current commit", {
+      exact: true,
+    })
+    .click();
+  await expectToast(smartlog, "Rebased escape-html");
+
+  expect(await demoRepository.git(["rev-parse", "escape-html~1"])).toBe(
+    await demoRepository.git(["rev-parse", "trim-utils"])
+  );
+  // The checked-out branch is the destination, so it stays where it was.
+  expect(await demoRepository.git(["rev-parse", "--abbrev-ref", "HEAD"])).toBe(
+    "trim-utils"
+  );
+});
+
+test("the checked-out commit rebases onto the clicked commit, and HEAD follows", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  await demoRepository.git(["checkout", "escape-html"]);
+  await reopen(smartlog);
+
+  await smartlog
+    .getByText("feat(pad): add padStart")
+    .click({ button: "right" });
+  await smartlog
+    .getByText("Rebase current commit and its descendants onto this commit", {
+      exact: true,
+    })
+    .click();
+  await expectToast(smartlog, "Rebased escape-html");
+
+  expect(await demoRepository.git(["rev-parse", "escape-html~1"])).toBe(
+    await demoRepository.git(["rev-parse", "pad-utils"])
+  );
+  expect(await demoRepository.git(["rev-parse", "--abbrev-ref", "HEAD"])).toBe(
+    "escape-html"
+  );
+  expect(await demoRepository.git(["status", "--porcelain"])).toBe("");
+});
+
+test("a rebase that cannot run is dimmed, with the reason", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  const menu = smartlog.locator("#menu");
+  // The rebases only: a stacked commit's `gh stack` entries are dimmed for a reason of their own.
+  const dimmed = menu.locator(".item.text-muted", { hasText: "Rebase" });
+
+  // On `main`, a trunk commit: it can be a destination, and this checkout cannot move it.
+  await smartlog
+    .getByText("feat(pad): add padStart")
+    .click({ button: "right" });
+  await expect(dimmed).toHaveText([
+    "Rebase current commit and its descendants onto this commit — the current commit is on trunk",
+  ]);
+  await smartlog.keyboard.press("Escape");
+
+  await demoRepository.git(["checkout", "trim-utils"]);
+  await reopen(smartlog);
+
+  // The commit directly under the checked-out one. Moving it onto the checked-out commit would
+  // put it on top of itself, and the checked-out commit is already on it.
+  await smartlog
+    .getByText("test(trim): cover collapseWhitespace")
+    .click({ button: "right" });
+  await expect(dimmed).toHaveText([
+    "Rebase this commit and its descendants onto current commit — the current commit is one of its descendants",
+    "Rebase current commit and its descendants onto this commit — already on this commit",
+  ]);
+  await smartlog.keyboard.press("Escape");
+
+  // The checked-out commit has no second commit to pair with, so its menu leaves both out.
+  await smartlog
+    .getByText("test(pad): cover padStart (local, unpushed)")
+    .click({ button: "right" });
+  await expect(
+    menu.locator(".item", { hasText: "current commit" })
+  ).toHaveCount(0);
+  await expect(
+    menu.getByText(REBASE_ONTO_TRUNK, { exact: true })
+  ).toBeVisible();
+});
+
+test("a stack's bottom commit cannot rebase onto the base it is already on", async ({
+  smartlog,
+}) => {
+  // escape-html forks straight off a trunk commit, which is its stack base.
+  await smartlog.getByText("feat: add escapeHtml").click({ button: "right" });
+  await expect(
+    smartlog.locator("#menu .item", { hasText: "onto stack base" })
+  ).toHaveText(
+    "Rebase this commit and its descendants onto stack base — already on the stack base"
+  );
 });
 
 test("clicking outside dismisses the menu, and the row clicked still responds", async ({
@@ -259,7 +380,7 @@ test("Copy commit hash is offered on the HEAD row and mid-conflict", async ({
   await smartlog
     .getByText("feat(truncate): break at word boundaries")
     .click({ button: "right" });
-  await smartlog.getByText(/^Rebase this commit onto origin\/main$/).click();
+  await smartlog.getByText(REBASE_ONTO_TRUNK, { exact: true }).click();
   await smartlog.waitForSelector("#conflict.open");
   // The toast, not just the banner. The banner appears with the model the rebase returned,
   // and the tree re-laying out under an open menu scrolls it — which this menu closes on, by

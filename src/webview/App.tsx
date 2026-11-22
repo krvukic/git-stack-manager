@@ -367,8 +367,8 @@ export function App({ settings }: { settings: HostSettings }) {
                     onSubmitStack: c => void commitActions.submitStack(c),
                     onSplit: c => void commitActions.openSplit(c),
                     onFold: c => void commitActions.foldCommit(c),
-                    onRebase: (c, destination) =>
-                      void commitActions.runRebase(c, destination),
+                    onRebase: (rootSha, destination) =>
+                      void commitActions.runRebase(rootSha, destination),
                   }),
                 });
               }}

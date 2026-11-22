@@ -3,6 +3,27 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0] - 2026-11-22
+
+### Added
+
+- Two rebases in a commit's right-click menu take the checked-out commit as one end. **Rebase
+  this commit and its descendants onto current commit** moves the clicked commit onto the one you
+  are on, and **Rebase current commit and its descendants onto this commit** moves the one you are
+  on onto the clicked commit. The checked-out commit's own menu offers neither.
+- A rebase entry that cannot run stays dimmed and gives the reason, before the click: the
+  destination is one of the commits that would move, the commits are already on it, or the
+  checked-out commit is on trunk. **Onto stack base** is dimmed the same way on a stack's bottom
+  commit, where it used to answer with an error.
+
+### Changed
+
+- The two existing rebase entries read **Rebase this commit and its descendants onto latest
+  trunk** and **onto stack base**. Each tooltip gives what the label used to: how many commits
+  move, and which trunk ref.
+- The right-click menu orders its sections as submit, split and fold, rebase, `gh stack`, and
+  delete. The `gh stack` section came before submit.
+
 ## [0.22.0] - 2026-11-22
 
 ### Changed

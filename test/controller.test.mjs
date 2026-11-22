@@ -122,12 +122,10 @@ test("a non-object payload is tolerated rather than crashing the dispatcher", as
 });
 
 /**
- * The menu offers two rebase destinations, trunk and the stack base, and nothing in the tree
- * drags one commit onto another. `Repository.rebase` still takes a named commit, so the
- * boundary is where that stops being reachable — an unrecognised destination is a payload no
- * reader can have produced.
+ * The rebase payload's boundary: a destination names trunk, the stack base, or a commit, and a
+ * commit destination has to name one.
  */
-test("a rebase destination the menu never offers is refused by name", async t => {
+test("a rebase destination outside the three kinds is refused by name", async t => {
   const { controller } = buildController(t);
   const before = await controller.model();
   const commit = present(
@@ -137,11 +135,37 @@ test("a rebase destination the menu never offers is refused by name", async t =>
 
   const result = await controller.handle("rebase", {
     sha: commit.sha,
-    destination: "commit",
-    destinationSha: commit.sha,
+    destination: "elsewhere",
   });
   assert.equal(result.ok, false);
-  assert.match(result.error, /Unknown rebase destination: commit/);
+  assert.match(result.error, /Unknown rebase destination: elsewhere/);
+
+  const unnamed = await controller.handle("rebase", {
+    sha: commit.sha,
+    destination: "commit",
+  });
+  assert.equal(unnamed.ok, false);
+  assert.match(unnamed.error, /destinationSha/);
+});
+
+test("a rebase onto a named commit reaches the planner, which refuses a commit's own parent", async t => {
+  const { controller } = buildController(t);
+  const before = await controller.model();
+  const commit = present(
+    before.rows
+      .flatMap(row => (row.type === "commit" ? [row.commit] : []))
+      .find(candidate => candidate.parents.length === 1),
+    "a commit with one parent"
+  );
+
+  const result = await controller.handle("rebase", {
+    sha: commit.sha,
+    destination: "commit",
+    destinationSha: commit.parents[0],
+  });
+  // The planner's own refusal, which only a parsed commit destination can reach.
+  assert.equal(result.ok, false);
+  assert.match(result.error, /already sit on that destination/);
 });
 
 test("a mutating action returns the fresh model and its command log together", async t => {
