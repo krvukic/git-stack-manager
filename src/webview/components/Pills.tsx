@@ -17,7 +17,12 @@
  */
 import type { UIBranch } from "#ui/renderModel";
 import { classes } from "../classes";
-import { pullRequestBadge, stackBadge, syncBadge } from "../model/badges.mjs";
+import {
+  pullRequestBadge,
+  stackBadge,
+  stackStatusBadge,
+  syncBadge,
+} from "../model/badges.mjs";
 
 /** The shape every pill and badge shares. `sizeClass` is what varies. */
 const CAPSULE = "flex-none rounded-capsule leading-none whitespace-nowrap";
@@ -188,7 +193,11 @@ export function BranchPills({
   branch: UIBranch;
   onOpenUrl: (url: string) => void;
 }) {
-  const sync = syncBadge(branch.sync, branch.pullRequest, branch.tracksTrunk);
+  // A branch in a stack gives up its own sync badge: the stack's one status, on its top row,
+  // says what the counts could not, which is whether GitHub or this checkout moved.
+  const sync = branch.stackStatus
+    ? stackStatusBadge(branch.stackStatus)
+    : syncBadge(branch.sync, branch.pullRequest, branch.tracksTrunk);
   const stack = stackBadge(branch.pullRequest);
   return (
     <>

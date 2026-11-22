@@ -200,6 +200,14 @@ GitHub answers.
 
 - A branch whose pull request GitHub links carries its place on its pill, such as `2/3`. The
   place arrives in the same request that reads pull request status.
+- A stack of two branches or more carries one status for the whole stack, as a badge on its top
+  row and as a sentence above Submit in the commit panel. The branches in it show no sync badge
+  of their own. The status says which side moved and what to click: *in sync*, *not on GitHub*,
+  *to submit*, *GitHub is newer*, *both changed*, or *not linked*. A count of commits cannot tell
+  those apart, since a rebased branch is ahead and behind exactly as a branch that a teammate
+  pushed to is. The status compares three commits per branch instead: the local tip, the commit
+  the last fetch left on the remote-tracking ref, and the pull request's head on GitHub. It needs
+  no fetch.
 - **Submit stack** pushes every branch up to the selected one, opens or updates each pull
   request, and then links them.
 - **Link stack**, in the right-click menu's `gh stack` section, links the stack's open pull

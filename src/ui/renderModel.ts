@@ -15,6 +15,11 @@ import {
   PullRequestStatus,
 } from "#github/pullRequests";
 import { planStackLink } from "#github/stackLink";
+import {
+  StackStatus,
+  stackStatus,
+  StackStatusLayer,
+} from "#github/stackStatus";
 import { stackChain } from "#github/submit";
 import { commitBranchRefusal } from "#history/createBranch";
 import { deletionRefusal } from "#history/deleteBranch";
@@ -44,6 +49,12 @@ export type UIBranch = {
    */
   stackLink: StackLinkPreview | null;
   /**
+   * How the stack this branch is in compares with GitHub, or null for a branch with nothing
+   * stacked on it or under it, which keeps its own sync badge. Every branch of a stack carries
+   * the same status, and `top` marks the one whose row shows it.
+   */
+  stackStatus: UIStackStatus | null;
+  /**
    * Why this branch is still here although its pull request merged, or null when its pull
    * request has not merged or the branch can be removed. `keptReason` in `pruneMerged.ts` owns
    * the wording; the merged badge's tooltip shows it.
@@ -60,6 +71,11 @@ export type UIBranch = {
    * the menu only offers or withholds the entry.
    */
   deletionRefusal: string | null;
+};
+
+export type UIStackStatus = StackStatus & {
+  /** True on the stack's top branch, whose row carries the badge. */
+  top: boolean;
 };
 
 export type StackLinkPreview = {
@@ -211,6 +227,55 @@ function previewStackLink(
   return { refusal: null, count: plan.pullRequests.length };
 }
 
+/**
+ * The status of every stack of two branches or more, keyed by each branch in it.
+ *
+ * A stack is found from its top: a branch whose own `stackChain` ends with it. The commits
+ * arrive newest first, so a top is met before the branches under it, and a branch that two
+ * tops share keeps the status of the first. A branch that is already inside a stack is not
+ * taken as a top of its own, which is what a fork point would otherwise be.
+ */
+function statusPerBranch(
+  rawData: RawData,
+  pullRequests: Map<string, PullRequestStatus>
+): Map<string, UIStackStatus> {
+  const tips = new Map<string, StackStatusLayer>();
+  for (const commit of rawData.commits) {
+    commit.branches.forEach((branch, index) => {
+      const sync = commit.branchSyncs[index] ?? null;
+      tips.set(branch, {
+        branch,
+        sha: commit.sha,
+        sync,
+        // A branch that tracks trunk itself has no remote copy of its own to compare with.
+        upstreamSha: sync?.upstream
+          ? (rawData.upstreamTips.get(sync.upstream) ?? null)
+          : null,
+        pullRequest: pullRequests.get(branch) ?? null,
+      });
+    });
+  }
+  const statuses = new Map<string, UIStackStatus>();
+  for (const top of tips.keys()) {
+    const chain = stackChain(rawData, top);
+    if (chain.length < 2 || chain.at(-1) !== top || statuses.has(top)) {
+      continue;
+    }
+    const layers = chain.flatMap(branch => tips.get(branch) ?? []);
+    const link = planStackLink(layers, layers.length);
+    const status = stackStatus(
+      layers,
+      typeof link !== "string" && link.kind === "current"
+    );
+    for (const branch of chain) {
+      if (!statuses.has(branch)) {
+        statuses.set(branch, { ...status, top: branch === top });
+      }
+    }
+  }
+  return statuses;
+}
+
 export function buildModel(
   rawData: RawData,
   pullRequests: Map<string, PullRequestStatus> = new Map(),
@@ -260,6 +325,8 @@ export function buildModel(
     rawData.commits.map(commit => [commit.sha, commit])
   );
 
+  const stackStatuses = statusPerBranch(rawData, pullRequests);
+
   const toUI = (sha: string): UICommit => {
     const commit = commitBySha.get(sha)!;
     return {
@@ -287,6 +354,7 @@ export function buildModel(
             name !== rawData.trunkBranch,
           worktree: rawData.heldBranches.get(name) ?? null,
           stackLink: previewStackLink(rawData, pullRequests, name),
+          stackStatus: stackStatuses.get(name) ?? null,
           mergedKeptReason: keptReasons.get(name) ?? null,
           draft: rawData.branchDrafts.get(name) ?? null,
           deletionRefusal: deletionRefusal(rawData, name),

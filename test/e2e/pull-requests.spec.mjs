@@ -11,7 +11,11 @@
  * records what GitHub answered, these record what the tree drew.
  */
 import { expect, reopen, test } from "./fixtures/demoRepo.mjs";
-import { expectToast, selectCommit } from "./fixtures/interactions.mjs";
+import {
+  descriptionOf,
+  expectToast,
+  selectCommit,
+} from "./fixtures/interactions.mjs";
 
 /**
  * @typedef {object} PullRequestBadge
@@ -367,4 +371,65 @@ test("deleting merged branches takes only a branch still at the merged commit, a
   await reopen(smartlog);
   await expect(pill).toHaveCount(1);
   expect(await exists()).toBe(true);
+});
+
+/**
+ * The stack status, which stands in for the sync badge of every branch in a stack.
+ *
+ * case-utils → pad-utils → trim-utils is the demo's linked stack, and trim-utils carries one
+ * commit that was never pushed. So the three rows show one badge between them, and it changes
+ * only when the stack as a whole does.
+ */
+const STATUS_BADGE = '[data-badge]:not([data-badge="stackpos"])';
+
+/**
+ * @param {import("@playwright/test").Page} page
+ * @param {string} subject
+ */
+function statusBadgeOn(page, subject) {
+  return page.locator("#tree .row", { hasText: subject }).locator(STATUS_BADGE);
+}
+
+test("a stack's top row carries one status for the stack, and its other rows carry none", async ({
+  smartlog,
+}) => {
+  const top = statusBadgeOn(
+    smartlog,
+    "test(pad): cover padStart (local, unpushed)"
+  );
+  await expect(top).toHaveText("to submit");
+  expect(await descriptionOf(top)).toBe(
+    "trim-utils has changes that GitHub does not have. Submit stack pushes them."
+  );
+  // The branches under the top give up their own badge to the stack's.
+  await expect(statusBadgeOn(smartlog, "feat(pad): add padStart")).toHaveCount(
+    0
+  );
+  await expect(
+    statusBadgeOn(smartlog, "feat(case): add snakeCase")
+  ).toHaveCount(0);
+  // A branch with nothing stacked on it keeps the badge it always had.
+  await expect(statusBadgeOn(smartlog, "feat: add escapeHtml")).toHaveText(
+    "not submitted"
+  );
+
+  // The sentence in full, on any branch of the stack, where the row has room for two words.
+  await selectCommit(smartlog, "feat(pad): add padStart");
+  await expect(smartlog.locator("#stack-status")).toHaveText(
+    "trim-utils has changes that GitHub does not have. Submit stack pushes them."
+  );
+});
+
+test("submitting the stack brings its status to in sync", async ({
+  smartlog,
+}) => {
+  const subject = "test(pad): cover padStart (local, unpushed)";
+  await selectCommit(smartlog, subject);
+  await smartlog.locator("#btn-submit-stack").click();
+  await expectToast(smartlog, "Submitted 3 branches");
+
+  await expect(statusBadgeOn(smartlog, subject)).toHaveText("in sync");
+  await expect(smartlog.locator("#stack-status")).toHaveText(
+    "In sync with GitHub."
+  );
 });

@@ -285,6 +285,12 @@ export function CommitPanel({
       <div className="[&>div:last-child]:mt-1">
         {target ? (
           <>
+            {/* The stack's status in full, where the tree's badge has room for a few words. */}
+            {target.stackStatus ? (
+              <div className="mb-2 text-body" id="stack-status">
+                {target.stackStatus.sentence}
+              </div>
+            ) : null}
             {/*
               Above the button it governs, and absent once the branch has an open pull request:
               the toggle sets the state a pull request opens in, and Submit leaves an open one's

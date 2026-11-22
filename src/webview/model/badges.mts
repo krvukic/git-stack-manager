@@ -11,6 +11,7 @@
  */
 import type { BranchSync } from "#git/snapshot";
 import type { PullRequestStatus } from "#github/pullRequests";
+import type { UIStackStatus } from "#ui/renderModel";
 
 export type SyncBadge = {
   /** Suffix of the stylesheet class that paints it: `.badge.ahead` and so on. */
@@ -230,6 +231,34 @@ export function pullRequestBadge(
       "Click to open on GitHub.",
     ].join("\n"),
     url: pullRequest.url,
+  };
+}
+
+/**
+ * The badge on a stack's top row: how the whole stack compares with GitHub.
+ *
+ * Painted with the sync badges' own colours, since it stands where one of them would: green
+ * for in sync, amber for something to push, blue for a pending link, red where GitHub has
+ * commits that this checkout does not.
+ */
+export function stackStatusBadge(
+  status: UIStackStatus | null
+): SyncBadge | null {
+  if (!status?.top) {
+    return null;
+  }
+  const variants: Record<UIStackStatus["state"], SyncBadge["variant"]> = {
+    "in-sync": "synced",
+    unpushed: "unpushed",
+    local: "unpushed",
+    unlinked: "ahead",
+    remote: "diverged",
+    both: "diverged",
+  };
+  return {
+    variant: variants[status.state],
+    label: status.label,
+    description: status.sentence,
   };
 }
 

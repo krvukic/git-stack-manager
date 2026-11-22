@@ -8,7 +8,7 @@
  * wrong legend is worse than none.
  */
 import type { PullRequestStatus } from "#github/pullRequests";
-import type { UIBranch } from "#ui/renderModel";
+import type { UIBranch, UIStackStatus } from "#ui/renderModel";
 
 export type LegendRow = {
   /** A branch to render through the real pill component, for most rows. */
@@ -56,6 +56,7 @@ function branch(
     tracksTrunk,
     worktree: null,
     stackLink: null,
+    stackStatus: null,
     mergedKeptReason: null,
     draft: null,
     deletionRefusal: null,
@@ -84,6 +85,22 @@ function pullRequest(fields: Partial<PullRequestStatus>): PullRequestStatus {
  */
 function pullRequestOnly(fields: Partial<PullRequestStatus>): UIBranch {
   return branch(null, pullRequest(fields));
+}
+
+/**
+ * A stack's top branch, carrying the status drawn for the whole stack. The legend draws these
+ * with the wording `#github/stackStatus` would produce, since the status reaches the webview
+ * finished.
+ */
+function stackTop(
+  state: UIStackStatus["state"],
+  label: string,
+  sentence: string
+): UIBranch {
+  return {
+    ...branch(null),
+    stackStatus: { state, label, sentence, top: true },
+  };
 }
 
 export function legendGroups(): LegendGroup[] {
@@ -227,6 +244,43 @@ export function legendGroups(): LegendGroup[] {
           }),
           what: "Both glyphs together",
           why: "Checks first, then review — so two ticks mean tests green and approved.",
+        },
+      ],
+    },
+    {
+      heading: "How a stack compares to GitHub",
+      rows: [
+        {
+          branch: stackTop("in-sync", "in sync", "In sync with GitHub."),
+          what: "Stack in sync",
+          why: "On a stack's top branch, and it speaks for every branch in the stack. Their own sync badges give way to it.",
+        },
+        {
+          branch: stackTop(
+            "local",
+            "to submit",
+            "my-branch has changes that GitHub does not have. Submit stack pushes them."
+          ),
+          what: "Changes to submit",
+          why: "A branch moved here and GitHub did not: a new commit, an amend, or a rebase. The tooltip and the commit panel name the branches.",
+        },
+        {
+          branch: stackTop(
+            "remote",
+            "GitHub is newer",
+            "GitHub has a newer version of my-branch. Take GitHub's version."
+          ),
+          what: "GitHub is newer",
+          why: "GitHub moved and this checkout did not, which is what a restack after a merge leaves. Known without a fetch, from the pull request's head.",
+        },
+        {
+          branch: stackTop(
+            "unlinked",
+            "not linked",
+            "These pull requests are not linked as a stack. Link stack links them."
+          ),
+          what: "Not linked",
+          why: "Every branch is in sync, and GitHub does not link the pull requests as a stack in this order.",
         },
       ],
     },

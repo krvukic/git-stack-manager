@@ -122,6 +122,16 @@ where every pull request is already linked that way, and dissolves a stack first
 append reaches the order. The model carries the same plan as a preview per branch, which is how
 the menu dims Link stack with the planner's own reason rather than a second copy of the rule.
 
+**The stack status** (`src/github/stackStatus.ts`) replaces the sync badge on every branch of a
+stack, because that badge misleads exactly when stacks are in use. `%(upstream:track)` counts the
+commits on each side, and a rebased branch is ahead and behind just as a branch that someone else
+pushed to is. Three commits tell the two apart: the local tip, the commit the remote-tracking ref
+is on, and the pull request's head. If the last two agree, GitHub has not moved since the last
+fetch, and only the checkout did. If they differ, GitHub moved, with or without the checkout. The
+pull request head already arrives with the badges, so the comparison needs no fetch. The
+remote-tracking commit costs one `for-each-ref`, which the reader starts before it awaits the
+history walk, so the two run side by side.
+
 **Submit** (`src/github/submit.ts`) exists because pushing and describing a change are two separate
 things on GitHub. The push updates the branch, and GitHub sets the pull request's title and body
 once, at creation, from whatever the commit message said then. An amended message plus a force push

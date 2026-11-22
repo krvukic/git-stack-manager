@@ -135,6 +135,7 @@ test("the command panel records exactly what the action ran", async ({
     "git config -z --get-regexp ^(user\\.email|branch\\..*\\.gsm-draft)$",
     "git for-each-ref --include-root-refs --format=… HEAD refs/heads refs/remotes/origin/HEAD refs/remotes/origin/main refs/remotes/origin/master refs/heads/main refs/heads/master",
     "git status --porcelain=v2 --branch -z",
+    "git for-each-ref --format=… refs/remotes/origin/case-utils refs/remotes/origin/fix-slugify-unicode refs/remotes/origin/pad-utils refs/remotes/origin/trim-utils refs/remotes/origin/wrap-lines",
     "git log --author-date-order --boundary --format=… --branches HEAD --not origin/main",
     "git rev-list --left-right --count <sha>...origin/main",
     "git rev-list --left-right --count <sha>...origin/main",

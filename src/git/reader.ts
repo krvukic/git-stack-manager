@@ -139,6 +139,48 @@ async function readRefs(
     });
 }
 
+/**
+ * The commit each local branch's remote-tracking ref is on, in one `for-each-ref`.
+ *
+ * `%(upstream:track)` in `readRefs` counts commits on either side and names neither tip, and
+ * the tip is what tells a rebase from a push made elsewhere. The upstream names are only known
+ * once `readRefs` answers, so this is a second read rather than more patterns on the first. It
+ * runs beside the history walk, and not at all when no branch tracks a remote branch of its own.
+ */
+async function readUpstreamTips(
+  git: GitRunner,
+  refs: RefRow[],
+  trunkRef: string | null
+): Promise<Map<string, string>> {
+  const upstreams = new Set(
+    refs
+      .filter(
+        ref =>
+          ref.refName.startsWith("refs/heads/") &&
+          ref.upstream.includes("/") &&
+          ref.upstream !== trunkRef &&
+          ref.track !== "gone"
+      )
+      .map(ref => `refs/remotes/${ref.upstream}`)
+  );
+  const tips = new Map<string, string>();
+  if (!upstreams.size) {
+    return tips;
+  }
+  const output = await git.tryRun([
+    "for-each-ref",
+    `--format=%(refname:short)${FIELD_SEPARATOR}%(objectname)`,
+    ...upstreams,
+  ]);
+  for (const line of (output ?? "").split("\n")) {
+    const [name, sha] = line.split(FIELD_SEPARATOR);
+    if (name && sha) {
+      tips.set(name, sha);
+    }
+  }
+  return tips;
+}
+
 /** Expand a user-supplied ref (`origin/main`, `main`) into candidate full refs. */
 function toFullRef(ref: string): string {
   if (ref.startsWith("refs/")) {
@@ -621,6 +663,7 @@ export async function readRawData(
   if (!head.sha) {
     return {
       ...common,
+      upstreamTips: new Map(),
       trunkBranchCommit: null,
       headCommit: null,
       headSha: "",
@@ -630,24 +673,29 @@ export async function readRawData(
     };
   }
 
+  // Started before the walk is awaited, so the two run side by side.
+  const upstreamTipsRead = readUpstreamTips(git, refs, trunkRef);
   const walk = await walkLocalCommits(git, trunkRef, branchesAtSha, syncsAtSha);
   const { commits, boundaries } = walk;
-  const [bases, trunkBranchCommit, headCommit, conflict] = await Promise.all([
-    describeBases(git, commits, boundaries, trunkRef),
-    locateTrunkBranch(git, trunkBranch, trunkRef, trunkTip),
-    locateHead(git, head, refs, walk, trunkRef, trunkTip, trunkBranch),
-    status.hasUnmerged
-      ? readConflictState(
-          git,
-          status.uncommitted
-            .filter(file => file.status === "U")
-            .map(file => file.path)
-        )
-      : Promise.resolve(null),
-  ]);
+  const [bases, trunkBranchCommit, headCommit, conflict, upstreamTips] =
+    await Promise.all([
+      describeBases(git, commits, boundaries, trunkRef),
+      locateTrunkBranch(git, trunkBranch, trunkRef, trunkTip),
+      locateHead(git, head, refs, walk, trunkRef, trunkTip, trunkBranch),
+      status.hasUnmerged
+        ? readConflictState(
+            git,
+            status.uncommitted
+              .filter(file => file.status === "U")
+              .map(file => file.path)
+          )
+        : Promise.resolve(null),
+      upstreamTipsRead,
+    ]);
 
   return {
     ...common,
+    upstreamTips,
     trunkBranchCommit,
     headCommit,
     headSha: head.sha,

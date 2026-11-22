@@ -73,6 +73,12 @@ export type RawData = {
   repoName: string;
   userEmail: string;
   /**
+   * The commit each remote-tracking ref that a local branch tracks is on, keyed by the ref's
+   * short name, such as `origin/feature-a`. Trunk is left out, and so is a ref that no longer
+   * exists. `#github/stackStatus` compares these with the local tips.
+   */
+  upstreamTips: Map<string, string>;
+  /**
    * Whether each branch's pull request should open as a draft, for every branch with a stored
    * choice. `#git/branchDraft` owns where the choice is stored.
    */

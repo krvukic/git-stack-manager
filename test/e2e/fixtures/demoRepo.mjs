@@ -403,6 +403,8 @@ const CANNED_PULL_REQUESTS = [
     title: "feat(trim): add collapseWhitespace",
     url: "https://github.com/example/strkit/pull/206",
     headRefName: "trim-utils",
+    // trim-utils carries one commit that was never pushed, so GitHub's head is the pushed one.
+    headRefOid: PUSHED_TIP,
     baseRefName: "pad-utils",
     reviewDecision: "APPROVED",
     checksState: "SUCCESS",
@@ -526,10 +528,10 @@ const CANNED_PULL_REQUESTS = [
  *
  * Every canned record's `headRefOid` is resolved here, against the demo repository's
  * actual local branch tips, rather than hardcoded: a literal sha would drift the moment
- * the demo generator changed anything upstream of that commit. `PUSHED_TIP` is the one
- * exception, resolved against the *remote* branch instead, for the record whose local
- * tip has since diverged from what was pushed — found only by the name lookup, since a
- * lookup by commit cannot find a pull request at a commit the branch has moved past.
+ * the demo generator changed anything upstream of that commit. `PUSHED_TIP` is the
+ * exception, resolved against the *remote* branch instead, for a record whose local tip
+ * has moved past what was pushed — found only by the name lookup, since a lookup by commit
+ * cannot find a pull request at a commit the branch has moved past.
  *
  * @param {string} directory
  */

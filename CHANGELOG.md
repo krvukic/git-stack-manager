@@ -3,6 +3,23 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-11-22
+
+### Added
+
+- One status for a whole stack, as a badge on the stack's top row and as a sentence above Submit
+  in the commit panel: *in sync*, *not on GitHub*, *to submit*, *GitHub is newer*, *both changed*,
+  or *not linked*. The sentence names the branches and the action, such as "trim-utils has
+  changes that GitHub does not have. Submit stack pushes them." It is known without a fetch, from
+  the pull request's head.
+
+### Changed
+
+- A branch in a stack of two or more shows no sync badge of its own; the stack's status stands
+  in for it. After a rebase onto trunk, every branch of the stack used to read *diverged*, in
+  red, though only the checkout had moved. The status reads *to submit* there. A branch with
+  nothing stacked on it or under it keeps its sync badge.
+
 ## [1.5.1] - 2026-11-22
 
 ### Fixed
