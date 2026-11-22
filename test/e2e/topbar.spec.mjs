@@ -41,6 +41,62 @@ test("hovering a described control shows its description", async ({
   await expect(smartlog.locator("#tip")).toContainText("Open the current file");
 });
 
+/**
+ * The browser's own popup, which no assertion can reach, so the `title` it reads is asserted
+ * instead.
+ *
+ * Dispatched inside the page rather than with `hover()`, because the claim is about one task:
+ * the `title` has to be gone by the time the `mouseover` handlers return, which is when the
+ * browser reads it. A real hover resolves some milliseconds later, and would pass against a
+ * `title` removed at any point before the read.
+ */
+test("a hovered control gives up its title before the tooltip's delay", async ({
+  smartlog,
+}) => {
+  const state = await smartlog.locator("#btn-pull").evaluate(button => {
+    button.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    return {
+      title: button.getAttribute("title"),
+      description: button.dataset.tip ?? "",
+      shown: document.querySelector("#tip.open") !== null,
+    };
+  });
+
+  expect(state.title).toBeNull();
+  expect(state.description).toContain("fast-forward");
+  // The tooltip still waits out its delay, so the move is what happened early, not the show.
+  expect(state.shown).toBe(false);
+});
+
+test("pressing the right mouse button hides the tooltip", async ({
+  smartlog,
+}) => {
+  // A top bar button rather than a commit: a commit's right-click opens the menu under the
+  // pointer, and the pointer leaving the commit for the menu hides the tooltip by itself.
+  await smartlog.locator("#btn-pull").hover();
+  await expect(smartlog.locator("#tip")).toBeVisible();
+
+  await smartlog.mouse.down({ button: "right" });
+
+  await expect(smartlog.locator("#tip")).toBeHidden();
+  await smartlog.mouse.up({ button: "right" });
+});
+
+test("a button pressed during the tooltip's delay cancels the tooltip", async ({
+  smartlog,
+}) => {
+  await smartlog.locator("#btn-pull").evaluate(button => {
+    button.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    button.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, button: 2 })
+    );
+  });
+
+  // Longer than the delay, which is the only way to assert that nothing arrives after it.
+  await smartlog.waitForTimeout(600);
+  await expect(smartlog.locator("#tip")).toBeHidden();
+});
+
 test("every top bar control describes itself", async ({ smartlog }) => {
   // A button whose only label is an icon, or whose label is a verb with no object, needs
   // the description more than the others — so this asserts none is left without one, in

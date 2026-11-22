@@ -12,6 +12,10 @@
  * `data-tip` when present and `title` otherwise, so a component may use either; `title`
  * is moved onto `data-tip` on first hover, which is what suppresses the native popup
  * underneath.
+ *
+ * The move happens on `mouseover` itself, ahead of the delay. A browser reads `title` for its
+ * own popup while it handles a mouse move, so a `title` still present once the handlers return
+ * can raise that popup over a resting pointer, however soon afterwards it is removed.
  */
 import { useEffect, useRef, useState } from "react";
 import { classes } from "../classes";
@@ -21,17 +25,33 @@ const TIP_DELAY = 350;
 
 type Placement = { top: number; left: number };
 
+/**
+ * The nearest described element at or above `node`, with every `title` on the way up moved to
+ * `data-tip`.
+ *
+ * Every ancestor, not only the nearest: a browser that finds no `title` on the hovered element
+ * raises its popup for the next ancestor that has one.
+ */
 function describedAncestor(node: EventTarget | null): HTMLElement | null {
+  let described: HTMLElement | null = null;
   for (
     let element = node as HTMLElement | null;
     element && element !== document.body;
     element = element.parentElement
   ) {
-    if (element.dataset && (element.dataset.tip || element.title)) {
-      return element;
+    if (!element.dataset) {
+      continue;
+    }
+    // A `title` that React set again after a change outranks the copy made from the old one.
+    if (element.title) {
+      element.dataset.tip = element.title;
+      element.removeAttribute("title");
+    }
+    if (!described && element.dataset.tip) {
+      described = element;
     }
   }
-  return null;
+  return described;
 }
 
 export function Tooltip() {
@@ -49,12 +69,6 @@ export function Tooltip() {
     };
 
     const show = (element: HTMLElement) => {
-      // Moving `title` aside stops the browser drawing its own popup over ours. Kept in
-      // `data-tip` so the text is still in the DOM for anything reading descriptions.
-      if (element.title) {
-        element.dataset.tip = element.title;
-        element.removeAttribute("title");
-      }
       target.current = element;
       setText(element.dataset.tip ?? null);
     };
@@ -103,6 +117,10 @@ export function Tooltip() {
     document.addEventListener("mouseout", onMouseOut);
     document.addEventListener("focusin", onFocusIn);
     document.addEventListener("focusout", hide);
+    // Any button, in the capture phase: a right-click raises no `click`, and the menu it opens
+    // must not appear under a tooltip, or under one whose delay was still running.
+    document.addEventListener("pointerdown", hide, true);
+    document.addEventListener("contextmenu", hide, true);
     document.addEventListener("click", hide);
     document.addEventListener("keydown", onKeyDown);
     return () => {
@@ -111,6 +129,8 @@ export function Tooltip() {
       document.removeEventListener("mouseout", onMouseOut);
       document.removeEventListener("focusin", onFocusIn);
       document.removeEventListener("focusout", hide);
+      document.removeEventListener("pointerdown", hide, true);
+      document.removeEventListener("contextmenu", hide, true);
       document.removeEventListener("click", hide);
       document.removeEventListener("keydown", onKeyDown);
     };

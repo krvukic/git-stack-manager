@@ -89,6 +89,8 @@ const pageEvaluationGlobals = /** @type {const} */ ({
   window: "readonly",
   getComputedStyle: "readonly",
   HTMLElement: "readonly",
+  MouseEvent: "readonly",
+  PointerEvent: "readonly",
   navigator: "readonly",
 });
 

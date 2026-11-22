@@ -3,6 +3,17 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.1] - 2026-11-22
+
+### Fixed
+
+- A tooltip closes when any mouse button goes down, so a commit's right-click menu never opens
+  under one, and a press during the tooltip's delay cancels it. Only a left click closed it
+  before.
+- A control gives up its `title` attribute the moment the pointer reaches it, where it kept the
+  attribute through the tooltip's delay before. A browser draws its own popup from that attribute,
+  beside the styled tooltip, so the change is aimed at that popup.
+
 ## [0.21.0] - 2026-10-04
 
 ### Added
