@@ -510,7 +510,7 @@ const ACTIONS: Record<string, ActionHandler> = {
     const branch = requireString(payload, "branch");
     const { value, log } = await controller.logged(`Submit ${branch}`, () =>
       controller.repository.submit(branch, {
-        draft: readFlag(payload, "draft"),
+        draftByDefault: readFlag(payload, "draftByDefault"),
       })
     );
     // The push changes what the branch's sync badge should say, so the caller gets
@@ -522,6 +522,21 @@ const ACTIONS: Record<string, ActionHandler> = {
     };
   },
 
+  /**
+   * The commit panel's Draft toggle. It touches only the repository's git config, so nothing
+   * reaches GitHub until Submit opens the pull request, and no history moves for Undo to
+   * restore.
+   */
+  async setDraft(controller, payload) {
+    const branch = requireString(payload, "branch");
+    const draft = readFlag(payload, "draft");
+    const { log } = await controller.logged(
+      `${draft ? "Draft" : "Ready for review"}: ${branch}`,
+      () => controller.repository.setBranchDraft(branch, draft)
+    );
+    return { ok: true, data: await controller.model(), log };
+  },
+
   /** Submit every branch from the bottom of the stack up to `branch`, like `submit` per layer. */
   async submitStack(controller, payload) {
     const branch = requireString(payload, "branch");
@@ -529,7 +544,7 @@ const ACTIONS: Record<string, ActionHandler> = {
       `Submit stack up to ${branch}`,
       () =>
         controller.repository.submitStack(branch, {
-          draft: readFlag(payload, "draft"),
+          draftByDefault: readFlag(payload, "draftByDefault"),
         })
     );
     return {

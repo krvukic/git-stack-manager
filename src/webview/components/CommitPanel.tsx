@@ -28,12 +28,14 @@ import {
   submitTarget,
 } from "../model/commits.mjs";
 import type { FileClick } from "../model/config.mjs";
+import { draftToggle } from "../model/draft.mjs";
 import {
   DESCRIPTION_HEIGHT_KEY,
   DESCRIPTION_MIN_HEIGHT,
 } from "../model/messageHeight.mjs";
 import { useStoredHeight } from "../state/useStoredHeight";
 import { Button, ButtonRow } from "./Button";
+import { Checkbox } from "./Checkbox";
 import { FieldLabel, TextArea, TextInput } from "./Field";
 import { CommitFileRow } from "./FileRow";
 import { Hairline } from "./Hairline";
@@ -117,12 +119,15 @@ export type CommitPanelProps = {
   model: RenderModel;
   files: FilesState;
   fileClick: FileClick;
+  /** The Config drawer's *New pull requests*, for a branch with no stored draft choice. */
+  draftByDefault: boolean;
   width: number;
   submitting: boolean;
   amending: boolean;
   onAmendMessage: (message: string) => void;
   onAmendWorkingChanges: () => void;
   onGoto: () => void;
+  onSetDraft: (branch: string, draft: boolean) => void;
   onSubmit: () => void;
   onSubmitStack: () => void;
   onViewChanges: () => void;
@@ -137,12 +142,14 @@ export function CommitPanel({
   model,
   files,
   fileClick,
+  draftByDefault,
   width,
   submitting,
   amending,
   onAmendMessage,
   onAmendWorkingChanges,
   onGoto,
+  onSetDraft,
   onSubmit,
   onSubmitStack,
   onViewChanges,
@@ -169,6 +176,7 @@ export function CommitPanel({
   const unchanged = subject === original.subject && body === original.body;
   const target = submitTarget(commit);
   const existing = target?.pullRequest;
+  const draft = target ? draftToggle(target, draftByDefault) : null;
   const layers = stackBranchesUpTo(model, commit);
   const goto = gotoTarget(commit);
 
@@ -277,6 +285,25 @@ export function CommitPanel({
       <div className="[&>div:last-child]:mt-1">
         {target ? (
           <>
+            {/*
+              Above the button it governs, and absent once the branch has an open pull request:
+              the toggle sets the state a pull request opens in, and Submit leaves an open one's
+              state alone.
+            */}
+            {draft === null ? null : (
+              <label
+                className="mb-2 flex w-fit cursor-pointer items-center gap-1.5 text-body"
+                title="Whether Submit opens this branch's pull request as a draft. Submit never changes the state of a pull request that is already open."
+              >
+                <Checkbox
+                  state={draft ? "all" : "none"}
+                  label={`Open the pull request for ${target.name} as a draft`}
+                  disabled={conflicted || submitting}
+                  onToggle={checked => onSetDraft(target.name, checked)}
+                />
+                Draft pull request
+              </label>
+            )}
             <ButtonRow>
               <Button
                 id="btn-submit"

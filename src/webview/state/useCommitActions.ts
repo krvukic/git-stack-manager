@@ -19,7 +19,11 @@ import { rpc } from "../rpc";
 import { useBusy } from "./useBusy";
 import type { Smartlog } from "./useSmartlog";
 
-export function useCommitActions(smartlog: Smartlog) {
+export function useCommitActions(
+  smartlog: Smartlog,
+  /** The Config drawer's *New pull requests*, which both submits send to the host. */
+  draftByDefault: boolean
+) {
   const { loadPullRequests, runAction, showToast } = smartlog;
   const { busy, whileBusy } = useBusy<"submit" | "amend" | "split">();
   const [split, setSplit] = useState<SplitState>(null);
@@ -277,7 +281,7 @@ export function useCommitActions(smartlog: Smartlog) {
           model: RenderModel;
         }>(
           "submit",
-          { branch },
+          { branch, draftByDefault },
           {
             modelFrom: data => data.model,
             onSuccess: data => {
@@ -311,7 +315,30 @@ export function useCommitActions(smartlog: Smartlog) {
         void loadPullRequests(true);
       }
     },
-    [loadPullRequests, runAction, showToast, whileBusy]
+    [draftByDefault, loadPullRequests, runAction, showToast, whileBusy]
+  );
+
+  /**
+   * Store the Draft toggle's choice for `branch`, which Submit reads when it opens the branch's
+   * pull request. Nothing reaches GitHub until then, which is why the toast names Submit.
+   */
+  const setDraft = useCallback(
+    (branch: string, draft: boolean) =>
+      runAction<RenderModel>(
+        "setDraft",
+        { branch, draft },
+        {
+          modelFrom: data => data,
+          onSuccess: () =>
+            showToast(
+              draft
+                ? `Submit will open ${branch}'s pull request as a draft ✓`
+                : `Submit will open ${branch}'s pull request ready for review ✓`,
+              false
+            ),
+        }
+      ),
+    [runAction, showToast]
   );
 
   /**
@@ -334,7 +361,7 @@ export function useCommitActions(smartlog: Smartlog) {
           model: RenderModel;
         }>(
           "submitStack",
-          { branch },
+          { branch, draftByDefault },
           {
             modelFrom: data => data.model,
             reloadOnError: true,
@@ -362,7 +389,7 @@ export function useCommitActions(smartlog: Smartlog) {
       void loadPullRequests(true);
       return response;
     },
-    [loadPullRequests, runAction, showToast, whileBusy]
+    [draftByDefault, loadPullRequests, runAction, showToast, whileBusy]
   );
 
   const amendMessage = useCallback(
@@ -441,6 +468,7 @@ export function useCommitActions(smartlog: Smartlog) {
     adoptRemote,
     deleteBranch,
     submitStack,
+    setDraft,
     foldCommit,
     submitCommit,
     amendMessage,

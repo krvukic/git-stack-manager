@@ -23,10 +23,12 @@
  *
  * `status --porcelain=v2 --branch` then supplies working-copy state (parsed by
  * `#git/statusParser`), and the repo root and user email ride along on
- * `rev-parse`/`config`. The shape of the result lives in `#git/snapshot`.
+ * `rev-parse`/`config`, the email together with each branch's draft choice
+ * (`#git/branchDraft`). The shape of the result lives in `#git/snapshot`.
  */
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
+import { readRepositoryConfig } from "#git/branchDraft";
 import { FIELD_SEPARATOR, GitRunner, RECORD_SEPARATOR } from "#git/runner";
 import {
   BaseInfo,
@@ -550,11 +552,11 @@ export async function readRawData(
   // Independent reads run concurrently; each is one process either way. The version
   // check joins them rather than gating them, so it costs no round trip — and when it
   // does reject, its message wins over the empty ref read an old git would produce.
-  const [, repoRoot, userEmail, refs, statusOutput, gitDirectory] =
+  const [, repoRoot, config, refs, statusOutput, gitDirectory] =
     await Promise.all([
       requireSupportedGit(git),
       git.run(["rev-parse", "--show-toplevel"]),
-      git.tryRun(["config", "user.email"]).then(email => email ?? ""),
+      readRepositoryConfig(git),
       readRefs(git, trunkOverride),
       git
         .tryRun(["status", "--porcelain=v2", "--branch", "-z"])
@@ -619,7 +621,8 @@ export async function readRawData(
   const common = {
     repoRoot,
     repoName: repoRoot.split("/").filter(Boolean).pop() ?? repoRoot,
-    userEmail,
+    userEmail: config.userEmail,
+    branchDrafts: config.branchDrafts,
     trunkRef,
     trunkTip,
     trunkBranch: trunkBranch?.name ?? null,

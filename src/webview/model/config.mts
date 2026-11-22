@@ -32,6 +32,8 @@ export type Config = {
   showLineCounts: boolean;
   /** Dim a commit whose author email differs from `git config user.email`. */
   dimOtherAuthors: boolean;
+  /** Open a new pull request as a draft, on a branch with no stored choice of its own. */
+  draftByDefault: boolean;
   /** Delete a local branch once its pull request merges at the branch's tip. */
   deleteMergedBranches: boolean;
 };
@@ -49,6 +51,7 @@ export const CONFIG_DEFAULTS: Config = {
   showDate: false,
   showLineCounts: false,
   dimOtherAuthors: false,
+  draftByDefault: false,
   deleteMergedBranches: false,
 };
 
@@ -91,6 +94,9 @@ export function parseConfig(stored: unknown): Config {
   }
   if (typeof fields.dimOtherAuthors === "boolean") {
     config.dimOtherAuthors = fields.dimOtherAuthors;
+  }
+  if (typeof fields.draftByDefault === "boolean") {
+    config.draftByDefault = fields.draftByDefault;
   }
   if (typeof fields.deleteMergedBranches === "boolean") {
     config.deleteMergedBranches = fields.deleteMergedBranches;

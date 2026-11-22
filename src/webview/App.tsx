@@ -109,7 +109,7 @@ export function App({ settings }: { settings: HostSettings }) {
   );
 
   const repository = useRepositoryActions(smartlog);
-  const commitActions = useCommitActions(smartlog);
+  const commitActions = useCommitActions(smartlog, config.draftByDefault);
   const commitFiles = useCommitFiles(smartlog);
   const lineCounts = useLineCounts(model, config.showLineCounts);
   // A file reset while its diff is on screen is read again, so the overlay stops showing the
@@ -408,6 +408,10 @@ export function App({ settings }: { settings: HostSettings }) {
             }
             onAmendWorkingChanges={() => void workingCopy.amendWorkingChanges()}
             onGoto={() => void commitActions.gotoCommit(selectedCommit)}
+            draftByDefault={config.draftByDefault}
+            onSetDraft={(branch, draft) =>
+              void commitActions.setDraft(branch, draft)
+            }
             onSubmit={() => void commitActions.submitCommit(selectedCommit)}
             onSubmitStack={() => void commitActions.submitStack(selectedCommit)}
             onViewChanges={() =>

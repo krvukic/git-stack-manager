@@ -8,6 +8,7 @@ import {
   PREVIEW_BYTE_LIMIT,
   toDataUri,
 } from "#core/media";
+import { writeBranchDraft } from "#git/branchDraft";
 import { CommitDiff, readCommitDiff, readWorkingCopyDiff } from "#git/diff";
 import { fullShas, LineCount, readLineCounts } from "#git/lineCounts";
 import { readRawData } from "#git/reader";
@@ -24,7 +25,12 @@ import {
   stacksHolding,
 } from "#github/ghStack";
 import { PullRequestService } from "#github/pullRequests";
-import { submitBranch, SubmitOutcome, submitStack } from "#github/submit";
+import {
+  submitBranch,
+  SubmitOptions,
+  SubmitOutcome,
+  submitStack,
+} from "#github/submit";
 import {
   AbsorbPlan,
   AbsorbResult,
@@ -758,7 +764,7 @@ export class Repository {
    */
   async submit(
     branch: string,
-    options: { draft?: boolean } = {}
+    options: SubmitOptions = {}
   ): Promise<SubmitOutcome> {
     const outcome = await submitBranch(
       this.git,
@@ -773,7 +779,7 @@ export class Repository {
   /** Submit every branch from the bottom of the stack up to `branch`, bottom first. */
   async submitStack(
     branch: string,
-    options: { draft?: boolean } = {}
+    options: SubmitOptions = {}
   ): Promise<SubmitOutcome[]> {
     const outcomes = await submitStack(
       this.git,
@@ -783,6 +789,27 @@ export class Repository {
     );
     outcomes.forEach(outcome => this.rememberSubmitted(outcome));
     return outcomes;
+  }
+
+  /**
+   * Store whether `branch`'s pull request should open as a draft, which Submit reads when it
+   * opens one.
+   *
+   * Refuses a branch that does not exist here. `git config` would write the section anyway,
+   * and a choice for a branch nobody has is one that no `git branch -D` ever removes.
+   */
+  async setBranchDraft(branch: string, draft: boolean): Promise<void> {
+    if (
+      !(await this.git.succeeds([
+        "show-ref",
+        "--verify",
+        "--quiet",
+        `refs/heads/${branch}`,
+      ]))
+    ) {
+      throw new GitError(`${branch} is not a local branch.`, "config");
+    }
+    await writeBranchDraft(this.git, branch, draft);
   }
 
   /**

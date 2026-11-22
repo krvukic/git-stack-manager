@@ -559,6 +559,121 @@ process.stdin.on("end", () => {
   await assert.rejects(() => repository.submit("feature-a"), /gh auth login/);
 });
 
+/**
+ * The draft choice, which applies to the pull request a submit opens and to no other.
+ *
+ * Two sources name the state, in this order: the branch's stored choice, and the *New pull
+ * requests* setting the webview sends as `draftByDefault`. Each test reads the `gh` calls that
+ * result, because the toast reads the same whichever state the pull request opened in.
+ */
+
+/**
+ * `gh pr list` output for one open pull request on `feature-a`.
+ *
+ * @param {boolean} isDraft
+ */
+function openPullRequest(isDraft) {
+  return JSON.stringify([
+    {
+      number: 42,
+      url: "https://github.com/example/example/pull/42",
+      isDraft,
+      baseRefName: "main",
+    },
+  ]);
+}
+
+/** @param {string} logPath */
+function readyCalls(logPath) {
+  return ghCalls(logPath)
+    .map(call => call.args)
+    .filter(args => args[1] === "ready");
+}
+
+/** @param {string} logPath */
+function createCalls(logPath) {
+  return ghCalls(logPath)
+    .map(call => call.args)
+    .filter(args => args[1] === "create");
+}
+
+test("a branch chosen as a draft opens its pull request as one", async t => {
+  const { logPath, repository } = scratchRepository(t);
+  await repository.setBranchDraft("feature-a", true);
+
+  const outcome = await repository.submit("feature-a");
+
+  assert.equal(outcome.isDraft, true);
+  assert.equal(createCalls(logPath)[0]?.at(-1), "--draft");
+});
+
+test("a branch with no choice opens its pull request in the setting's state", async t => {
+  const { logPath, repository } = scratchRepository(t);
+
+  const outcome = await repository.submit("feature-a", {
+    draftByDefault: true,
+  });
+
+  assert.equal(outcome.isDraft, true);
+  assert.equal(createCalls(logPath)[0]?.at(-1), "--draft");
+});
+
+test("a stored choice is used before the setting", async t => {
+  const { logPath, repository } = scratchRepository(t);
+  await repository.setBranchDraft("feature-a", false);
+
+  const outcome = await repository.submit("feature-a", {
+    draftByDefault: true,
+  });
+
+  assert.equal(outcome.isDraft, false);
+  assert.ok(!createCalls(logPath)[0]?.includes("--draft"));
+});
+
+test("a pull request that is already open keeps its state, whatever the choice", async t => {
+  // The choice names the state a pull request opens in. Converting an open one would undo
+  // whatever a reviewer or the author did on GitHub since.
+  for (const [onGitHub, chosen] of [
+    [false, true],
+    [true, false],
+  ]) {
+    const { logPath, repository } = scratchRepository(t, {
+      prListOutput: openPullRequest(onGitHub),
+    });
+    await repository.setBranchDraft("feature-a", chosen);
+
+    const outcome = await repository.submit("feature-a", {
+      draftByDefault: chosen,
+    });
+
+    assert.equal(outcome.created, false);
+    assert.equal(outcome.isDraft, onGitHub);
+    assert.deepEqual(readyCalls(logPath), []);
+  }
+});
+
+test("submitting a stack applies each branch's own choice", async t => {
+  const { logPath, repository } = scratchRepository(t);
+  await repository.setBranchDraft("feature-a", true);
+  await repository.setBranchDraft("feature-b", false);
+
+  const outcomes = await repository.submitStack("feature-b", {
+    draftByDefault: true,
+  });
+
+  assert.deepEqual(
+    outcomes.map(outcome => [outcome.branch, outcome.isDraft]),
+    [
+      ["feature-a", true],
+      ["feature-b", false],
+    ]
+  );
+  assert.deepEqual(
+    createCalls(logPath).map(args => args.includes("--draft")),
+    [true, false]
+  );
+});
+
 test("base resolution walks past a commit that carries no branch", () => {
   // Only branch tips anchor a pull request base. A mid-stack commit without a
   // branch must not become one, so the walk continues to the next branch down.

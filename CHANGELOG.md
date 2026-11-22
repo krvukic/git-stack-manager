@@ -3,6 +3,19 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-11-22
+
+### Added
+
+- **Draft pull request**, a toggle above Submit in the commit panel. It sets whether Submit opens
+  the branch's pull request as a draft, and **Submit stack** applies each branch's own choice.
+  The toggle is absent once the branch has an open pull request, because Submit never changes
+  the state of one that is already open.
+- **New pull requests** in **Config** sets the state Submit opens a pull request in, for a branch
+  with no choice of its own: ready for review, or draft.
+
+Every pull request used to open ready for review, with no way to ask for a draft.
+
 ## [1.1.0] - 2026-11-22
 
 ### Added

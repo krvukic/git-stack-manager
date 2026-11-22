@@ -75,6 +75,11 @@ export type RawData = {
   stackMembership: Map<string, StackMembership>;
   repoName: string;
   userEmail: string;
+  /**
+   * Whether each branch's pull request should open as a draft, for every branch with a stored
+   * choice. `#git/branchDraft` owns where the choice is stored.
+   */
+  branchDrafts: Map<string, boolean>;
   trunkRef: string | null;
   trunkTip: CommitRef | null;
   /**

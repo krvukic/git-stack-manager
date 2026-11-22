@@ -9,7 +9,7 @@
  * `gh` is a recording stand-in (see the `fakeGitHub` fixture) so no test touches
  * GitHub, while the pushes are real against the copy's own bare origin.
  */
-import { expect, test } from "./fixtures/demoRepo.mjs";
+import { expect, reopen, test } from "./fixtures/demoRepo.mjs";
 import {
   expectToast,
   REBASE_ONTO_TRUNK,
@@ -193,4 +193,82 @@ test("a conflict that starts with the sidebar open disables submit too", async (
   expect(fakeGitHub.calls().filter(call => call.args[1] === "create")).toEqual(
     []
   );
+});
+
+/**
+ * The Draft toggle, which names the state Submit opens a pull request in.
+ *
+ * Each test reads the choice back out of git config and the call out of the stand-in `gh`,
+ * because the toggle's tick alone would look right with neither behind it.
+ */
+const DRAFT_TOGGLE = "#sidebar input[type=checkbox]";
+
+test("ticking Draft stores the choice, and Submit opens a draft", async ({
+  demoRepository,
+  smartlog,
+  fakeGitHub,
+}) => {
+  await selectCommit(smartlog, "feat: add escapeHtml");
+  // Never pushed and never chosen, so the toggle shows the setting: ready for review.
+  await expect(smartlog.locator(DRAFT_TOGGLE)).not.toBeChecked();
+
+  await smartlog.locator(DRAFT_TOGGLE).click();
+  await expectToast(
+    smartlog,
+    "Submit will open escape-html's pull request as a draft"
+  );
+  await expect(smartlog.locator(DRAFT_TOGGLE)).toBeChecked();
+  expect(
+    await demoRepository.git(["config", "branch.escape-html.gsm-draft"])
+  ).toBe("true");
+  // The toggle only records. Nothing has reached GitHub yet.
+  expect(fakeGitHub.calls().filter(call => call.args[0] === "pr")).toEqual([]);
+
+  await smartlog.locator("#btn-submit").click();
+  await expectToast(smartlog, "Opened #101");
+  const create = fakeGitHub.calls().find(call => call.args[1] === "create");
+  expect(create.args.at(-1)).toBe("--draft");
+});
+
+test("the New pull requests setting ticks Draft on a branch with no choice of its own", async ({
+  smartlog,
+  fakeGitHub,
+}) => {
+  await smartlog.locator("#btn-config").click();
+  await smartlog
+    .locator('#seg-draftdefault button[data-draftdefault="on"]')
+    .click();
+  await smartlog.locator("#btn-config-close").click();
+
+  await selectCommit(smartlog, "feat: add escapeHtml");
+  await expect(smartlog.locator(DRAFT_TOGGLE)).toBeChecked();
+
+  await smartlog.locator("#btn-submit").click();
+  await expectToast(smartlog, "Opened #101");
+  const create = fakeGitHub.calls().find(call => call.args[1] === "create");
+  expect(create.args.at(-1)).toBe("--draft");
+});
+
+test("a branch with an open pull request offers no Draft toggle, and Submit leaves its state alone", async ({
+  demoRepository,
+  smartlog,
+  fakeGitHub,
+}) => {
+  // #206 on trim-utils is open and ready for review. A choice of draft is stored for the
+  // branch, which is the case a submit that enforced the choice would act on.
+  await demoRepository.git(["config", "branch.trim-utils.gsm-draft", "true"]);
+  await reopen(smartlog);
+
+  await selectCommit(smartlog, "test(pad): cover padStart (local, unpushed)");
+  await expect(smartlog.locator("#btn-submit")).toHaveText("Submit → #206");
+  await expect(smartlog.locator(DRAFT_TOGGLE)).toHaveCount(0);
+
+  await smartlog.locator("#btn-submit").click();
+  await expectToast(smartlog, "Updated #206");
+  expect(
+    fakeGitHub
+      .calls()
+      .map(call => call.args)
+      .filter(args => args[1] === "ready")
+  ).toEqual([]);
 });

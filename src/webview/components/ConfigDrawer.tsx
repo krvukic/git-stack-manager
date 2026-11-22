@@ -174,6 +174,24 @@ export function ConfigDrawer({
         </Hint>
       </Group>
       <Group>
+        <GroupLabel>New pull requests</GroupLabel>
+        <Segmented
+          id="seg-draftdefault"
+          attribute="draftdefault"
+          value={config.draftByDefault ? "on" : "off"}
+          options={[
+            { value: "off", label: "Ready for review" },
+            { value: "on", label: "Draft" },
+          ]}
+          onChange={choice => onChange({ draftByDefault: choice === "on" })}
+        />
+        <Hint>
+          The state Submit opens a new pull request in. The Draft toggle in the
+          commit panel overrides it for one branch. Submit never changes the
+          state of a pull request that is already open.
+        </Hint>
+      </Group>
+      <Group>
         <GroupLabel>Auto-remove merged commits</GroupLabel>
         <Segmented
           id="seg-deletemerged"

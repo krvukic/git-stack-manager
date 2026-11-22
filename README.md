@@ -182,6 +182,13 @@ Every one of these is conflict-free and leaves your working copy alone, except w
   nothing, because GitHub has no branch to base it on.
 - **Submit stack** submits every branch from the bottom of the stack up to the selected one, bottom
   first, so each pull request has its base on GitHub by the time it opens.
+- **Draft pull request**, the toggle above Submit, sets whether Submit opens the branch's pull
+  request as a draft. A branch with no choice of its own takes **New pull requests** in
+  **Config**. The toggle is there only while the branch has no open pull request: Submit never
+  changes the state of one that is already open, so marking it ready, or converting it to a
+  draft, stays a decision made on GitHub. The repository's git config stores the choice, as
+  `branch.<name>.gsm-draft`, so `git branch -m` moves it with the branch and `git branch -D`
+  removes it.
 - A branch in a [stacked pull
   request](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/managing-stacked-pull-requests)
   carries its layer position and a *needs rebase* flag on its pill.

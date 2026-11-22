@@ -132,7 +132,7 @@ test("the command panel records exactly what the action ran", async ({
     "git symbolic-ref --short -q HEAD",
     "git rev-parse HEAD",
     "git rev-parse --show-toplevel",
-    "git config user.email",
+    "git config -z --get-regexp ^(user\\.email|branch\\..*\\.gsm-draft)$",
     "git for-each-ref --include-root-refs --format=… HEAD refs/heads refs/remotes/origin/HEAD refs/remotes/origin/main refs/remotes/origin/master refs/heads/main refs/heads/master",
     "git status --porcelain=v2 --branch -z",
     "git rev-parse --path-format=absolute --git-common-dir",

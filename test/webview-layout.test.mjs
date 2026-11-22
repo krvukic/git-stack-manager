@@ -56,6 +56,7 @@ test("a stored config is adopted field by field", () => {
     showDate: true,
     showLineCounts: true,
     dimOtherAuthors: true,
+    draftByDefault: true,
     deleteMergedBranches: true,
   });
   assert.deepEqual(config, {
@@ -68,6 +69,7 @@ test("a stored config is adopted field by field", () => {
     showDate: true,
     showLineCounts: true,
     dimOtherAuthors: true,
+    draftByDefault: true,
     deleteMergedBranches: true,
   });
 });

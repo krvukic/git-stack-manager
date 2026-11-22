@@ -127,3 +127,11 @@ checkout has seen the commits being replaced, which makes git reject that push. 
 refspec explicitly and passes `-u`, because the branch it submits is usually not the checked-out
 one. Without `-u` that branch would end up with no upstream, and the tree would still read "not
 submitted" after a successful push.
+
+Submit opens a pull request in the state the branch's **draft choice** names, and leaves the state
+of an open one alone, as Sapling's submit does. The choice is stored in git config, as
+`branch.<name>.gsm-draft`, for three reasons: both hosts read the same value, `git branch -m`
+moves it with the branch, and `git branch -D` removes it. Submit stack needs the choice per branch,
+which is why it is stored at all. The read costs no extra process, because `#git/branchDraft` asks
+for the choices and `user.email` in one `git config --get-regexp`, where the repository read used
+to ask for the email alone.

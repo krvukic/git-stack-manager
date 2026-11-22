@@ -57,6 +57,14 @@ export type StaleBase = {
   reason: "unsubmitted" | "rewritten";
 };
 
+export type SubmitOptions = {
+  /**
+   * Whether a new pull request opens as a draft when its branch has no stored choice: the
+   * Config drawer's *New pull requests*.
+   */
+  draftByDefault?: boolean;
+};
+
 /** The commit message, split into the title and body a pull request takes. */
 type Message = {
   title: string;
@@ -74,7 +82,7 @@ export async function submitBranch(
   git: GitRunner,
   snapshot: RawData,
   branch: string,
-  options: { draft?: boolean } = {}
+  options: SubmitOptions = {}
 ): Promise<SubmitOutcome> {
   const { remote } = trunkParts(snapshot);
   const base = baseBranchFor(snapshot, branch);
@@ -101,6 +109,8 @@ export async function submitBranch(
       number: existing.number,
       url: existing.url,
       title: message.title,
+      // The draft choice applies to a pull request that submit opens. One that is already open
+      // keeps the state it has, as Sapling's submit leaves it.
       isDraft: existing.isDraft,
       base: effectiveBase,
       staleBase: await findStaleBase(
@@ -112,20 +122,16 @@ export async function submitBranch(
       ),
     };
   }
-  const opened = await createPullRequest(
-    git,
-    branch,
-    base,
-    message,
-    options.draft === true
-  );
+  const draft =
+    snapshot.branchDrafts.get(branch) ?? options.draftByDefault === true;
+  const opened = await createPullRequest(git, branch, base, message, draft);
   return {
     branch,
     created: true,
     number: opened.number,
     url: opened.url,
     title: message.title,
-    isDraft: options.draft === true,
+    isDraft: draft,
     base,
     staleBase: await findStaleBase(git, snapshot, remote, branch, base),
   };
@@ -144,7 +150,7 @@ export async function submitStack(
   git: GitRunner,
   snapshot: RawData,
   branch: string,
-  options: { draft?: boolean } = {}
+  options: SubmitOptions = {}
 ): Promise<SubmitOutcome[]> {
   const outcomes: SubmitOutcome[] = [];
   for (const layer of stackBranchesUpTo(snapshot, branch)) {

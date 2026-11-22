@@ -41,6 +41,11 @@ export type UIBranch = {
    */
   worktree: string | null;
   /**
+   * The reader's stored choice for the pull request Submit opens for this branch: a draft, or
+   * ready for review. Null while no choice is stored, where the Config setting answers.
+   */
+  draft: boolean | null;
+  /**
    * Why **Delete branch** refuses this branch, or null when it can go. Computed here for the same
    * reason as `mergedBranches`: the host owns which branches may go and how each refusal reads, and
    * the menu only offers or withholds the entry.
@@ -231,6 +236,7 @@ export function buildModel(
             sync.upstream === rawData.trunkRef &&
             name !== rawData.trunkBranch,
           worktree: rawData.heldBranches.get(name) ?? null,
+          draft: rawData.branchDrafts.get(name) ?? null,
           deletionRefusal: deletionRefusal(rawData, name),
         };
       }),
