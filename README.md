@@ -186,12 +186,14 @@ Every one of these is conflict-free and leaves your working copy alone, except w
   draft, stays a decision made on GitHub. The repository's git config stores the choice, as
   `branch.<name>.gsm-draft`, so `git branch -m` moves it with the branch and `git branch -D`
   removes it.
-- A branch in a [stacked pull
-  request](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/managing-stacked-pull-requests)
-  carries its layer position and a *needs rebase* flag on its pill.
-- The right-click menu offers `gh stack rebase`, `push`, `submit`, and `sync --prune`, and launches
-  `gh stack modify` for drop, reorder, insert, and rename. That terminal interface already covers
-  restructuring, so this extension does not rebuild it.
+- A branch whose pull request is in a [stack on
+  GitHub](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/managing-stacked-pull-requests)
+  carries its place on its pill, such as `2/3`. The place comes from GitHub, in the same request
+  that reads pull request status.
+- **Take GitHub's version**, in the right-click menu's `gh stack` section, points every branch
+  of a stack at the commit its remote branch has, after GitHub restacked the stack because a
+  lower pull request merged. It pushes nothing, and refuses a branch with local work that the
+  remote does not have.
 
 ## Opening it
 

@@ -16,7 +16,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { Repository } from "#app/repository";
-import { baseBranchFor } from "#github/submit";
+import { baseBranchFor, stackChain } from "#github/submit";
 import { Controller } from "#ui/controller";
 import { commitFile, OTHER, run } from "../scripts/git-fixture.mjs";
 import { present } from "./present.mjs";
@@ -699,4 +699,40 @@ test("base resolution walks past a commit that carries no branch", () => {
     ),
     "master"
   );
+});
+
+/**
+ * The branches that make up one stack, read off the graph.
+ *
+ *   top → mid (no branch) → bottom → trunk, with `side` forking off `bottom`
+ */
+test("a stack runs from its bottom branch to its top, whichever branch is asked about", () => {
+  const snapshot = /** @type {RawData} */ ({
+    trunkRef: "origin/main",
+    commits: [
+      { sha: "d", parents: ["c"], branches: ["top"] },
+      { sha: "c", parents: ["b"], branches: ["middle"] },
+      { sha: "b", parents: ["a"], branches: [] },
+      { sha: "a", parents: ["trunk"], branches: ["bottom"] },
+    ],
+  });
+  for (const branch of ["bottom", "middle", "top"]) {
+    assert.deepEqual(stackChain(snapshot, branch), ["bottom", "middle", "top"]);
+  }
+});
+
+test("a stack that forks ends at the fork when asked from below it", () => {
+  const snapshot = /** @type {RawData} */ ({
+    trunkRef: "origin/main",
+    commits: [
+      { sha: "c", parents: ["a"], branches: ["left"] },
+      { sha: "b", parents: ["a"], branches: ["right"] },
+      { sha: "a", parents: ["trunk"], branches: ["bottom"] },
+    ],
+  });
+  // Two lines share the bottom, and nothing says which one a click on it meant.
+  assert.deepEqual(stackChain(snapshot, "bottom"), ["bottom"]);
+  // Asked from one line, the stack is that line down to the shared bottom.
+  assert.deepEqual(stackChain(snapshot, "left"), ["bottom", "left"]);
+  assert.deepEqual(stackChain(snapshot, "right"), ["bottom", "right"]);
 });

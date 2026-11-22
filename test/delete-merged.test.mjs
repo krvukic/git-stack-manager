@@ -44,6 +44,7 @@ function pullRequest(state, headSha) {
     headSha,
     reviewDecision: null,
     checks: null,
+    stack: null,
   };
 }
 

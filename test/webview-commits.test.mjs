@@ -48,7 +48,6 @@ function commitRow(sha, parents, branches = []) {
             name,
             sync: null,
             pullRequest: null,
-            stack: null,
           })
       ),
       parents,
@@ -201,12 +200,11 @@ test("a commit with no branch cannot be submitted", () => {
 test("submit prefers the branch that already has a pull request", () => {
   const commit = /** @type {UICommit} */ ({
     branchDetails: [
-      { name: "plain", sync: null, pullRequest: null, stack: null },
+      { name: "plain", sync: null, pullRequest: null },
       {
         name: "has-pr",
         sync: null,
         pullRequest: { number: 7 },
-        stack: null,
       },
     ],
   });
@@ -216,8 +214,8 @@ test("submit prefers the branch that already has a pull request", () => {
 test("submit falls back to the first branch when none has a pull request", () => {
   const commit = /** @type {UICommit} */ ({
     branchDetails: [
-      { name: "first", sync: null, pullRequest: null, stack: null },
-      { name: "second", sync: null, pullRequest: null, stack: null },
+      { name: "first", sync: null, pullRequest: null },
+      { name: "second", sync: null, pullRequest: null },
     ],
   });
   assert.equal(present(submitTarget(commit), "a submit target").name, "first");
@@ -241,7 +239,6 @@ function commitWithBranches(branches, heldBy = {}) {
           name,
           sync: null,
           pullRequest: null,
-          stack: null,
           tracksTrunk: false,
           worktree: heldBy[name] ?? null,
         })

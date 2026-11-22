@@ -3,6 +3,30 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-11-22
+
+### Changed
+
+- A branch's place in a stack, such as `2/3`, comes from GitHub, in the request that already
+  reads pull request status. It used to come from `.git/gh-stack`, the local record that
+  `gh stack init` writes, so a stack linked on GitHub by anyone else drew no pill. A branch with
+  no open pull request draws none.
+- **Move stack onto *remote*** is now **Take GitHub's version**. It moves the stack the tree
+  draws through the clicked commit, where it used to move the branches the local record named.
+- The `gh stack` section of the right-click menu appears on a commit whose branch has an open
+  pull request.
+- A refresh runs one git process fewer, since nothing looks for the record's directory.
+
+### Removed
+
+- The right-click menu's **Rebase stack**, **Rebase this layer and above**, **Checkout top
+  layer**, **Push stack**, **Submit stack (create/update PRs)**, **Sync stack**, and
+  **Restructure stack**. The four rebases in the same menu restructure a stack, **Submit stack**
+  pushes it, and **Auto-remove merged commits** in **Config** removes merged branches.
+- The **needs rebase** badge, which compared a branch with the local record.
+- Reading and rewriting `.git/gh-stack`. A rebase no longer runs `gh stack rebase --no-trunk`
+  afterwards to bring that record up to date.
+
 ## [1.3.0] - 2026-11-22
 
 ### Removed

@@ -18,7 +18,6 @@ function branch({ draft = null, pullRequest = null }) {
   return /** @type {UIBranch} */ ({
     name: "feature-a",
     sync: null,
-    stack: null,
     draft,
     pullRequest,
   });

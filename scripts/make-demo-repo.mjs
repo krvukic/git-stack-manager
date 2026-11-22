@@ -5,8 +5,8 @@
  *
  * Every branch below exists to produce one state the UI draws differently, and
  * each comment names that state. Between them they cover every sync badge
- * `model/badges.mts` can emit, both `gh stack` badge states, a teammate's commit
- * on a shared branch, and a rebase that stops on a conflict:
+ * `model/badges.mts` can emit, a teammate's commit on a shared branch, and a rebase
+ * that stops on a conflict:
  *
  *   submitted        case-utils           Pushed, and unchanged since
  *   N unsubmitted    trim-utils           Pushed, then one more local commit on top
@@ -34,7 +34,6 @@
  * Usage: node scripts/make-demo-repo.mjs [destination]   (default: .demo-repo)
  */
 import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -43,12 +42,10 @@ import {
   initRepoWithOrigin,
   OTHER,
   run,
-  writeGhStackState,
 } from "./git-fixture.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const destination = resolve(process.argv[2] ?? join(repoRoot, ".demo-repo"));
-const require = createRequire(import.meta.url);
 
 if (existsSync(destination)) {
   rmSync(destination, { recursive: true, force: true });
@@ -64,67 +61,6 @@ const branch = (/** @type {string} */ name) =>
   run(repo, "git", ["switch", "-c", name]);
 const push = (/** @type {string[]} */ ...args) =>
   run(repo, "git", ["push", ...args]);
-
-/**
- * Fail the build unless the extension reads back the stack badges this fixture set
- * out to produce.
- *
- * `.git/gh-stack` is written here by hand, because a fixture every machine has to
- * build cannot depend on a preview `gh` extension being installed. The cost is that
- * the private format is now hard-coded in a second place, and a `gh stack` that
- * moved to schemaVersion 2 would make `readGhStacks` return nothing — badges would
- * simply vanish, and the only symptom would be a snapshot diff someone might
- * re-record without reading. Asserting the expected badges here turns that into a
- * generator that refuses to run, naming the mismatch.
- *
- * `test/gh-stack.test.mjs` covers the other half: it compares this module's derived
- * `needsRebase` against `gh stack view --json` whenever the extension is present,
- * so the two together catch both a format that moved and a verdict that drifted.
- *
- * @param {string} repository
- * @param {Record<string, string>} expected
- */
-function verifyStackBadges(repository, expected) {
-  const { readGhStacks, indexStackMembership } = require(
-    join(repoRoot, "out", "github", "ghStack.js")
-  );
-  const shaOfBranch = new Map(
-    run(repository, "git", [
-      "for-each-ref",
-      "--format=%(refname:short) %(objectname)",
-      "refs/heads",
-    ])
-      .split("\n")
-      .filter(Boolean)
-      .map(line => /** @type {[string, string]} */ (line.split(" ")))
-  );
-  const membership = indexStackMembership(
-    readGhStacks(join(repository, ".git")),
-    shaOfBranch
-  );
-  const actual = Object.fromEntries(
-    [...membership].map(([name, { position, branches, needsRebase }]) => [
-      name,
-      `${position}/${branches.length}${needsRebase ? " needs rebase" : ""}`,
-    ])
-  );
-  const problems = [
-    ...new Set([...Object.keys(expected), ...Object.keys(actual)]),
-  ]
-    .filter(name => expected[name] !== actual[name])
-    .map(
-      name =>
-        `  ${name}: expected ${expected[name] ?? "no badge"}, got ${actual[name] ?? "no badge"}`
-    );
-  if (problems.length) {
-    throw new Error(
-      `The gh stack badges this demo produces are not the ones it intends:\n${problems.join("\n")}\n\n` +
-        "Most likely `gh stack` changed the format of .git/gh-stack, which SUPPORTED_SCHEMA_VERSION in\n" +
-        "src/github/ghStack.ts then rejects. Compare `gh stack view --json` against that module and\n" +
-        "update both it and `writeGhStackState` in scripts/git-fixture.mjs."
-    );
-  }
-}
 
 // Trunk: the strkit scaffold, and a few utilities other people shipped.
 commitFile(
@@ -328,8 +264,8 @@ commitFile(
 );
 
 // normalize-quotes: pushed, then its pull request was squash-merged and GitHub
-// deleted the remote branch — so the upstream ref is configured but gone, which is
-// the state `gh stack sync --prune` exists to clean up. The local commit survives
+// deleted the remote branch — so the upstream ref is configured but gone. The local
+// commit survives
 // because a squash merge lands a different commit on trunk.
 checkout("main");
 branch("normalize-quotes");
@@ -365,8 +301,7 @@ commitFile(
 push("origin", "main");
 
 // mask-utils → redact-utils: a fresh 2-commit stack, neither pushed. It forks off
-// where local main comes to rest, which is what keeps both of its `gh stack` layers
-// correctly based — the clean counterpart to the case-utils stack.
+// where local main comes to rest.
 branch("mask-utils");
 commitFile(
   repo,
@@ -460,10 +395,7 @@ commitFile(
 // The final trunk commits, which reach origin/main only.
 // Committed on a detached HEAD and pushed straight to origin/main, so local main
 // stays where the stacks above forked from. That is the ordinary state of a
-// repository someone fetches but has not pulled, and it is also what makes the two
-// `gh stack` badge states differ: the case-utils stack forked before these commits
-// and reads as needing a rebase, while the mask-utils stack forked at local main and
-// stays clean.
+// repository someone fetches but has not pulled.
 detach("main");
 commitFile(
   repo,
@@ -496,33 +428,11 @@ commitFile(
 push("origin", "HEAD:main");
 checkout("main");
 
-// gh stack membership.
-// Two stacks, reusing the chains already here rather than adding branches: one stack
-// cannot show both badge states at once, and "Layer 2 of 3" only reads unambiguously
-// with a second stack on screen to compare it against.
-//
-// case-utils → pad-utils → trim-utils forked back at the slugify commit and trunk
-// has moved repeatedly since, so its bottom layer's recorded base no longer matches
-// main — layer 1 draws "needs rebase" while 2 and 3 stay clean. mask-utils →
-// redact-utils forked at where local main sits, so all of it is clean.
-writeGhStackState(repo, [
-  { trunk: "main", branches: ["case-utils", "pad-utils", "trim-utils"] },
-  { trunk: "main", branches: ["mask-utils", "redact-utils"] },
-]);
-verifyStackBadges(repo, {
-  "case-utils": "1/3 needs rebase",
-  "pad-utils": "2/3",
-  "trim-utils": "3/3",
-  "mask-utils": "1/2",
-  "redact-utils": "2/2",
-});
-
 console.log(
   [
     `Demo repo ready: ${repo}`,
     `  bare origin:  ${join(destination, "origin.git")}`,
-    "  gh stacks:    case-utils → pad-utils → trim-utils (layer 1 needs rebase)",
-    "                mask-utils → redact-utils (every layer correctly based)",
+    "  stacks:       case-utils → pad-utils → trim-utils, and mask-utils → redact-utils",
     "  sync badges:  case-utils, pad-utils (submitted), trim-utils (1 unsubmitted)",
     "                fix-slugify-unicode (diverged 1↑1↓), wrap-lines (1 behind)",
     "                normalize-quotes (upstream gone), and several never pushed",

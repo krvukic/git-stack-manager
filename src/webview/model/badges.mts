@@ -11,7 +11,6 @@
  */
 import type { BranchSync } from "#git/snapshot";
 import type { PullRequestStatus } from "#github/pullRequests";
-import type { UIBranch } from "#ui/renderModel";
 
 export type SyncBadge = {
   /** Suffix of the stylesheet class that paints it: `.badge.ahead` and so on. */
@@ -221,35 +220,28 @@ export function pullRequestBadge(
 }
 
 export type StackBadge = {
-  variant: "stackpos" | "needsrebase";
+  variant: "stackpos";
   label: string;
   description: string;
 };
 
 /**
- * `gh stack` placement: which layer this branch is, and whether GitHub would say it
- * needs a rebase (it does not contain the tip of the layer below).
+ * Where an open pull request is in its stack on GitHub, such as `2/3`, or null when it is in
+ * none.
+ *
+ * Only an open pull request counts. A merged one keeps its entry on GitHub, and the branch
+ * that carried it is no longer part of what the reader is stacking.
  */
-export function stackBadges(stack: UIBranch["stack"]): StackBadge[] {
+export function stackBadge(
+  pullRequest: PullRequestStatus | null
+): StackBadge | null {
+  const stack = pullRequest?.state === "OPEN" ? pullRequest.stack : null;
   if (!stack) {
-    return [];
+    return null;
   }
-  const size = stack.branches.length;
-  const badges: StackBadge[] = [
-    {
-      variant: "stackpos",
-      label: `${stack.position}/${size}`,
-      description: `Layer ${stack.position} of ${size} in this gh stack.`,
-    },
-  ];
-  if (stack.needsRebase) {
-    badges.push({
-      variant: "needsrebase",
-      label: "needs rebase",
-      description:
-        "The branch below moved, so this layer still points at the old commit. " +
-        "Rebase the stack to realign it.",
-    });
-  }
-  return badges;
+  return {
+    variant: "stackpos",
+    label: `${stack.position}/${stack.size}`,
+    description: `Pull request ${stack.position} of ${stack.size} in stack #${stack.number} on GitHub.`,
+  };
 }

@@ -389,6 +389,12 @@ export async function stateOf(repository) {
  */
 const PUSHED_TIP = "<pushed tip>";
 
+/**
+ * The one stack GitHub links in the demo: case-utils, pad-utils, and trim-utils, bottom first.
+ * GitHub numbers a stack out of the same sequence as its pull requests.
+ */
+const STACK_NUMBER = 207;
+
 const CANNED_PULL_REQUESTS = [
   {
     number: 206,
@@ -400,6 +406,7 @@ const CANNED_PULL_REQUESTS = [
     baseRefName: "pad-utils",
     reviewDecision: "APPROVED",
     checksState: "SUCCESS",
+    stackEntry: { position: 3, stack: { number: STACK_NUMBER, size: 3 } },
   },
   {
     number: 205,
@@ -411,6 +418,7 @@ const CANNED_PULL_REQUESTS = [
     baseRefName: "case-utils",
     reviewDecision: "REVIEW_REQUIRED",
     checksState: "PENDING",
+    stackEntry: { position: 2, stack: { number: STACK_NUMBER, size: 3 } },
   },
   {
     number: 204,
@@ -433,6 +441,7 @@ const CANNED_PULL_REQUESTS = [
     baseRefName: "main",
     reviewDecision: "CHANGES_REQUESTED",
     checksState: "FAILURE",
+    stackEntry: { position: 1, stack: { number: STACK_NUMBER, size: 3 } },
   },
   {
     number: 191,
@@ -522,9 +531,6 @@ const CANNED_PULL_REQUESTS = [
  * tip has since diverged from what was pushed — found only by the name lookup, since a
  * lookup by commit cannot find a pull request at a commit the branch has moved past.
  *
- * `gh stack rebase --no-trunk` is the one command the shim carries out rather than
- * answers, because the extension reads back the file it writes. See `reRecordBases`.
- *
  * @param {string} directory
  */
 export function writeStandInGitHub(directory) {
@@ -567,10 +573,6 @@ function answer() {
   if (args[0] === "pr" && args[1] === "list") {
     return JSON.stringify(listPullRequests());
   }
-  if (args[0] === "stack" && args[1] === "rebase" && args.includes("--no-trunk")) {
-    reRecordBases(args[2]);
-    return "All branches in stack rebased locally (without trunk)\\n";
-  }
   if (args[0] === "repo" && args[1] === "view") {
     return JSON.stringify({ owner: { login: "example" }, name: "strkit" });
   }
@@ -580,40 +582,6 @@ function answer() {
   // Everything else — \`pr edit\` among them — reports success and says nothing,
   // which is what the callers of those commands read.
   return "[]";
-}
-
-/**
- * What \`gh stack rebase <bottom> --no-trunk\` does to \`.git/gh-stack\`, and nothing else.
- *
- * The extension runs this after its own rebase to bring the record back in line, so a shim
- * that only logged the call left every snapshot showing "needs rebase" on the stack that had
- * just been rebased — the bug, not the fix.
- *
- * Faithful to \`gh stack\` v0.1.0 on a stack whose layers already sit in order: it replays each
- * layer onto the one below, which moves no commit, and rewrites every base. Two details came
- * from checking the real CLI. The bottom layer's base is the tip of the trunk *branch*, which
- * \`Repository.recordStackBases\` relies on. And a rebase adds a \`head\` per branch, which
- * \`gh stack init\` omits.
- */
-function reRecordBases(bottom) {
-  const path = git(["rev-parse", "--path-format=absolute", "--git-path", "gh-stack"]);
-  const state = JSON.parse(fs.readFileSync(path, "utf8"));
-  for (const stack of state.stacks) {
-    if (stack.branches[0].branch !== bottom) {
-      continue;
-    }
-    stack.trunk.head = git(["rev-parse", stack.trunk.branch]);
-    stack.branches.forEach((entry, index) => {
-      const below = index === 0 ? stack.trunk.branch : stack.branches[index - 1].branch;
-      entry.head = git(["rev-parse", entry.branch]);
-      entry.base = git(["rev-parse", below]);
-    });
-  }
-  fs.writeFileSync(path, JSON.stringify(state, null, 2) + "\\n");
-}
-
-function git(argv) {
-  return execFileSync("git", argv, { encoding: "utf8" }).trim();
 }
 
 function tipOf(ref) {
@@ -662,6 +630,7 @@ function nodeFrom(pullRequest) {
     headRefName: pullRequest.headRefName,
     headRefOid: pullRequest.headRefOid,
     reviewDecision: pullRequest.reviewDecision,
+    stackEntry: pullRequest.stackEntry ?? null,
     // The by-name lookup reads checks from here, the pull request's own head rollup; the
     // by-commit lookup reads the same rollup off the commit object directly, in
     // \`answerGraphql\` below.

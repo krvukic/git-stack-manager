@@ -5,7 +5,7 @@
  * pull request at the trunk, then force-pushes every remaining branch onto the squash commit. A
  * checkout that has only fetched since that restack still points at the pre-rebase commits, so
  * `syncBadge` marks every layer diverged even though the remote holds the commits that the pull
- * requests name. A local rebase reaches those same trees under new shas, and `gh stack push` then
+ * requests name. A local rebase reaches those same trees under new shas, and a submit then
  * force-pushes all of them, which restarts each check and marks the review comments outdated.
  * `adoptRemoteStack` takes the remote's commits instead, and pushes nothing.
  *
@@ -50,11 +50,6 @@ export type AdoptOutcome = {
   skipped: SkippedLayer[];
   /** The layer HEAD was on, whose working copy moved with it. Null when HEAD sat elsewhere. */
   checkedOut: string | null;
-  /**
-   * Bottom branches whose `gh stack` record still names replaced commits after the move. Filled in
-   * after the move, because re-recording runs `gh` and nothing in this module does.
-   */
-  staleStacks?: string[];
 };
 
 type LayerRef = {

@@ -40,7 +40,6 @@ import {
 } from "#git/snapshot";
 import { parseStatus } from "#git/statusParser";
 import { requireSupportedGit } from "#git/version";
-import { indexStackMembership, readGhStacks } from "#github/ghStack";
 
 /** Trunk candidates, most authoritative first, when `origin/HEAD` is not a symref. */
 const TRUNK_CANDIDATES = [
@@ -552,19 +551,15 @@ export async function readRawData(
   // Independent reads run concurrently; each is one process either way. The version
   // check joins them rather than gating them, so it costs no round trip — and when it
   // does reject, its message wins over the empty ref read an old git would produce.
-  const [, repoRoot, config, refs, statusOutput, gitDirectory] =
-    await Promise.all([
-      requireSupportedGit(git),
-      git.run(["rev-parse", "--show-toplevel"]),
-      readRepositoryConfig(git),
-      readRefs(git, trunkOverride),
-      git
-        .tryRun(["status", "--porcelain=v2", "--branch", "-z"])
-        .then(output => output ?? ""),
-      // `gh stack` keeps its state in the common git directory, so a linked
-      // worktree still sees the repository's stacks.
-      git.tryRun(["rev-parse", "--path-format=absolute", "--git-common-dir"]),
-    ]);
+  const [, repoRoot, config, refs, statusOutput] = await Promise.all([
+    requireSupportedGit(git),
+    git.run(["rev-parse", "--show-toplevel"]),
+    readRepositoryConfig(git),
+    readRefs(git, trunkOverride),
+    git
+      .tryRun(["status", "--porcelain=v2", "--branch", "-z"])
+      .then(output => output ?? ""),
+  ]);
 
   const status = parseStatus(statusOutput);
   const trunk = resolveTrunk(refs, trunkOverride);
@@ -608,14 +603,6 @@ export async function readRawData(
     }
   }
 
-  const shaOfBranch = new Map<string, string>();
-  for (const ref of refs) {
-    if (ref.refName.startsWith("refs/heads/")) {
-      shaOfBranch.set(toShortRef(ref.refName), ref.sha);
-    }
-  }
-  const stacks = gitDirectory ? readGhStacks(gitDirectory) : [];
-
   // Everything the repository-wide reads answer, which an empty repository has as much of
   // as any other. Only the history walk below distinguishes the two.
   const common = {
@@ -634,9 +621,6 @@ export async function readRawData(
   if (!head.sha) {
     return {
       ...common,
-      // No walk to draw parents from, so `indexStackMembership` falls back to the recorded
-      // shas. A repository with no commit has no branch to badge either way.
-      stackMembership: indexStackMembership(stacks, shaOfBranch),
       trunkBranchCommit: null,
       headCommit: null,
       headSha: "",
@@ -664,13 +648,6 @@ export async function readRawData(
 
   return {
     ...common,
-    // `.git/gh-stack` is a file read and the parents are already in hand, so stack badges cost
-    // no subprocess per refresh.
-    stackMembership: indexStackMembership(
-      stacks,
-      shaOfBranch,
-      new Map(commits.map(commit => [commit.sha, commit.parents]))
-    ),
     trunkBranchCommit,
     headCommit,
     headSha: head.sha,

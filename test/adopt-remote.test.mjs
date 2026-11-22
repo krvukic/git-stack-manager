@@ -13,12 +13,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import {
-  commitFile,
-  OTHER,
-  run,
-  writeGhStackState,
-} from "../scripts/git-fixture.mjs";
+import { commitFile, OTHER, run } from "../scripts/git-fixture.mjs";
 import {
   branchShas,
   shaOf,
@@ -43,7 +38,6 @@ function pushedStack(t, prefix) {
     commitFile(repo, `${branch}.txt`, `${branch}\n`, `${branch} work`);
     run(repo, "git", ["push", "-qu", "origin", branch]);
   }
-  writeGhStackState(repo, [{ trunk: "main", branches: LAYERS }]);
   run(repo, "git", ["switch", "-q", "middle"]);
   return { ...fixture, other: teammateClone(root, origin) };
 }
@@ -182,13 +176,20 @@ test("the move refuses uncommitted changes on the checked-out layer before any r
   );
 });
 
-test("the move refuses a branch outside every stack rather than moving it alone", async t => {
-  const { repo, repository } = pushedStack(t, "gsm-adopt-unstacked-");
+test("a branch with nothing stacked on it is a stack of one, and the others stay put", async t => {
+  const { repo, repository, other } = pushedStack(t, "gsm-adopt-unstacked-");
+  restackFromClone(other);
   run(repo, "git", ["switch", "-qc", "solo", "main"]);
   commitFile(repo, "solo.txt", "solo\n", "solo work");
+  const before = branchShas(repo);
 
-  await assert.rejects(
-    () => repository.adoptRemoteStack("solo"),
-    /belongs to no gh stack/
+  const outcome = await repository.adoptRemoteStack("solo");
+
+  // Never pushed, so it has no remote commit to take, and the stack beside it is not asked.
+  assert.deepEqual(outcome.moved, []);
+  assert.deepEqual(
+    outcome.skipped.map(layer => layer.branch),
+    ["solo"]
   );
+  assert.deepEqual(branchShas(repo), before);
 });

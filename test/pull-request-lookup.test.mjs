@@ -29,6 +29,7 @@ import { scratchRoot } from "./repoFixture.mjs";
  *   headRefOid: string,
  *   commits: string[],
  *   checks?: "SUCCESS" | "FAILURE" | "PENDING",
+ *   stackEntry?: { position: number, stack: { number: number, size: number } },
  * }} StoredPullRequest
  */
 
@@ -40,10 +41,14 @@ function sha(character) {
 /**
  * Put a `gh` on PATH that answers `pr list --search` and `api graphql` from `pullRequests`.
  *
+ * `knowsStacks: false` answers the way a GitHub without stacked pull requests does: it rejects
+ * any query that names `stackEntry`.
+ *
  * @param {import("node:test").TestContext} t
  * @param {StoredPullRequest[]} pullRequests
+ * @param {{ knowsStacks?: boolean }} [options]
  */
-function installStandInGitHub(t, pullRequests) {
+function installStandInGitHub(t, pullRequests, { knowsStacks = true } = {}) {
   const root = scratchRoot(t, "gsm-pr-lookup-");
   const binDirectory = join(root, "fakebin");
   mkdirSync(binDirectory, { recursive: true });
@@ -66,6 +71,7 @@ const summary = pullRequest => ({
   headRefName: pullRequest.headRefName,
   headRefOid: pullRequest.headRefOid,
   reviewDecision: null,
+  stackEntry: pullRequest.stackEntry ?? null,
 });
 
 if (command === "repo" && subcommand === "view") {
@@ -98,6 +104,10 @@ if (command === "pr" && subcommand === "list") {
 let query = "";
 process.stdin.on("data", chunk => (query += chunk));
 process.stdin.on("end", () => {
+  if (!${JSON.stringify(knowsStacks)} && query.includes("stackEntry")) {
+    process.stderr.write("gh: Field 'stackEntry' doesn't exist on type 'PullRequest'\\n");
+    process.exit(1);
+  }
   const node = pullRequest => ({
     ...summary(pullRequest),
     commits: {
@@ -194,6 +204,73 @@ test("a branch pushed under another name finds its pull request by tip commit", 
   const status = present(service.cached().get("dev/readme"), "dev/readme");
   assert.equal(status.number, 26403);
   assert.equal(status.checks, "success");
+});
+
+test("a pull request in a stack reports its place, read in the same query", async t => {
+  const cwd = installStandInGitHub(t, [
+    {
+      number: 7,
+      state: "OPEN",
+      headRefName: "feature-a",
+      headRefOid: sha("a"),
+      commits: [sha("a")],
+      stackEntry: { position: 2, stack: { number: 19, size: 3 } },
+    },
+    {
+      number: 8,
+      state: "OPEN",
+      headRefName: "feature-b",
+      headRefOid: sha("b"),
+      commits: [sha("b")],
+    },
+  ]);
+  const service = new PullRequestService(cwd);
+
+  await service.refresh(
+    [
+      { name: "feature-a", sha: sha("a") },
+      { name: "feature-b", sha: sha("b") },
+    ],
+    true
+  );
+
+  assert.deepEqual(present(service.cached().get("feature-a"), "a").stack, {
+    number: 19,
+    position: 2,
+    size: 3,
+  });
+  assert.equal(present(service.cached().get("feature-b"), "b").stack, null);
+});
+
+test("a GitHub without stacked pull requests still answers, minus the stack", async t => {
+  // The one unknown field fails the whole query, so every badge would go with it.
+  const cwd = installStandInGitHub(
+    t,
+    [
+      {
+        number: 7,
+        state: "OPEN",
+        headRefName: "feature-a",
+        headRefOid: sha("a"),
+        commits: [sha("a")],
+      },
+    ],
+    { knowsStacks: false }
+  );
+  const lines = /** @type {string[]} */ ([]);
+  const service = new PullRequestService(cwd, line => lines.push(line));
+
+  await service.refresh([{ name: "feature-a", sha: sha("a") }], true);
+  const status = present(service.cached().get("feature-a"), "feature-a");
+  assert.equal(status.number, 7);
+  assert.equal(status.stack, null);
+  assert.equal(service.availabilityReason(), null);
+
+  // Remembered for the session, so the next refresh asks once rather than failing first.
+  const asked = () => lines.filter(line => line.startsWith("gh api")).length;
+  const before = asked();
+  await service.refresh([{ name: "feature-a", sha: sha("a") }], true);
+  assert.equal(asked() - before, 1);
 });
 
 test("a branch whose tip sits inside a later pull request keeps its own pull request", async t => {

@@ -102,7 +102,7 @@ test("a change under .git's refs asks the panel to re-read", t => {
       { base: gitDirectory, pattern: "{HEAD,index}" },
       {
         base: gitDirectory,
-        pattern: "{refs/**,gh-stack}",
+        pattern: "refs/**",
       },
     ],
     "the watchers should be scoped to the git directory"
@@ -113,7 +113,7 @@ test("a change under .git's refs asks the panel to re-read", t => {
 
 /**
  * A linked worktree's `.git` is a file, so watching `<checkout>/.git/refs` saw nothing: a
- * commit made there, or `gh stack init` run there, left the tree as it was.
+ * commit made there left the tree as it was.
  */
 test("a linked worktree watches the git directories its .git file names", t => {
   const root = scratchRoot(t, "gsm-host-worktree-");
@@ -130,7 +130,7 @@ test("a linked worktree watches the git directories its .git file names", t => {
     { base: gitDirectory, pattern: "{HEAD,index}" },
     {
       base: commonDirectory,
-      pattern: "{refs/**,gh-stack}",
+      pattern: "refs/**",
     },
   ]);
 });

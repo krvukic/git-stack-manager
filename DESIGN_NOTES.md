@@ -106,10 +106,11 @@ For the same reason, the badge reads **no local upstream** rather than "not subm
 request exists for the commit. The branch tracks nothing here, but the work has plainly been
 submitted.
 
-Stack membership comes from `.git/gh-stack`, the `gh stack` extension's own state file, which is a
-file read rather than a subprocess. Where `gh stack` has a command, this extension calls it: `gh
-stack` owns the server-side stack object and pushes with `--force-with-lease`, so a parallel
-implementation would only drift from GitHub's view.
+A stack is two separate things, and each has one source. The branches that make up a stack come
+from the graph: a branch belongs with the one its commits are on, and `stackChain` reads that off
+the snapshot. Which pull requests GitHub links comes from GitHub, through `stackEntry` on each pull
+request in the query that already reads pull request status. The extension keeps no record of its
+own and reads none of `gh stack`'s, so no file can disagree with either source after a rebase.
 
 **Submit** (`src/github/submit.ts`) exists because pushing and describing a change are two separate
 things on GitHub. The push updates the branch, and GitHub sets the pull request's title and body

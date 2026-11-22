@@ -14,18 +14,9 @@ import { fullShas, LineCount, readLineCounts } from "#git/lineCounts";
 import { readRawData } from "#git/reader";
 import { GitError, GitRunner } from "#git/runner";
 import { FileChange, RawData } from "#git/snapshot";
-import { runGh } from "#github/ghRunner";
-import {
-  ghStackArguments,
-  GhStackCommand,
-  GhStackInfo,
-  indexStackMembership,
-  readGhStacks,
-  StackMembership,
-  stacksHolding,
-} from "#github/ghStack";
 import { PullRequestService } from "#github/pullRequests";
 import {
+  stackChain,
   submitBranch,
   SubmitOptions,
   SubmitOutcome,
@@ -60,7 +51,6 @@ import {
   planRebase,
   RebaseDestination,
   RebaseOutcome,
-  requireCleanWorkingCopy,
   resolveDestination,
   runRebase,
 } from "#history/rebase";
@@ -544,107 +534,6 @@ export class Repository {
   }
 
   /**
-   * The `gh stack` record and the commit each local branch points at.
-   *
-   * A full read walks the history a rebase just rewrote. Re-recording the bases needs none of it,
-   * so this costs two git commands and a file read — the budget for a check that runs after every
-   * rebase.
-   */
-  private async readStackState(): Promise<{
-    stacks: GhStackInfo[];
-    membership: Map<string, StackMembership>;
-  }> {
-    const [gitDirectory, refs] = await Promise.all([
-      // The common directory, so a linked worktree sees the repository's stacks.
-      this.git.tryRun([
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-common-dir",
-      ]),
-      this.git.run([
-        "for-each-ref",
-        "--format=%(refname:short) %(objectname)",
-        "refs/heads",
-      ]),
-    ]);
-    const shaOfBranch = new Map<string, string>();
-    for (const line of refs.split("\n").filter(Boolean)) {
-      const [branch, sha] = line.split(" ");
-      if (branch && sha) {
-        shaOfBranch.set(branch, sha);
-      }
-    }
-    const stacks = gitDirectory ? readGhStacks(gitDirectory) : [];
-    return { stacks, membership: indexStackMembership(stacks, shaOfBranch) };
-  }
-
-  /**
-   * Bring the `gh stack` record of every stack this rebase moved back in line with where its
-   * branches now sit.
-   *
-   * A rebase with `--update-refs` moves each layer and leaves `.git/gh-stack` naming the commits
-   * it replaced, with nothing on screen to show it. The graph then drew "needs rebase" on the
-   * stack just rebased, and `gh stack submit` would have opened its pull requests against
-   * abandoned shas. `gh stack rebase <bottom> --no-trunk` replays each layer onto the one below —
-   * already where the rebase put them — and writes the new bases.
-   *
-   * This reports a failure rather than throwing one. The commits have already moved, so turning a
-   * finished rebase into an error would tell the reader the opposite of what happened. `gh stack`
-   * exits 0 even when it prints `✗` and rebases nothing, so the verdict comes from re-reading the
-   * record rather than from the exit status.
-   */
-  private async recordStackBases(
-    outcome: RebaseOutcome
-  ): Promise<RebaseOutcome> {
-    if (outcome.conflict || !outcome.moved.length) {
-      return outcome;
-    }
-    // A rebase never writes the record, so it still names the same stacks it did before the
-    // commits moved.
-    const stacks = stacksHolding(
-      (await this.readStackState()).stacks,
-      outcome.moved
-    );
-    if (!stacks.length) {
-      return outcome;
-    }
-    const bottoms: string[] = [];
-    for (const stack of stacks) {
-      const bottom = stack.branches[0]?.branch;
-      if (!bottom) {
-        continue;
-      }
-      bottoms.push(bottom);
-      try {
-        await runGh(
-          this.git,
-          ghStackArguments({
-            kind: "rebase",
-            scope: "all",
-            branch: bottom,
-            noTrunk: true,
-          })
-        );
-      } catch {
-        // Nothing to do here: the check below reports every stack still stale, whether `gh`
-        // failed outright or printed a cross and carried on.
-      }
-    }
-    // The bottom layer counts like any other. `gh stack` records its base as the tip of the trunk
-    // *branch* rather than the commit the layer sits on, and `indexStackMembership` compares
-    // against that same value, so a stack rebased past a trailing local `main` reads clean.
-    const after = await this.readStackState();
-    const staleStacks = stacksHolding(after.stacks, bottoms)
-      .filter(stack =>
-        stack.branches.some(
-          entry => after.membership.get(entry.branch)?.recordedBaseStale
-        )
-      )
-      .flatMap(stack => (stack.branches[0] ? [stack.branches[0].branch] : []));
-    return staleStacks.length ? { ...outcome, staleStacks } : outcome;
-  }
-
-  /**
    * Move `sha` and its descendants onto `destination`.
    *
    * Returns `conflict: true` with git's rebase state intact when a step stops,
@@ -662,33 +551,18 @@ export class Repository {
     }
     const destinationSha = resolveDestination(snapshot, sha, destination);
     const plan = planRebase(snapshot, sha, destinationSha);
-    const outcome = await runRebase(this.git, snapshot, plan);
-    return this.recordStackBases(outcome);
+    return runRebase(this.git, snapshot, plan);
   }
 
   /**
-   * Move every layer of the stack that holds `branch` onto the commit that its remote holds.
+   * Move every branch of the stack that holds `branch` onto the commit that its remote has.
    *
-   * The layers come from the `gh stack` record rather than from the graph that the tree drew. The
-   * record names the stack that GitHub restacked, and `buildModel` draws no row beside the others
-   * for a layer whose local branch was left behind two rebases ago.
-   *
-   * Re-records the bases afterwards for the same reason that a rebase does: every layer now
-   * points at the commit that its remote parent holds, so the record names a replaced base for
-   * every layer.
+   * The branches come from the graph, through `stackChain`: the stack is whatever the tree draws
+   * as one line through `branch`.
    */
   async adoptRemoteStack(branch: string): Promise<AdoptOutcome> {
     const snapshot = await this.read();
-    const stack = stacksHolding((await this.readStackState()).stacks, [
-      branch,
-    ])[0];
-    if (!stack) {
-      throw new GitError(
-        `${branch} belongs to no gh stack, so this action finds no layers to move.`,
-        "adopt remote"
-      );
-    }
-    const branches = stack.branches.map(entry => entry.branch);
+    const branches = stackChain(snapshot, branch);
     // Only the checked-out layer's files move, so only that layer can catch an edit mid-move. An
     // untracked file never blocks the move, because nothing here writes a path that git does not
     // track.
@@ -703,56 +577,12 @@ export class Repository {
         "adopt remote"
       );
     }
-    const outcome = await adoptRemoteStack(
+    return adoptRemoteStack(
       this.git,
       branches,
       snapshot.trunkRef,
       snapshot.headBranch
     );
-    const recorded = await this.recordStackBases({
-      moved: outcome.moved,
-      conflict: false,
-    });
-    return recorded.staleStacks
-      ? { ...outcome, staleStacks: recorded.staleStacks }
-      : outcome;
-  }
-
-  /**
-   * Check out the layer a scoped rebase starts from.
-   *
-   * `gh stack rebase --upstack lower` takes its starting layer from the *checked-out* branch; the
-   * branch on the command line only selects the stack. Run with HEAD on the top layer, it printed
-   * `starting from upper to upper`, counted every upstack branch as rebased, and left the middle
-   * layer on the commit the bottom one had abandoned — a wrong result with no error. Checking the
-   * layer out first makes the menu label and the outcome agree.
-   *
-   * HEAD stays on that layer afterwards, as it does after any `gh stack rebase`.
-   */
-  private async checkoutRebasePivot(command: GhStackCommand): Promise<void> {
-    if (
-      command.kind !== "rebase" ||
-      command.scope === "all" ||
-      !command.branch
-    ) {
-      return;
-    }
-    const snapshot = await this.read();
-    if (snapshot.headBranch === command.branch) {
-      return;
-    }
-    requireCleanWorkingCopy(snapshot, `gh stack rebase --${command.scope}`);
-    await this.git.run(["switch", command.branch]);
-  }
-
-  /**
-   * Delegate to the `gh stack` extension. It owns the server-side stack object
-   * and force-pushes with --force-with-lease, so reimplementing submit/sync here
-   * would only drift from GitHub's own view of the stack.
-   */
-  async runGhStack(command: GhStackCommand): Promise<string> {
-    await this.checkoutRebasePivot(command);
-    return runGh(this.git, ghStackArguments(command));
   }
 
   /**
@@ -834,6 +664,8 @@ export class Repository {
         headSha: "",
         reviewDecision: null,
         checks: null,
+        // A submit neither links nor unlinks, so the place the last read reported still holds.
+        stack: this.pullRequests.cached().get(branch)?.stack ?? null,
       });
     }
   }
@@ -916,12 +748,9 @@ export class Repository {
     return this.undoHistory.undo();
   }
 
-  /**
-   * Finish the rebase the user resolved, then record where the stacks landed — a rebase that
-   * stopped on a conflict moves the same branches as one that did not.
-   */
-  async continueRebase(): Promise<RebaseOutcome> {
-    return this.recordStackBases(await continueRebase(this.git));
+  /** Finish the rebase the user resolved. */
+  continueRebase(): Promise<RebaseOutcome> {
+    return continueRebase(this.git);
   }
 
   abortRebase(): Promise<void> {

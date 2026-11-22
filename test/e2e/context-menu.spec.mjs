@@ -31,64 +31,27 @@ test("right-clicking a stacked commit lists its rebase destinations", async ({
   await snapshot("commit-context-menu", { locator: smartlog.locator("#menu") });
 });
 
-test("the stack commands that read HEAD wait for a checkout, and offer it", async ({
+test("the gh stack section appears only on a commit whose branch has an open pull request", async ({
   smartlog,
 }) => {
   const menu = smartlog.locator("#menu");
+  const taking = menu.locator(".item", { hasText: "Take GitHub's version" });
+
+  // pad-utils carries the open #205.
   await smartlog
     .getByText("feat(pad): add padStart")
     .click({ button: "right" });
-  // HEAD is on `main`, which both demo stacks name as trunk. `gh stack submit` would refuse with
-  // `branch "main" belongs to multiple stacks` after the click, so the entry states that before
-  // the click, and the checkout above turns the fix into one gesture.
-  await expect(menu).toContainText("Push stack — check out a layer first");
-  await expect(menu).toContainText(
-    "Submit stack (create/update PRs) — check out a layer first"
+  await expect(taking).toHaveCount(1);
+  expect(await descriptionOf(taking)).toContain(
+    "point every branch of this stack at the commit that its remote branch has"
   );
-  await expect(menu).toContainText(
-    "Sync stack with remote (prune merged) — check out a layer first"
-  );
+  await smartlog.keyboard.press("Escape");
 
-  await menu.getByText("Checkout trim-utils (top layer)").click();
-  await expectToast(smartlog, "Checked out trim-utils ✓");
-
-  await smartlog
-    .getByText("feat(pad): add padStart")
-    .click({ button: "right" });
-  // The same three, now runnable, so the checkout is what the three needed, and the dimming
-  // clears rather than sticking.
-  await expect(menu).toContainText("Push stack");
-  await expect(menu).not.toContainText("check out a layer first");
-  await expect(menu).not.toContainText("Checkout trim-utils");
-});
-
-test("the two rebase families say apart what each one moves", async ({
-  smartlog,
-}) => {
-  const menu = smartlog.locator("#menu");
-  await smartlog
-    .getByText("feat(pad): add padStart")
-    .click({ button: "right" });
-  // Two kinds of rebase entry sit on one stacked commit, and only the tooltips separate them: two
-  // move recorded layers, the rest move commits. A reader picks between them on that sentence
-  // alone, so it is pinned.
-  await expect(
-    menu.locator(".item", { hasText: "Rebase stack (all layers)" })
-  ).toHaveAttribute("title", /every recorded layer/);
-  await expect(
-    menu.locator(".item", { hasText: "Rebase this layer and above" })
-  ).toHaveAttribute("title", /from this layer up/);
-  // The panel's own rebase re-records the bases it moves, so no entry leaves a stack recorded
-  // against replaced commits. That is the part worth stating where a reader looks.
-  for (const label of [
-    "onto current commit",
-    "onto latest trunk",
-    "onto stack base",
-  ]) {
-    expect(
-      await descriptionOf(menu.locator(".item", { hasText: label }))
-    ).toContain("Re-records the bases of any gh stack layer it moves");
-  }
+  // escape-html was never pushed, so there is no pull request for a stack action to act on.
+  await smartlog.getByText("feat: add escapeHtml").click({ button: "right" });
+  await expect(menu).toBeVisible();
+  await expect(taking).toHaveCount(0);
+  await expect(menu).not.toContainText("gh stack");
 });
 
 /**

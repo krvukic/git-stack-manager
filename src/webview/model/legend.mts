@@ -47,14 +47,12 @@ const SYNCED = {
 function branch(
   sync: UIBranch["sync"],
   pullRequest: PullRequestStatus | null = null,
-  stack: UIBranch["stack"] = null,
   tracksTrunk = false
 ): UIBranch {
   return {
     name: "my-branch",
     sync,
     pullRequest,
-    stack,
     tracksTrunk,
     worktree: null,
     draft: null,
@@ -72,6 +70,7 @@ function pullRequest(fields: Partial<PullRequestStatus>): PullRequestStatus {
     checks: null,
     headSha: "",
     reviewDecision: null,
+    stack: null,
     ...fields,
   };
 }
@@ -138,7 +137,6 @@ export function legendGroups(): LegendGroup[] {
         {
           branch: branch(
             { ...SYNCED, upstream: "origin/main", ahead: 1, behind: 32 },
-            null,
             null,
             true
           ),
@@ -231,25 +229,14 @@ export function legendGroups(): LegendGroup[] {
       ],
     },
     {
-      heading: "Position in a gh stack",
+      heading: "Position in a stack on GitHub",
       rows: [
         {
-          branch: branch(null, null, {
-            position: 2,
-            branches: ["lower", "middle", "upper"],
-            needsRebase: false,
+          branch: pullRequestOnly({
+            stack: { number: 57, position: 2, size: 3 },
           }),
-          what: "Layer 2 of 3",
-          why: "Which layer of a stacked pull request this branch is.",
-        },
-        {
-          branch: branch(null, null, {
-            position: 2,
-            branches: ["lower", "middle", "upper"],
-            needsRebase: true,
-          }),
-          what: "Needs rebase",
-          why: "The layer below moved, so this one still points at the old commit.",
+          what: "Pull request 2 of 3",
+          why: "Where this pull request is in a stack that GitHub links. Link stack in a commit's right-click menu creates one.",
         },
       ],
     },

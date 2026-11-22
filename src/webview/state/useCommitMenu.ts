@@ -2,9 +2,9 @@
  * The right-click menu's contents for a commit.
  *
  * Built from the model rather than fixed, because which entries apply depends on where the
- * commit sits: a `gh stack` member gets the stack commands, a commit with a branch gets
- * Submit, and a stopped rebase replaces the rebase entries with an explanation instead of
- * hiding them.
+ * commit sits: a commit with a branch gets Submit, one whose branch has an open pull request
+ * gets the `gh stack` section, and a stopped rebase replaces the rebase entries with an
+ * explanation instead of hiding them.
  */
 import type { RebaseDestination } from "#history/rebase";
 import type { RenderModel, UIBranch, UICommit } from "#ui/renderModel";
@@ -24,11 +24,8 @@ export type CommitMenuActions = {
   onGoto: (commit: UICommit) => void;
   onCopySha: (commit: UICommit) => void;
   onCopyBranchName: (branch: string) => void;
-  onCheckoutBranch: (branch: string) => void;
-  onGhStack: (payload: Record<string, unknown>, label: string) => void;
   onAdoptRemote: (branch: string) => void;
   onDeleteBranch: (branch: string) => void;
-  onOpenTerminal: (command: string) => void;
   onSubmit: (commit: UICommit) => void;
   onSubmitStack: (commit: UICommit) => void;
   onSplit: (commit: UICommit) => void;
@@ -36,71 +33,6 @@ export type CommitMenuActions = {
   /** Rebase the commit `rootSha` names, and its descendants, onto `destination`. */
   onRebase: (rootSha: string, destination: RebaseDestination) => void;
 };
-
-/**
- * The three `gh stack` commands that read the stack from HEAD, plus the checkout that lets them.
- *
- * `submit`, `push`, and `sync` take no branch argument, so each one finds its stack through the
- * checked-out branch. Offered from trunk they refuse after the click with `branch "main" belongs to
- * multiple stacks; checkout a non-trunk branch first` — a refusal from a CLI the reader never
- * invoked. Omitting `run` states that before the click instead, as the conflict case does for
- * rebase.
- */
-function fromHeadItems(
-  model: RenderModel,
-  layers: string[],
-  actions: CommitMenuActions
-): MenuItem[] {
-  const headInStack = !!model.headBranch && layers.includes(model.headBranch);
-  const topLayer = layers[layers.length - 1];
-  const reason = `\`gh stack\` reads the stack from the checked-out branch, and HEAD is ${
-    model.headBranch ? `on ${model.headBranch}` : "detached"
-  }.`;
-  const entry = (
-    label: string,
-    description: string,
-    payload: Record<string, unknown>,
-    toast: string
-  ): MenuItem =>
-    headInStack
-      ? { label, description, run: () => actions.onGhStack(payload, toast) }
-      : {
-          label: `${label} — check out a layer first`,
-          description: `${description}. ${reason}`,
-        };
-
-  return [
-    // Any layer inside the stack lets all three run, since each reads the whole stack from its
-    // record. The top is offered because a later `--upstack` from there covers every layer too.
-    ...(headInStack || !topLayer
-      ? []
-      : [
-          {
-            label: `Checkout ${topLayer} (top layer)`,
-            description: "What the three entries below need, in one click",
-            run: () => actions.onCheckoutBranch(topLayer),
-          },
-        ]),
-    entry(
-      "Push stack",
-      "gh stack push — force-with-lease every branch in the stack",
-      { command: "push" },
-      "Pushing stack"
-    ),
-    entry(
-      "Submit stack (create/update PRs)",
-      "gh stack submit",
-      { command: "submit" },
-      "Submitting stack"
-    ),
-    entry(
-      "Sync stack with remote (prune merged)",
-      "gh stack sync --prune",
-      { command: "sync", prune: true },
-      "Syncing stack"
-    ),
-  ];
-}
 
 /**
  * One **Copy branch name** entry per branch on the commit, or none when it carries no branch.
@@ -128,8 +60,8 @@ function copyBranchItems(
 /**
  * One **Delete branch** entry per branch on the commit, each carrying its own refusal.
  *
- * Each refused branch keeps its entry, which names the reason, as the rebase and `gh stack` entries
- * do: a branch with no entry at all reads as a bug in the menu. The host always refuses trunk, so
+ * Each refused branch keeps its entry, which names the reason, as the rebase entries do: a
+ * branch with no entry at all reads as a bug in the menu. The host always refuses trunk, so
  * `main` never gets a runnable entry.
  */
 function deleteItems(commit: UICommit, actions: CommitMenuActions): MenuItem[] {
@@ -185,9 +117,7 @@ function rebaseItem(
 /**
  * The four rebases: onto and from the checked-out commit, onto trunk, and onto the stack base.
  *
- * All four walk the graph, so each carries a fork above its root and branches that no stack
- * record names. The `gh stack` pair further down moves recorded layers instead, which is why
- * both families stay.
+ * All four walk the graph, so each carries a fork above its root, with every branch on it.
  *
  * The first two need a second commit, so the checked-out commit's own menu leaves them out.
  */
@@ -197,7 +127,6 @@ function rebaseItems(
   actions: CommitMenuActions
 ): MenuItem[] {
   const moving = movingSet(model, commit.sha, "this commit");
-  const recorded = "Re-records the bases of any gh stack layer it moves";
   const items: MenuItem[] = [];
 
   if (!commit.isHead && model.headSha) {
@@ -205,7 +134,7 @@ function rebaseItems(
     items.push(
       rebaseItem(
         "Rebase this commit and its descendants onto current commit",
-        `Re-parent ${moving} on the commit you are on, without a fetch. ${recorded}`,
+        `Re-parent ${moving} on the commit you are on, without a fetch.`,
         rebaseRefusal(model, commit, model.headSha),
         "the current commit",
         () =>
@@ -214,7 +143,7 @@ function rebaseItems(
       head
         ? rebaseItem(
             "Rebase current commit and its descendants onto this commit",
-            `Re-parent ${movingSet(model, head.sha, "the commit you are on")} on this one, without a fetch. ${recorded}`,
+            `Re-parent ${movingSet(model, head.sha, "the commit you are on")} on this one, without a fetch.`,
             rebaseRefusal(model, head, commit.sha),
             "this commit",
             () =>
@@ -232,12 +161,12 @@ function rebaseItems(
   items.push(
     {
       label: "Rebase this commit and its descendants onto latest trunk",
-      description: `Fetch ${model.trunkRef || "trunk"}, then replay ${moving} on its tip — every commit above this one, stacked or not. ${recorded}`,
+      description: `Fetch ${model.trunkRef || "trunk"}, then replay ${moving} on its tip — every commit above this one, stacked or not.`,
       run: () => actions.onRebase(commit.sha, { kind: "trunk" }),
     },
     rebaseItem(
       "Rebase this commit and its descendants onto stack base",
-      `Re-parent ${moving} on the commit this stack forked from, without pulling in newer trunk commits. ${recorded}`,
+      `Re-parent ${moving} on the commit this stack forked from, without pulling in newer trunk commits.`,
       base ? rebaseRefusal(model, commit, base) : null,
       "the stack base",
       () => actions.onRebase(commit.sha, { kind: "base" })
@@ -325,51 +254,22 @@ export function commitMenuItems(
     ...rebaseItems(model, commit, actions)
   );
 
-  const stacked = (commit.branchDetails ?? []).find(detail => detail.stack);
-  if (stacked) {
-    // `gh stack` owns the server-side stack object and pushes with --force-with-lease, so
-    // delegate rather than reimplement these.
+  // The section is about the stack's pull requests, so it needs one to act on.
+  const published = (commit.branchDetails ?? []).find(
+    detail => detail.pullRequest?.state === "OPEN"
+  );
+  if (published) {
     items.push(
       { separator: true },
       { head: "gh stack" },
       {
-        label: "Rebase stack (all layers)",
-        description:
-          "gh stack rebase — fetches trunk, then replays every recorded layer onto it, bottom-to-top",
-        run: () =>
-          actions.onGhStack(
-            { command: "rebase", scope: "all", branch: stacked.name },
-            "Rebasing stack"
-          ),
-      },
-      {
-        label: "Rebase this layer and above",
-        description:
-          "gh stack rebase --upstack — the same, from this layer up, leaving those below alone. Checks this layer out first, since gh stack starts from HEAD",
-        run: () =>
-          actions.onGhStack(
-            { command: "rebase", scope: "upstack", branch: stacked.name },
-            "Rebasing upstack"
-          ),
-      },
-      {
-        // The opposite direction to the two rebases above. Those two replay local commits; this
-        // entry takes the commits that the remote already holds. Once GitHub restacks a stack, the
-        // remote holds the correct copy, and a local replay reaches the same trees under new
-        // shas and force-pushes every branch.
-        label: `Move stack onto ${remoteOf(stacked) ?? "the remote"}`,
-        description:
-          "Point every layer at the commit that its remote branch holds, where GitHub's restack left it once a lower pull request merged. This pushes nothing, Undo puts the branches back, and the move refuses when a layer holds work that the remote does not have",
-        run: () => actions.onAdoptRemote(stacked.name),
-      },
-      ...fromHeadItems(model, stacked.stack?.branches ?? [], actions),
-      {
-        // Drop, insert, rename, and reorder all live in gh stack's own TUI, so point at it
-        // rather than building a second one.
-        label: "Restructure stack (drop, reorder, insert)…",
-        description:
-          "Runs `gh stack modify` in a terminal — it needs an interactive TUI",
-        run: () => actions.onOpenTerminal("gh stack modify"),
+        // The opposite direction to the rebases above. Those replay local commits; this entry
+        // takes the commits that the remote already has. Once GitHub restacks a stack, the
+        // remote has the correct copy, and a local replay reaches the same trees under new
+        // shas, which the next submit then force-pushes over every branch.
+        label: "Take GitHub's version",
+        description: `Fetch ${remoteOf(published) ?? "the remote"}, then point every branch of this stack at the commit that its remote branch has, where GitHub's restack left it once a lower pull request merged. This pushes nothing, Undo puts the branches back, and a branch with work that the remote does not have stays where it is`,
+        run: () => actions.onAdoptRemote(published.name),
       }
     );
   }

@@ -55,6 +55,18 @@ export type PullRequestStatus = {
   reviewDecision: string | null;
   /** Rolled-up CI result: success | failure | pending, or null when no checks ran. */
   checks: "success" | "failure" | "pending" | null;
+  /** Where the pull request is in a stack on GitHub, or null when it is in none. */
+  stack: PullRequestStack | null;
+};
+
+/** A pull request's place in a GitHub stack: what `gh stack link` creates and extends. */
+export type PullRequestStack = {
+  /** The stack's own number, which `gh stack link` and `gh stack unstack` take. */
+  number: number;
+  /** 1-based, counted from the pull request that targets trunk. */
+  position: number;
+  /** How many pull requests the stack holds. */
+  size: number;
 };
 
 /** What the UI needs to explain an empty pull request panel. */
@@ -336,19 +348,7 @@ export class PullRequestService {
       batches,
       BATCH_CONCURRENCY,
       async batch => {
-        const output = await this.runGh(
-          [
-            "api",
-            "graphql",
-            "-f",
-            `owner=${owner}`,
-            "-f",
-            `repo=${repo}`,
-            "-F",
-            "query=@-",
-          ],
-          lookupQuery(batch)
-        );
+        const output = await this.lookUp(batch, owner, repo);
         try {
           applyBatch(batch, output, byBranch);
         } catch (error: unknown) {
@@ -411,6 +411,51 @@ export class PullRequestService {
     }
     this.repoIdentity = { owner, repo: name };
     return this.repoIdentity;
+  }
+
+  /**
+   * Whether this GitHub knows stacked pull requests. A GitHub Enterprise Server without the
+   * feature rejects the whole query over the one unknown field, which would cost every badge,
+   * so the first such rejection turns the field off for the rest of the session.
+   */
+  private stacksSupported = true;
+
+  /** Run `lookupQuery` for one batch, without the stack fields where GitHub rejects them. */
+  private async lookUp(
+    batch: BranchTip[],
+    owner: string,
+    repo: string
+  ): Promise<string> {
+    const ask = (withStacks: boolean) =>
+      this.runGh(
+        [
+          "api",
+          "graphql",
+          "-f",
+          `owner=${owner}`,
+          "-f",
+          `repo=${repo}`,
+          "-F",
+          "query=@-",
+        ],
+        lookupQuery(batch, withStacks)
+      );
+    if (!this.stacksSupported) {
+      return ask(false);
+    }
+    try {
+      return await ask(true);
+    } catch (error: unknown) {
+      const detail = ghFailureDetail(error) || errorMessage(error);
+      if (!detail.includes("stackEntry")) {
+        throw error;
+      }
+      this.stacksSupported = false;
+      this.log(
+        "  → no stacked pull requests on this GitHub; asking without them"
+      );
+      return ask(false);
+    }
   }
 
   /**
@@ -492,7 +537,15 @@ async function mapWithConcurrency<T, R>(
 const PULL_REQUEST_SUMMARY_FIELDS = `number state isDraft title url headRefName headRefOid reviewDecision`;
 
 /**
- * `PULL_REQUEST_SUMMARY_FIELDS` plus the pull request's own head commit's rollup.
+ * The pull request's place in a stack, which rides in the same query so that stack membership
+ * costs no request of its own. Left out for a GitHub that has no such field; see
+ * `PullRequestService.stacksSupported`.
+ */
+const STACK_FIELDS = `stackEntry { position stack { number size } }`;
+
+/**
+ * The pull request's own head commit's rollup, which the by-name lookup reads beside the
+ * summary fields.
  *
  * `commits(last: 1)` is the pull request's own head, which is what the rollup has to come
  * from: the branch's local tip is not necessarily what GitHub has run checks against, and
@@ -501,8 +554,7 @@ const PULL_REQUEST_SUMMARY_FIELDS = `number state isDraft title url headRefName 
  * directly, so its nodes use `PULL_REQUEST_SUMMARY_FIELDS` and read the rollup once off the
  * commit object instead of asking for it again per pull request.
  */
-const PULL_REQUEST_NODE_FIELDS = `${PULL_REQUEST_SUMMARY_FIELDS}
-    commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }`;
+const PULL_REQUEST_HEAD_ROLLUP = `commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }`;
 
 /**
  * One GraphQL query answering every branch in `batch` at once, two ways: `n{index}` by
@@ -517,24 +569,42 @@ const PULL_REQUEST_NODE_FIELDS = `${PULL_REQUEST_SUMMARY_FIELDS}
  * contains, newest first is what keeps that pull request's own entry inside the page
  * instead of being crowded out by older ones that merely contain the same commit.
  */
-function lookupQuery(batch: BranchTip[]): string {
+function lookupQuery(batch: BranchTip[], withStacks: boolean): string {
+  const summary = withStacks
+    ? `${PULL_REQUEST_SUMMARY_FIELDS} ${STACK_FIELDS}`
+    : PULL_REQUEST_SUMMARY_FIELDS;
   const aliases = batch
     .map(
       (branch, index) => `
   n${index}: pullRequests(headRefName: ${JSON.stringify(branch.name)}, states: [OPEN, CLOSED, MERGED], orderBy: { field: CREATED_AT, direction: DESC }, first: ${PULL_REQUESTS_PER_BRANCH}) {
-    nodes { ${PULL_REQUEST_NODE_FIELDS} }
+    nodes { ${summary}
+    ${PULL_REQUEST_HEAD_ROLLUP} }
   }
   c${index}: object(oid: ${JSON.stringify(branch.sha)}) {
     ... on Commit {
       statusCheckRollup { state }
       associatedPullRequests(first: ${PULL_REQUESTS_PER_BRANCH}, orderBy: { field: CREATED_AT, direction: DESC }) {
-        nodes { ${PULL_REQUEST_SUMMARY_FIELDS} }
+        nodes { ${summary} }
       }
     }
   }`
     )
     .join("");
   return `query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) {${aliases}\n} }`;
+}
+
+/** A node's `stackEntry`, or null when the pull request is in no stack or the field is absent. */
+function readStack(value: unknown): PullRequestStack | null {
+  const entry = asRecord(value);
+  const stack = asRecord(entry?.stack);
+  if (
+    typeof entry?.position !== "number" ||
+    typeof stack?.number !== "number" ||
+    typeof stack.size !== "number"
+  ) {
+    return null;
+  }
+  return { number: stack.number, position: entry.position, size: stack.size };
 }
 
 /** A pull request node's own head rollup, from its `commits(last: 1)` field. */
@@ -588,6 +658,7 @@ function applyBatch(
             ? entry.reviewDecision
             : null,
         checks,
+        stack: readStack(entry.stackEntry),
       };
       // A branch can carry several pull requests over time (reopened, or closed then
       // replaced). Prefer an open one, else the highest number — the newest.

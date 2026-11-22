@@ -157,12 +157,6 @@ async function handleRequest(
       } else if (action === "openUrl") {
         openWithSystem(requireString(payload, "url"));
         result = { ok: true };
-      } else if (action === "openTerminal") {
-        // Web mode has no terminal to drive, so tell the user what to run.
-        result = {
-          ok: false,
-          error: `Run this in a terminal: ${requireString(payload, "command")}`,
-        };
       } else if (action === "openDiff" || action === "openCommitChanges") {
         // No editor here to host a diff. The UI reads this refusal as "show it inline"
         // and falls back to its own overlay, so the button works in both hosts.

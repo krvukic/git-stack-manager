@@ -22,13 +22,8 @@ import { MergedBranch, mergedBranches } from "#history/pruneMerged";
 export type UIBranch = {
   name: string;
   sync: BranchSync | null;
+  /** The branch's pull request, which also says where it is in a stack on GitHub. */
   pullRequest: PullRequestStatus | null;
-  /** Position in a `gh stack`, when the branch belongs to one. */
-  stack: {
-    position: number;
-    branches: string[];
-    needsRebase: boolean;
-  } | null;
   /**
    * The upstream is trunk itself rather than a pushed copy of this branch, so the sync
    * counts measure it against trunk. Excludes the branch trunk resolves to, whose counts
@@ -125,8 +120,6 @@ export type RenderModel = {
    * webview decides whether to ask, never which branches qualify or how a refusal is phrased.
    */
   mergedBranches: MergedBranch[];
-  /** True when `gh stack` tracks at least one branch here. */
-  hasGhStack: boolean;
   /** Why pull request badges are absent, when they are. Null when that status works. */
   pullRequestNotice?: string | null;
   /** How the last pull request fetch went, for the header's freshness indicator. */
@@ -185,7 +178,6 @@ export function buildModel(
     pullRequestNotice,
     pullRequestRefresh,
     undoLabel,
-    hasGhStack: rawData.stackMembership.size > 0,
     mergedBranches: mergedBranches(rawData, pullRequests),
     rows,
   };
@@ -223,7 +215,6 @@ export function buildModel(
           name,
           sync,
           pullRequest: pullRequests.get(name) ?? null,
-          stack: rawData.stackMembership.get(name) ?? null,
           /*
            * `git switch -c` off a remote ref adopts it as upstream under git's default
            * `branch.autoSetupMerge=true`, so a branch cut from origin/main tracks trunk.

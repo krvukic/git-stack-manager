@@ -9,9 +9,6 @@
  *
  * The host supplies the reason that a layer stayed behind, so one place owns that wording rather
  * than each surface owning a copy.
- *
- * This module leaves out the stale-record warning. `staleStackNote` belongs to every surface that
- * moves a layer, and the caller appends it exactly as the rebase toast does.
  */
 export type AdoptReportInput = {
   moved: string[];

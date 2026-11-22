@@ -17,7 +17,7 @@
  */
 import type { UIBranch } from "#ui/renderModel";
 import { classes } from "../classes";
-import { pullRequestBadge, stackBadges, syncBadge } from "../model/badges.mjs";
+import { pullRequestBadge, stackBadge, syncBadge } from "../model/badges.mjs";
 
 /** The shape every pill and badge shares. `sizeClass` is what varies. */
 const CAPSULE = "flex-none rounded-capsule leading-none whitespace-nowrap";
@@ -70,7 +70,6 @@ const BADGE_VARIANTS: Record<string, string> = {
   gone: "bg-err/20 text-err",
   synced: "bg-add/18 text-add",
   stackpos: "bg-accent/16 font-[monospace] text-muted",
-  needsrebase: "bg-mod/24 text-mod",
 };
 
 export function Badge({
@@ -190,12 +189,11 @@ export function BranchPills({
   onOpenUrl: (url: string) => void;
 }) {
   const sync = syncBadge(branch.sync, branch.pullRequest, branch.tracksTrunk);
+  const stack = stackBadge(branch.pullRequest);
   return (
     <>
       <Pill label={branch.name} />
-      {stackBadges(branch.stack).map(badge => (
-        <Badge key={badge.variant} {...badge} />
-      ))}
+      {stack ? <Badge {...stack} /> : null}
       {sync ? <Badge {...sync} /> : null}
       <PullRequestBadge branch={branch} onOpenUrl={onOpenUrl} />
     </>

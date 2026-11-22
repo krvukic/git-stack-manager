@@ -346,16 +346,10 @@ export function App({ settings }: { settings: HostSettings }) {
                     onCopySha: commit => void commitActions.copySha(commit),
                     onCopyBranchName: branch =>
                       void commitActions.copyBranchName(branch),
-                    onCheckoutBranch: branch =>
-                      void repository.gotoBranch(branch),
-                    onGhStack: (payload, label) =>
-                      void commitActions.runGhStack(payload, label),
                     onAdoptRemote: branch =>
                       void commitActions.adoptRemote(branch),
                     onDeleteBranch: branch =>
                       void commitActions.deleteBranch(branch),
-                    onOpenTerminal: command =>
-                      void rpc("openTerminal", { command }),
                     onSubmit: c => void commitActions.submitCommit(c),
                     onSubmitStack: c => void commitActions.submitStack(c),
                     onSplit: c => void commitActions.openSplit(c),

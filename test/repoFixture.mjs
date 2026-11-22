@@ -15,7 +15,6 @@
  * holds what only a test needs.
  */
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -305,21 +304,6 @@ export const branchShas = repo =>
       .filter(Boolean)
       .map(line => /** @type {[string, string]} */ (line.split(" ")))
   );
-
-/**
- * Whether the `gh stack` extension is installed.
- *
- * Anything that reads or writes `.git/gh-stack` is worth one test against the CLI that owns the
- * file, and that test skips rather than fails on a machine without a public-preview extension.
- */
-export function ghStackAvailable() {
-  try {
-    execFileSync("gh", ["stack", "--help"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * The scratch refs a rebase creates, of which a finished one leaves none.

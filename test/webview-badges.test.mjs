@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   pullRequestBadge,
-  stackBadges,
+  stackBadge,
   syncBadge,
   trunkBehindBadge,
 } from "../src/webview/model/badges.mts";
@@ -41,6 +41,7 @@ function pullRequest(fields = {}) {
     checks: null,
     headSha: "",
     reviewDecision: null,
+    stack: null,
     ...fields,
   };
 }
@@ -312,32 +313,33 @@ test("the description carries the title, then the state, and how to open it", ()
   assert.match(badge.description, /Click to open on GitHub\.$/);
 });
 
-test("a branch outside a stack gets no stack badges", () => {
-  assert.deepEqual(stackBadges(null), []);
+test("a pull request in no stack, and a branch with no pull request, get no stack badge", () => {
+  assert.equal(stackBadge(null), null);
+  assert.equal(stackBadge(pullRequest()), null);
 });
 
-test("a stacked branch reports its layer", () => {
+test("an open pull request reports its place in the stack, and names the stack", () => {
   const position = present(
-    stackBadges({
-      position: 2,
-      branches: ["lower", "middle", "upper"],
-      needsRebase: false,
-    })[0],
+    stackBadge(pullRequest({ stack: { number: 57, position: 2, size: 3 } })),
     "the stack position badge"
   );
   assert.equal(position.variant, "stackpos");
   assert.equal(position.label, "2/3");
-  assert.match(position.description, /Layer 2 of 3/);
+  assert.equal(
+    position.description,
+    "Pull request 2 of 3 in stack #57 on GitHub."
+  );
 });
 
-test("a lagging layer adds a needs-rebase badge after its position", () => {
-  const badges = stackBadges({
-    position: 2,
-    branches: ["lower", "middle", "upper"],
-    needsRebase: true,
-  });
-  assert.deepEqual(
-    badges.map(badge => badge.variant),
-    ["stackpos", "needsrebase"]
+test("a merged pull request's old place in a stack is not drawn", () => {
+  // GitHub keeps the entry, and the branch is no longer part of what the reader is stacking.
+  assert.equal(
+    stackBadge(
+      pullRequest({
+        state: "MERGED",
+        stack: { number: 57, position: 1, size: 3 },
+      })
+    ),
+    null
   );
 });

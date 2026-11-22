@@ -6,7 +6,6 @@
  * apart from the reader so importing the shape does not pull in the reading logic,
  * and so the contract is visible in one screen.
  */
-import { StackMembership } from "#github/ghStack";
 
 /**
  * How a local branch compares to the remote branch it tracks. Every field comes from the ref
@@ -71,8 +70,6 @@ export type ConflictState = {
 
 export type RawData = {
   repoRoot: string;
-  /** `gh stack` placement per branch name; empty when the extension is unused. */
-  stackMembership: Map<string, StackMembership>;
   repoName: string;
   userEmail: string;
   /**

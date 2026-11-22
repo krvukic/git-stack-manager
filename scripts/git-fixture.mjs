@@ -9,9 +9,6 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-/** The schema of `.git/gh-stack` that `gh stack` v0.1.0 writes. */
-const GH_STACK_SCHEMA_VERSION = 1;
-
 /**
  * @typedef {object} CommitIdentity
  * @property {string} GIT_AUTHOR_NAME
@@ -136,50 +133,6 @@ export function commitFile(repo, name, content, message, identity = ME) {
  */
 export function amendFile(repo, name, content, message, identity = ME) {
   writeAndCommit(repo, name, content, message, identity, ["--amend"]);
-}
-
-/**
- * Write the `.git/gh-stack` state file describing `stacks`, where each stack is
- * `{ trunk, branches }` and every branch names the layer it sits on.
- *
- * This helper writes the file rather than calling `gh stack init`, because a fixture
- * every machine must build cannot depend on a preview `gh` extension being
- * installed. Verified byte-identical to what `gh stack init` v0.1.0 writes
- * for the demo's own topology, apart from the `repository` field.
- *
- * A layer still sitting on the tip below it therefore records that tip, while a
- * bottom layer whose trunk has since moved on records the older fork point — which
- * is the drift `indexStackMembership` reports as "needs rebase".
- *
- * @param {string} repo
- * @param {{ trunk: string, branches: string[] }[]} stacks
- */
-export function writeGhStackState(repo, stacks) {
-  const state = {
-    schemaVersion: GH_STACK_SCHEMA_VERSION,
-    // `gh stack init` leaves this empty for a non-GitHub remote, which a local
-    // bare origin is. Nothing reads it.
-    repository: "",
-    stacks: stacks.map(({ trunk, branches }) => ({
-      trunk: { branch: trunk, head: run(repo, "git", ["rev-parse", trunk]) },
-      branches: branches.map((branch, index) => ({
-        branch,
-        // The fork point, which is what `gh stack init` records: for an intact
-        // layer it equals the tip of the layer below, and for a bottom layer
-        // whose trunk has moved on it stays at the older commit — the drift the
-        // "needs rebase" badge reports.
-        base: run(repo, "git", [
-          "merge-base",
-          index === 0 ? trunk : branches[index - 1],
-          branch,
-        ]),
-      })),
-    })),
-  };
-  writeFileSync(
-    join(repo, ".git", "gh-stack"),
-    `${JSON.stringify(state, null, 2)}\n`
-  );
 }
 
 /**

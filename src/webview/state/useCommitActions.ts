@@ -14,7 +14,6 @@ import { useCallback, useState } from "react";
 import type { SplitHunk, SplitState } from "../components/SplitPanel";
 import { adoptReport, type AdoptReportInput } from "../model/adoptReport.mjs";
 import { gotoTarget, submitTarget } from "../model/commits.mjs";
-import { staleStackNote } from "../model/rebaseReport.mjs";
 import { rpc } from "../rpc";
 import { useBusy } from "./useBusy";
 import type { Smartlog } from "./useSmartlog";
@@ -130,7 +129,6 @@ export function useCommitActions(
         model: RenderModel;
         conflict: unknown;
         moved: string[];
-        staleStacks?: string[];
       }>(
         "rebase",
         {
@@ -151,40 +149,17 @@ export function useCommitActions(
               );
               return;
             }
-            const note = staleStackNote(data.staleStacks);
-            const done = data.moved.length
-              ? `Rebased ${data.moved.join(", ")} ✓`
-              : "Rebased ✓";
-            showToast(`${done}${note}`, Boolean(note));
+            showToast(
+              data.moved.length
+                ? `Rebased ${data.moved.join(", ")} ✓`
+                : "Rebased ✓",
+              false
+            );
           },
         }
       );
     },
     [runAction, showToast]
-  );
-
-  /**
-   * `gh stack` commands push and talk to GitHub, so they take seconds; the toast reports
-   * progress and pull request status is re-read afterwards because the stack's state on
-   * GitHub has changed.
-   */
-  const runGhStack = useCallback(
-    async (payload: Record<string, unknown>, label: string) => {
-      showToast(`${label}…`, false);
-      const response = await runAction<{ model: RenderModel }>(
-        "ghStack",
-        payload,
-        {
-          modelFrom: data => data.model,
-          reloadOnError: true,
-          onSuccess: () => showToast(`${label} ✓`, false),
-        }
-      );
-      if (response.ok) {
-        void loadPullRequests(true);
-      }
-    },
-    [loadPullRequests, runAction, showToast]
   );
 
   /**
@@ -194,9 +169,9 @@ export function useCommitActions(
    */
   const adoptRemote = useCallback(
     async (branch: string) => {
-      showToast("Moving stack onto the remote…", false);
+      showToast("Taking GitHub's version of the stack…", false);
       const response = await runAction<
-        AdoptReportInput & { model: RenderModel; staleStacks?: string[] }
+        AdoptReportInput & { model: RenderModel }
       >(
         "adoptRemoteStack",
         { branch },
@@ -205,8 +180,7 @@ export function useCommitActions(
           reloadOnError: true,
           onSuccess: data => {
             const report = adoptReport(data);
-            const note = staleStackNote(data.staleStacks);
-            showToast(`${report.text}${note}`, report.warn || Boolean(note));
+            showToast(report.text, report.warn);
           },
         }
       );
@@ -464,7 +438,6 @@ export function useCommitActions(
     copySha,
     copyBranchName,
     runRebase,
-    runGhStack,
     adoptRemote,
     deleteBranch,
     submitStack,

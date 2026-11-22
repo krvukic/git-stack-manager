@@ -131,6 +131,7 @@ function statusFromSubmit() {
     headSha: "",
     reviewDecision: null,
     checks: null,
+    stack: null,
   };
 }
 

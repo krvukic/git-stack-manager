@@ -4,13 +4,12 @@
  *
  * Actions live in a table rather than a switch so each one stays small enough to
  * read on its own, and so adding one cannot accidentally fall through into a
- * neighbour. Host-specific actions ("openFile", "openUrl", "openTerminal") are
- * handled by each host before it reaches here.
+ * neighbour. Host-specific actions ("openFile", "openUrl") are handled by each host
+ * before it reaches here.
  */
 import { Repository } from "#app/repository";
 import { errorMessage, shortSha } from "#core/values";
 import { RawData } from "#git/snapshot";
-import { ghStackArguments, GhStackCommand } from "#github/ghStack";
 import { BranchTip } from "#github/pullRequests";
 import { RebaseDestination } from "#history/rebase";
 import {
@@ -414,7 +413,7 @@ const ACTIONS: Record<string, ActionHandler> = {
   async adoptRemoteStack(controller, payload) {
     const branch = requireString(payload, "branch");
     const { value, log, model } = await controller.edit(
-      "Adopt stack from remote",
+      "Take GitHub's version",
       () => controller.repository.adoptRemoteStack(branch)
     );
     return { ok: true, data: { ...value, model }, log };
@@ -528,24 +527,6 @@ const ACTIONS: Record<string, ActionHandler> = {
       log,
     };
   },
-
-  /**
-   * `gh stack` talks to GitHub and rewrites branches, so these are slow by
-   * nature; the UI reports progress rather than blocking a paint. They are not
-   * undoable either — `gh stack` owns its own abort, and undoing a push would be
-   * a lie.
-   */
-  async ghStack(controller, payload) {
-    const command = parseGhStackCommand(payload);
-    const { value, log } = await controller.logged(ghStackTitle(command), () =>
-      controller.repository.runGhStack(command)
-    );
-    return {
-      ok: true,
-      data: { output: value, model: await controller.model() },
-      log,
-    };
-  },
 };
 
 /**
@@ -569,36 +550,6 @@ function discardTitle(paths: string[]): string {
   return paths.length === 1
     ? `Discard ${paths[0]}`
     : `Discard ${paths.length} changes`;
-}
-
-function parseGhStackCommand(payload: ActionPayload): GhStackCommand {
-  const command = payload.command;
-  switch (command) {
-    case "submit":
-      return { kind: "submit" };
-    case "sync":
-      return { kind: "sync", prune: readFlag(payload, "prune") };
-    case "push":
-      return { kind: "push" };
-    case "rebase": {
-      const scope = payload.scope;
-      return {
-        kind: "rebase",
-        scope: scope === "downstack" || scope === "upstack" ? scope : "all",
-        branch: optionalString(payload, "branch"),
-      };
-    }
-    default:
-      throw new Error(`Unknown gh stack command: ${String(command)}`);
-  }
-}
-
-/**
- * The command log line for a `gh stack` run, built from the arguments actually passed. The line
- * therefore cannot drift from what ran, and it names the branch a rebase was given.
- */
-function ghStackTitle(command: GhStackCommand): string {
-  return `gh ${ghStackArguments(command).join(" ")}`;
 }
 
 /**

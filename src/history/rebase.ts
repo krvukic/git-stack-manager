@@ -68,13 +68,6 @@ export type RebasePlan = {
 export type RebaseOutcome = {
   moved: string[];
   conflict: boolean;
-  /**
-   * Bottom branches of the `gh stack` stacks whose recorded bases still name replaced commits
-   * after the move, so the caller can print the command that repairs them. Absent whenever the
-   * rebase carried no stacked branch, which is the common case. `Repository` sets it, because
-   * re-recording runs `gh` and nothing here does.
-   */
-  staleStacks?: string[];
 };
 
 // Markers must live under refs/heads: `rebase --update-refs` only rewrites refs

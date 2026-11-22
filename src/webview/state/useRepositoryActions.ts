@@ -14,7 +14,6 @@
  */
 import type { RenderModel } from "#ui/renderModel";
 import { useCallback } from "react";
-import { staleStackNote } from "../model/rebaseReport.mjs";
 import { rpc } from "../rpc";
 import { useBusy } from "./useBusy";
 import type { Smartlog } from "./useSmartlog";
@@ -136,7 +135,6 @@ export function useRepositoryActions(smartlog: Smartlog) {
         runAction<{
           model: RenderModel;
           conflict: unknown;
-          staleStacks?: string[];
         }>(
           "rebaseContinue",
           {},
@@ -148,8 +146,7 @@ export function useRepositoryActions(smartlog: Smartlog) {
                 showToast("Another conflict — resolve it below.", true);
                 return;
               }
-              const note = staleStackNote(data.staleStacks);
-              showToast(`Rebase finished ✓${note}`, Boolean(note));
+              showToast("Rebase finished ✓", false);
             },
           }
         )

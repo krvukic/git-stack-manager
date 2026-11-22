@@ -241,14 +241,14 @@ function wireRefresh(
       refresh.signal();
     }
   };
-  // git's own writes: HEAD moves, refs update, the index changes, and `gh stack` records a
-  // stack. Narrow by design — a recursive watcher over the working tree
+  // git's own writes: HEAD moves, refs update, and the index changes. Narrow by design — a
+  // recursive watcher over the working tree
   // would fire once per file a build writes, and the events below already cover every
   // edit VS Code makes.
   const { gitDirectory, commonDirectory } = gitDirectoriesOf(cwd);
   const watchers = [
     new vscode.RelativePattern(gitDirectory, "{HEAD,index}"),
-    new vscode.RelativePattern(commonDirectory, "{refs/**,gh-stack}"),
+    new vscode.RelativePattern(commonDirectory, "refs/**"),
   ].map(pattern => vscode.workspace.createFileSystemWatcher(pattern));
   return vscode.Disposable.from(
     ...watchers.flatMap(watcher => [
@@ -464,13 +464,6 @@ async function runHostAction(
   }
   if (action === "openCommitChanges") {
     return openCommitChanges(repository, requireString(payload, "sha"));
-  }
-  if (action === "openTerminal") {
-    // An interactive TUI cannot run inside the webview, so give it a terminal.
-    const terminal = vscode.window.createTerminal("Git Stack");
-    terminal.show();
-    terminal.sendText(requireString(payload, "command"));
-    return { ok: true };
   }
   if (action === "openUrl") {
     await vscode.env.openExternal(

@@ -174,6 +174,37 @@ export function stackBranchesUpTo(snapshot: RawData, branch: string): string[] {
 }
 
 /**
+ * Every branch of the stack that holds `branch`, bottom first: the branches below it, then
+ * the ones above it for as long as the stack does not fork.
+ *
+ * Read off the graph, because nothing else records a stack: a branch belongs with the one its
+ * commits are on. A stack that forks above `branch` ends at the fork, since the two lines
+ * above it are two stacks that share a bottom, and no rule says which one a click meant.
+ */
+export function stackChain(snapshot: RawData, branch: string): string[] {
+  const layers = stackBranchesUpTo(snapshot, branch);
+  const childrenOf = new Map<string, RawCommit[]>();
+  for (const commit of snapshot.commits) {
+    const parent = commit.parents[0];
+    if (parent !== undefined) {
+      childrenOf.set(parent, [...(childrenOf.get(parent) ?? []), commit]);
+    }
+  }
+  let current = snapshot.commits.find(commit =>
+    commit.branches.includes(branch)
+  );
+  while (current) {
+    const children: RawCommit[] = childrenOf.get(current.sha) ?? [];
+    current = children.length === 1 ? children[0] : undefined;
+    const above = current?.branches.find(name => !layers.includes(name));
+    if (above) {
+      layers.push(above);
+    }
+  }
+  return layers;
+}
+
+/**
  * Refuse to open a pull request onto a base GitHub does not have yet, naming the fix.
  * GitHub's own answer is "Base ref must be a branch", which reads like a bug.
  */
