@@ -179,9 +179,16 @@ export type PullRequestBadge = {
   url: string;
 };
 
-/** The clickable pull request badge for a branch, or null when it has none. */
+/**
+ * The clickable pull request badge for a branch, or null when it has none.
+ *
+ * `mergedKeptReason` adds a line to a merged badge's description. A merged badge beside a
+ * branch that stays otherwise reads as a setting that did not work, and the tooltip is where a
+ * reader looks for why.
+ */
 export function pullRequestBadge(
-  pullRequest: PullRequestStatus | null
+  pullRequest: PullRequestStatus | null,
+  mergedKeptReason: string | null = null
 ): PullRequestBadge | null {
   if (!pullRequest) {
     return null;
@@ -214,7 +221,14 @@ export function pullRequestBadge(
     reviewGlyph: pullRequest.reviewDecision
       ? (REVIEW_GLYPH[pullRequest.reviewDecision] ?? null)
       : null,
-    description: `${pullRequest.title}\n${parts.join(" · ")}\nClick to open on GitHub.`,
+    description: [
+      pullRequest.title,
+      parts.join(" · "),
+      ...(mergedKeptReason
+        ? [`The branch stays because ${mergedKeptReason}.`]
+        : []),
+      "Click to open on GitHub.",
+    ].join("\n"),
     url: pullRequest.url,
   };
 }

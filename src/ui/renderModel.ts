@@ -44,6 +44,12 @@ export type UIBranch = {
    */
   stackLink: StackLinkPreview | null;
   /**
+   * Why this branch is still here although its pull request merged, or null when its pull
+   * request has not merged or the branch can be removed. `keptReason` in `pruneMerged.ts` owns
+   * the wording; the merged badge's tooltip shows it.
+   */
+  mergedKeptReason: string | null;
+  /**
    * The reader's stored choice for the pull request Submit opens for this branch: a draft, or
    * ready for review. Null while no choice is stored, where the Config setting answers.
    */
@@ -213,6 +219,12 @@ export function buildModel(
   pullRequestRefresh: PullRequestRefreshState | null = null
 ): RenderModel {
   const rows: Row[] = [];
+  const merged = mergedBranches(rawData, pullRequests);
+  const keptReasons = new Map(
+    merged.flatMap(branch =>
+      branch.keptReason ? [[branch.name, branch.keptReason] as const] : []
+    )
+  );
   const model: RenderModel = {
     repoName: rawData.repoName,
     trunkRef: rawData.trunkRef,
@@ -225,7 +237,7 @@ export function buildModel(
     pullRequestNotice,
     pullRequestRefresh,
     undoLabel,
-    mergedBranches: mergedBranches(rawData, pullRequests),
+    mergedBranches: merged,
     rows,
   };
 
@@ -275,6 +287,7 @@ export function buildModel(
             name !== rawData.trunkBranch,
           worktree: rawData.heldBranches.get(name) ?? null,
           stackLink: previewStackLink(rawData, pullRequests, name),
+          mergedKeptReason: keptReasons.get(name) ?? null,
           draft: rawData.branchDrafts.get(name) ?? null,
           deletionRefusal: deletionRefusal(rawData, name),
         };

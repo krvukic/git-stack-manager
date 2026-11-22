@@ -125,7 +125,7 @@ function PullRequestBadge({
   branch: UIBranch;
   onOpenUrl: (url: string) => void;
 }) {
-  const badge = pullRequestBadge(branch.pullRequest);
+  const badge = pullRequestBadge(branch.pullRequest, branch.mergedKeptReason);
   if (!badge) {
     return null;
   }

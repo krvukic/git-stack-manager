@@ -3,6 +3,14 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-11-22
+
+### Fixed
+
+- A merged badge's tooltip gives the reason its branch is still in the tree: amended past the
+  commit that merged, checked out here, held by another worktree, or a stopped rebase. Nothing
+  gave that reason once **Clear merged** left the top bar.
+
 ## [1.5.0] - 2026-11-22
 
 ### Added

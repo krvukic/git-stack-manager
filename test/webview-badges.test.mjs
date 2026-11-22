@@ -313,6 +313,30 @@ test("the description carries the title, then the state, and how to open it", ()
   assert.match(badge.description, /Click to open on GitHub\.$/);
 });
 
+test("a merged badge says why its branch stays, between the status and the link", () => {
+  const merged = pullRequest({ state: "MERGED", title: "feat: B" });
+  assert.equal(
+    present(
+      pullRequestBadge(
+        merged,
+        "you have it checked out — check out trunk first"
+      ),
+      "a pull request badge"
+    ).description,
+    [
+      "feat: B",
+      "merged",
+      "The branch stays because you have it checked out — check out trunk first.",
+      "Click to open on GitHub.",
+    ].join("\n")
+  );
+  // A branch that can go, or has not merged, carries no such line.
+  assert.equal(
+    badgeFor(merged).description,
+    "feat: B\nmerged\nClick to open on GitHub."
+  );
+});
+
 test("a pull request in no stack, and a branch with no pull request, get no stack badge", () => {
   assert.equal(stackBadge(null), null);
   assert.equal(stackBadge(pullRequest()), null);

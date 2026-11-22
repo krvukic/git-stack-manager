@@ -56,6 +56,7 @@ function branch(
     tracksTrunk,
     worktree: null,
     stackLink: null,
+    mergedKeptReason: null,
     draft: null,
     deletionRefusal: null,
   };

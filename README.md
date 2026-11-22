@@ -75,7 +75,8 @@ Run `just init-repo` once, then pick a host:
   removal runs on the reads that bring pull request status in: when the view opens, and when
   **Refresh** runs — never on a timer of its own while the panel sits open.
   With the setting off, **Delete branch** in a commit's right-click menu removes one branch at a
-  time.
+  time. A merged branch that stays gives the reason on its merged badge's tooltip: amended past
+  the commit that merged, checked out here, held by another worktree, or a stopped rebase.
 - Double-click the bottom-right corner of the sidebar's **description** box to fit it to the
   message, and double-click again to restore its starting height. Dragging that corner still resizes
   by hand, and double-clicking anywhere else still selects a word. The box keeps whatever height you

@@ -140,6 +140,11 @@ test("each pull request state gets its own badge", async ({ smartlog }) => {
   // so in words.
   expect(badgeFor(badges, "pad-utils").title).toContain("open (draft)");
   expect(badgeFor(badges, "fix-slugify-unicode").title).toContain("merged");
+  // The demo's fix-slugify-unicode diverged from what merged, so the branch stays, and the
+  // badge beside it is the one place that gives the reason.
+  expect(badgeFor(badges, "fix-slugify-unicode").title).toMatch(
+    /The branch stays because it holds commits its pull request never had/
+  );
   expect(badgeFor(badges, "fix-slugify-unicode").title).toContain(
     "fix(slugify): strip diacritics so accented input slugifies"
   );
