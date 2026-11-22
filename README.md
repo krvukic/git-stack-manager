@@ -94,7 +94,8 @@ Run `just init-repo` once, then pick a host:
   collects work that already happened elsewhere, and a merge or a rebase is a history decision a
   Pull button should not make on its own. Pull refuses, changing nothing, on a detached HEAD, a
   branch tracking no remote, a dirty working copy, or a branch that has diverged. For a diverged
-  branch it reports both counts and points at *Rebase onto trunk*, which carries the whole stack.
+  branch it reports both counts and points at the right-click menu's rebase onto trunk, which
+  carries the whole stack.
 
 ## Refreshing the state
 

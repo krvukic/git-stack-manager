@@ -36,6 +36,7 @@ import { useStoredHeight } from "../state/useStoredHeight";
 import { Button, ButtonRow } from "./Button";
 import { FieldLabel, TextArea, TextInput } from "./Field";
 import { CommitFileRow } from "./FileRow";
+import { Hairline } from "./Hairline";
 import { BranchPills } from "./Pills";
 
 /** How near the bottom-right corner a double-click counts as hitting the grip. */
@@ -122,7 +123,6 @@ export type CommitPanelProps = {
   onAmendMessage: (message: string) => void;
   onAmendWorkingChanges: () => void;
   onGoto: () => void;
-  onRebase: () => void;
   onSubmit: () => void;
   onSubmitStack: () => void;
   onViewChanges: () => void;
@@ -143,7 +143,6 @@ export function CommitPanel({
   onAmendMessage,
   onAmendWorkingChanges,
   onGoto,
-  onRebase,
   onSubmit,
   onSubmitStack,
   onViewChanges,
@@ -198,7 +197,8 @@ export function CommitPanel({
           ))}
         </div>
       ) : null}
-      <FieldLabel heading className="mt-2 mb-1">
+      <Hairline className="my-3" />
+      <FieldLabel heading className="mb-1">
         Message
       </FieldLabel>
       <TextInput
@@ -229,10 +229,8 @@ export function CommitPanel({
         }}
       />
       {/*
-        Each action sits directly above the note explaining it, so the two read as one
-        thing. Rebase used to share a row with the amend buttons while its "right-click for
-        more destinations" note sat two blocks below, next to Submit's note — which made
-        both notes look like they belonged to whatever was nearest.
+        Every button in this panel takes the primary colour. Here the colour makes an action
+        easy to find rather than marking one of them as the panel's purpose.
       */}
       <ButtonRow className="mt-2">
         <Button
@@ -249,6 +247,7 @@ export function CommitPanel({
         {commit.isHead && model.uncommitted.length ? (
           <Button
             id="btn-amend-wc"
+            variant="primary"
             disabled={conflicted}
             title="git add -A && git commit --amend --no-edit"
             onClick={onAmendWorkingChanges}
@@ -259,6 +258,7 @@ export function CommitPanel({
         {!commit.isHead ? (
           <Button
             id="btn-goto"
+            variant="primary"
             disabled={Boolean(goto.heldBy)}
             title={
               goto.heldBy
@@ -273,22 +273,8 @@ export function CommitPanel({
           </Button>
         ) : null}
       </ButtonRow>
-      <div className="mt-3.5 [&>div:last-child]:mt-1">
-        <ButtonRow>
-          <Button
-            id="btn-rebase"
-            disabled={conflicted}
-            title="Replay this commit and everything above it on the trunk tip"
-            onClick={onRebase}
-          >
-            Rebase onto trunk
-          </Button>
-        </ButtonRow>
-        <div className="mt-2 font-[monospace] text-meta text-muted">
-          Right-click a commit for more rebase destinations.
-        </div>
-      </div>
-      <div className="mt-3.5 [&>div:last-child]:mt-1">
+      <Hairline className="my-3" />
+      <div className="[&>div:last-child]:mt-1">
         {target ? (
           <>
             <ButtonRow>
@@ -313,6 +299,7 @@ export function CommitPanel({
               {layers.length > 1 ? (
                 <Button
                   id="btn-submit-stack"
+                  variant="primary"
                   disabled={conflicted || submitting}
                   title={`Submit ${layers.join(", ")} in that order, so every pull request has its base on GitHub.`}
                   onClick={onSubmitStack}
@@ -321,18 +308,19 @@ export function CommitPanel({
                 </Button>
               ) : null}
             </ButtonRow>
-            <div className="mb-3 font-[monospace] text-meta text-muted">
+            <div className="font-[monospace] text-meta text-muted">
               Submitting always carries the message across — a force push alone
               leaves the pull request text stale.
             </div>
           </>
         ) : (
-          <div className="mt-2 font-[monospace] text-meta text-muted">
+          <div className="font-[monospace] text-meta text-muted">
             Give this commit a branch to submit it as a pull request.
           </div>
         )}
       </div>
-      <FieldLabel heading className="mt-2 mb-1">
+      <Hairline className="my-3" />
+      <FieldLabel heading className="mb-1">
         Files changed
       </FieldLabel>
       {/*
@@ -342,6 +330,7 @@ export function CommitPanel({
       <ButtonRow className="mt-1.5 mb-0.5">
         <Button
           size="small"
+          variant="primary"
           id="btn-view-changes"
           title="Show every change in this commit as one scrollable diff, editable when the commit is checked out."
           onClick={onViewChanges}
@@ -355,6 +344,7 @@ export function CommitPanel({
         */}
         <Button
           size="small"
+          variant="primary"
           id="btn-open-all-files"
           disabled={!openable}
           title={openAllDescription(files)}

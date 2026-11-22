@@ -3,6 +3,21 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0] - 2026-11-22
+
+### Changed
+
+- Every button in the commit panel is blue, as **Amend message** already was, so each action is
+  easy to find.
+- Hairlines divide the commit panel into its sections: the commit's identity, the message, the
+  submit buttons, and the files. Another one separates the working copy from the tree below it.
+  They are the line the right-click menu draws between its sections.
+
+### Removed
+
+- **Rebase onto trunk** in the commit panel, and the note under it. A commit's right-click menu
+  offers every rebase, that one included.
+
 ## [0.21.1] - 2026-11-22
 
 ### Fixed

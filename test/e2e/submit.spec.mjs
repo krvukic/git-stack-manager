@@ -184,7 +184,6 @@ test("a conflict that starts with the sidebar open disables submit too", async (
   await smartlog.waitForSelector("#conflict.open");
 
   await expect(smartlog.locator("#btn-submit")).toBeDisabled();
-  await expect(smartlog.locator("#btn-rebase")).toBeDisabled();
   // The push is what a stale guard actually costs, so assert that nothing reached
   // `gh` rather than only that the button looks dimmed.
   expect(fakeGitHub.calls().filter(call => call.args[1] === "create")).toEqual(

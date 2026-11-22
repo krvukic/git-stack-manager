@@ -416,7 +416,7 @@ export class Repository {
       .map(value => parseInt(value, 10) || 0);
     if (ahead && behind) {
       throw new GitError(
-        `"${snapshot.headBranch}" and ${upstream} have both moved (${ahead} local, ${behind} remote), so it cannot fast-forward. Rebase onto trunk instead — that carries the whole stack.`,
+        `"${snapshot.headBranch}" and ${upstream} have both moved (${ahead} local, ${behind} remote), so it cannot fast-forward. Rebase it onto trunk from its commit's right-click menu instead — that carries the whole stack.`,
         "pull"
       );
     }

@@ -30,6 +30,23 @@ test("selecting a commit opens the sidebar with its message and files", async ({
   await snapshot("sidebar-selected-commit");
 });
 
+test("the commit panel divides its sections, and offers no rebase of its own", async ({
+  smartlog,
+}) => {
+  await selectCommit(smartlog, "feat(pad): add padStart");
+  // One line above each of the message, the submit buttons, and the files.
+  await expect(smartlog.locator("#sidebar hr")).toHaveCount(3);
+  // Every rebase is in the right-click menu, where the destination reads next to the commit.
+  await expect(smartlog.locator("#sidebar button:not(.iconbtn)")).toHaveText([
+    "Amend message",
+    "Goto",
+    "Submit → #205",
+    "Submit stack (2)",
+    /^View changes in /,
+    "Open all files",
+  ]);
+});
+
 test("a dirty working copy shows the uncommitted chip and its files", async ({
   demoRepository,
   smartlog,

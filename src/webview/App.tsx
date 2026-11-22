@@ -25,6 +25,7 @@ import { ConflictBanner } from "./components/ConflictBanner";
 import { ContextMenu, type MenuState } from "./components/ContextMenu";
 import { type DrawerName } from "./components/Drawer";
 import { EmptyState } from "./components/Field";
+import { Hairline } from "./components/Hairline";
 import { LegendDrawer } from "./components/LegendDrawer";
 import { ShortcutsDrawer } from "./components/ShortcutsDrawer";
 import { SplitPanel } from "./components/SplitPanel";
@@ -332,6 +333,7 @@ export function App({ settings }: { settings: HostSettings }) {
                 onCancelAbsorb={workingCopy.closeAbsorbPlan}
               />
             ) : null}
+            {model.uncommitted.length ? <Hairline className="mb-2" /> : null}
             <Tree
               model={model}
               rowHeight={rowHeight}
@@ -411,9 +413,6 @@ export function App({ settings }: { settings: HostSettings }) {
             }
             onAmendWorkingChanges={() => void workingCopy.amendWorkingChanges()}
             onGoto={() => void commitActions.gotoCommit(selectedCommit)}
-            onRebase={() =>
-              void commitActions.runRebase(selectedCommit, "trunk")
-            }
             onSubmit={() => void commitActions.submitCommit(selectedCommit)}
             onSubmitStack={() => void commitActions.submitStack(selectedCommit)}
             onViewChanges={() =>

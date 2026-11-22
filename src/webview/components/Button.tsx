@@ -7,7 +7,8 @@
  * variant is chosen rather than undone.
  *
  * `secondary` is the default because most buttons here are: the primary colour marks the one
- * action a panel is *for*, and a panel with two primaries has none.
+ * action a panel is *for*, and a panel with two primaries has none. The commit panel is the
+ * exception: every button there is primary, so that each action is easy to find.
  */
 import { classes } from "../classes";
 
@@ -149,9 +150,8 @@ export function IconButton({
 /**
  * A row of buttons.
  *
- * Wraps, because the widest set — *Amend message / Amend working changes / Rebase onto trunk*,
- * shown for a HEAD commit with a dirty working copy — does not fit the panel's minimum width,
- * and a second line is a better answer there than a horizontal scrollbar.
+ * Wraps, because a row can have more buttons than fit a narrow panel, and a second line is a
+ * better answer there than a horizontal scrollbar.
  *
  * No margin of its own. It had `mt-2`, and three of the eight callers then fought it — two
  * cancelling it through a `[&>.btnrow]:mt-0!` descendant selector on a wrapper, one overriding

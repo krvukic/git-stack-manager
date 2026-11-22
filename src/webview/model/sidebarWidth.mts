@@ -2,12 +2,10 @@
  * How wide the commit panel may be.
  *
  * Both bounds come from measuring the panel's own contents at 1px steps rather than from
- * taste. The floor is where the action buttons stop fitting on one line: "Amend message /
- * Amend working changes / Rebase onto trunk" — the widest set, shown for a HEAD commit
- * with a dirty working copy — needs 447px, and the common "Amend message / Goto / Rebase
- * onto trunk" needs 335px. 340 keeps the usual case whole and lets the dirty-HEAD case
- * wrap to a second line, which is a cosmetic loss; 447 as a floor would mean the panel
- * could never be narrow. The ceiling is where the tree starts losing its subjects. A
+ * taste. The floor keeps every row of action buttons on one line: "Amend message / Amend
+ * working changes" — the widest set, shown for a HEAD commit with a dirty working copy —
+ * needs 306px, so 340 fits it whole with room for a longer label. The ceiling is where the
+ * tree starts losing its subjects. A
  * subject only ellipses once the tree drops under about 760px, so the 1400px reference
  * viewport tolerates 640 before anything is cut; past 780 the worst row shows barely half
  * its subject. 640 also buys the description editor 81 monospace columns, comfortably past

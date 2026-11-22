@@ -11,6 +11,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { classes } from "../classes";
 import { FieldLabel } from "./Field";
+import { Hairline } from "./Hairline";
 
 export type MenuItem =
   | { separator: true }
@@ -96,7 +97,7 @@ export function ContextMenu({
     >
       {menu?.items.map((item, index) => {
         if ("separator" in item) {
-          return <div className="mx-0.5 my-1 h-px bg-edge" key={index} />;
+          return <Hairline className="mx-0.5 my-1" key={index} />;
         }
         if ("head" in item) {
           // The horizontal padding is the items' own, so the head's first letter sits on the
