@@ -55,6 +55,7 @@ function branch(
     pullRequest,
     tracksTrunk,
     worktree: null,
+    stackLink: null,
     draft: null,
     deletionRefusal: null,
   };

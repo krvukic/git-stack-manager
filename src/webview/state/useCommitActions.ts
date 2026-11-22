@@ -14,6 +14,11 @@ import { useCallback, useState } from "react";
 import type { SplitHunk, SplitState } from "../components/SplitPanel";
 import { adoptReport, type AdoptReportInput } from "../model/adoptReport.mjs";
 import { gotoTarget, submitTarget } from "../model/commits.mjs";
+import {
+  linkReport,
+  submittedLinkNote,
+  type StackLinkOutcome,
+} from "../model/stackLink.mjs";
 import { rpc } from "../rpc";
 import { useBusy } from "./useBusy";
 import type { Smartlog } from "./useSmartlog";
@@ -156,6 +161,42 @@ export function useCommitActions(
               false
             );
           },
+        }
+      );
+    },
+    [runAction, showToast]
+  );
+
+  /**
+   * Link the stack's pull requests on GitHub, in the tree's order. The host re-reads pull
+   * request status before it answers, so the model that comes back draws each one's new place.
+   */
+  const linkStack = useCallback(
+    async (branch: string) => {
+      showToast("Linking the stack on GitHub…", false);
+      await runAction<{ link: StackLinkOutcome; model: RenderModel }>(
+        "linkStack",
+        { branch },
+        {
+          modelFrom: data => data.model,
+          onSuccess: data => showToast(linkReport(data.link), false),
+        }
+      );
+    },
+    [runAction, showToast]
+  );
+
+  /** Dissolve the stack on GitHub that the branch's pull request is in. */
+  const unstack = useCallback(
+    async (branch: string) => {
+      showToast("Unstacking on GitHub…", false);
+      await runAction<{ stack: number; model: RenderModel }>(
+        "unstack",
+        { branch },
+        {
+          modelFrom: data => data.model,
+          onSuccess: data =>
+            showToast(`Unstacked #${data.stack} on GitHub ✓`, false),
         }
       );
     },
@@ -332,6 +373,7 @@ export function useCommitActions(
             created: boolean;
             staleBase: { branch: string; reason: string } | null;
           }>;
+          link: StackLinkOutcome | { error: string } | null;
           model: RenderModel;
         }>(
           "submitStack",
@@ -339,9 +381,10 @@ export function useCommitActions(
           {
             modelFrom: data => data.model,
             reloadOnError: true,
-            onSuccess: ({ outcomes }) => {
+            onSuccess: ({ outcomes, link }) => {
               const opened = outcomes.filter(outcome => outcome.created).length;
-              const done = `Submitted ${outcomes.length} branches — ${opened} opened, ${outcomes.length - opened} updated`;
+              const linked = submittedLinkNote(link);
+              const done = `Submitted ${outcomes.length} branches — ${opened} opened, ${outcomes.length - opened} updated${linked.text}`;
               // Bottom-up submission pushes every base first, so only a base rewritten out
               // from under a layer is left to report.
               const stale = outcomes.find(
@@ -353,7 +396,7 @@ export function useCommitActions(
                   true
                 );
               } else {
-                showToast(`${done} ✓`, false);
+                showToast(`${done}${linked.warn ? "" : " ✓"}`, linked.warn);
               }
             },
           }
@@ -438,6 +481,8 @@ export function useCommitActions(
     copySha,
     copyBranchName,
     runRebase,
+    linkStack,
+    unstack,
     adoptRemote,
     deleteBranch,
     submitStack,

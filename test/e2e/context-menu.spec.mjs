@@ -54,6 +54,29 @@ test("the gh stack section appears only on a commit whose branch has an open pul
   await expect(menu).not.toContainText("gh stack");
 });
 
+test("Link stack says why it has nothing to do, and Unstack names the stack it dissolves", async ({
+  smartlog,
+  fakeGitHub,
+}) => {
+  const menu = smartlog.locator("#menu");
+  // The demo's GitHub links case-utils, pad-utils, and trim-utils as stack #207 already.
+  await smartlog
+    .getByText("feat(pad): add padStart")
+    .click({ button: "right" });
+  await expect(menu.locator(".item", { hasText: "Link stack" })).toHaveText(
+    "Link stack — GitHub already links these pull requests, as stack #207."
+  );
+
+  await menu.getByText("Unstack #207", { exact: true }).click();
+  await expectToast(smartlog, "Unstacked #207 on GitHub");
+  expect(
+    fakeGitHub
+      .calls()
+      .map(call => call.args)
+      .filter(args => args[0] === "stack")
+  ).toEqual([["stack", "unstack", "207"]]);
+});
+
 /**
  * The two rebases that take the checked-out commit as one end.
  *

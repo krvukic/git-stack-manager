@@ -24,6 +24,8 @@ export type CommitMenuActions = {
   onGoto: (commit: UICommit) => void;
   onCopySha: (commit: UICommit) => void;
   onCopyBranchName: (branch: string) => void;
+  onLinkStack: (branch: string) => void;
+  onUnstack: (branch: string) => void;
   onAdoptRemote: (branch: string) => void;
   onDeleteBranch: (branch: string) => void;
   onSubmit: (commit: UICommit) => void;
@@ -232,7 +234,7 @@ export function commitMenuItems(
       items.push({
         label: `Submit stack — ${layers.length} branches up to ${submittable.name}`,
         description:
-          "Submit each branch from the bottom up, so every pull request has its base on GitHub",
+          "Submit each branch from the bottom up, so every pull request has its base on GitHub, then link the pull requests as a stack",
         run: () => actions.onSubmitStack(commit),
       });
     }
@@ -259,9 +261,28 @@ export function commitMenuItems(
     detail => detail.pullRequest?.state === "OPEN"
   );
   if (published) {
+    const link = published.stackLink;
+    const stack = published.pullRequest?.stack;
     items.push(
       { separator: true },
       { head: "gh stack" },
+      link?.refusal || !link
+        ? { label: `Link stack — ${link?.refusal ?? "no open pull request"}` }
+        : {
+            label: `Link stack — ${link.count} pull requests`,
+            description:
+              "gh stack link — make GitHub link this stack's pull requests in the order the tree draws them, then set each one's title and body from its commit message. Pushes no code",
+            run: () => actions.onLinkStack(published.name),
+          },
+      ...(stack
+        ? [
+            {
+              label: `Unstack #${stack.number}`,
+              description: `gh stack unstack ${stack.number} — dissolve this stack on GitHub. The pull requests stay open, each with the base it has`,
+              run: () => actions.onUnstack(published.name),
+            },
+          ]
+        : []),
       {
         // The opposite direction to the rebases above. Those replay local commits; this entry
         // takes the commits that the remote already has. Once GitHub restacks a stack, the

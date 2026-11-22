@@ -346,6 +346,8 @@ export function App({ settings }: { settings: HostSettings }) {
                     onCopySha: commit => void commitActions.copySha(commit),
                     onCopyBranchName: branch =>
                       void commitActions.copyBranchName(branch),
+                    onLinkStack: branch => void commitActions.linkStack(branch),
+                    onUnstack: branch => void commitActions.unstack(branch),
                     onAdoptRemote: branch =>
                       void commitActions.adoptRemote(branch),
                     onDeleteBranch: branch =>

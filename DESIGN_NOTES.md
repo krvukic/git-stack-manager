@@ -112,6 +112,16 @@ the snapshot. Which pull requests GitHub links comes from GitHub, through `stack
 request in the query that already reads pull request status. The extension keeps no record of its
 own and reads none of `gh stack`'s, so no file can disagree with either source after a rebase.
 
+**Linking** (`src/github/stackLink.ts`) passes pull request numbers to `gh stack link`, never
+branch names, because that command pushes a branch it is given by name and a link here pushes
+nothing. `planStackLink` chooses the calls from what the pull request query already returned, and
+its rules come from running the command against a real stack. `gh stack link` creates a stack,
+appends to one that the list starts with, and refuses a list that drops a linked pull request or
+reorders them. So the plan appends wherever GitHub's stack leads the list in order, makes no call
+where every pull request is already linked that way, and dissolves a stack first only when no
+append reaches the order. The model carries the same plan as a preview per branch, which is how
+the menu dims Link stack with the planner's own reason rather than a second copy of the rule.
+
 **Submit** (`src/github/submit.ts`) exists because pushing and describing a change are two separate
 things on GitHub. The push updates the branch, and GitHub sets the pull request's title and body
 once, at creation, from whatever the commit message said then. An amended message plus a force push

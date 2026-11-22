@@ -8,19 +8,31 @@ import {
   PREVIEW_BYTE_LIMIT,
   toDataUri,
 } from "#core/media";
+import { errorMessage } from "#core/values";
 import { writeBranchDraft } from "#git/branchDraft";
 import { CommitDiff, readCommitDiff, readWorkingCopyDiff } from "#git/diff";
 import { fullShas, LineCount, readLineCounts } from "#git/lineCounts";
 import { readRawData } from "#git/reader";
 import { GitError, GitRunner } from "#git/runner";
 import { FileChange, RawData } from "#git/snapshot";
-import { PullRequestService } from "#github/pullRequests";
+import {
+  BranchTip,
+  PullRequestService,
+  PullRequestStatus,
+} from "#github/pullRequests";
+import {
+  planStackLink,
+  runStackLink,
+  StackLinkPlan,
+  unstack,
+} from "#github/stackLink";
 import {
   stackChain,
   submitBranch,
   SubmitOptions,
   SubmitOutcome,
   submitStack,
+  syncPullRequestMessage,
 } from "#github/submit";
 import {
   AbsorbPlan,
@@ -132,6 +144,25 @@ function buildImagePreview(
       bytes: after.length,
     },
   };
+}
+
+/** What a link did, for the toast that reports it. */
+export type StackLinkOutcome = Pick<
+  StackLinkPlan,
+  "kind" | "pullRequests" | "stack"
+>;
+
+/**
+ * Every local branch in the snapshot, with the commit it is on.
+ *
+ * A branch with no upstream is included deliberately. Sapling and `gh stack` push
+ * under a server-side name that differs from the local one, so "never pushed"
+ * locally does not mean "has no pull request" — and the sha is what finds it.
+ */
+export function branchTips(snapshot: RawData): BranchTip[] {
+  return snapshot.commits.flatMap(commit =>
+    commit.branches.map(name => ({ name, sha: commit.sha }))
+  );
 }
 
 export class Repository {
@@ -619,6 +650,119 @@ export class Repository {
     );
     outcomes.forEach(outcome => this.rememberSubmitted(outcome));
     return outcomes;
+  }
+
+  /**
+   * Make GitHub link the pull requests of the stack that holds `branch`, in the tree's order,
+   * then bring each one's title and body up to date. Pushes no code.
+   *
+   * Pull request status is read afresh first. The plan depends on which stack each pull request
+   * is in now, and an answer a minute old can name a stack that someone has since dissolved.
+   */
+  async linkStack(branch: string): Promise<StackLinkOutcome> {
+    const snapshot = await this.read();
+    const plan = this.planLink(
+      snapshot,
+      branch,
+      await this.pullRequests.refresh(branchTips(snapshot), true)
+    );
+    if (typeof plan === "string") {
+      throw new GitError(plan, "link stack");
+    }
+    await runStackLink(this.git, plan);
+    const written = await Promise.allSettled(
+      plan.branches.map(layer => syncPullRequestMessage(this.git, layer))
+    );
+    // Read again, so the model this action answers with draws the stack as GitHub now has it.
+    await this.pullRequests.refresh(branchTips(snapshot), true);
+    const failed = written.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected"
+    );
+    if (failed) {
+      throw new GitError(
+        `The stack is linked, but a pull request's title and body did not update: ${errorMessage(failed.reason)}`,
+        "link stack"
+      );
+    }
+    return {
+      kind: plan.kind,
+      pullRequests: plan.pullRequests,
+      stack: plan.stack,
+    };
+  }
+
+  /**
+   * Link the stack that a Submit stack just pushed, when it holds something to link.
+   *
+   * Reports a failure rather than throwing one: every branch has already reached GitHub, so an
+   * error here would tell the reader that the submit failed. Null when the stack has fewer than
+   * two open pull requests, where no link applies.
+   */
+  async linkSubmittedStack(
+    branch: string,
+    outcomes: SubmitOutcome[]
+  ): Promise<StackLinkOutcome | { error: string } | null> {
+    try {
+      const snapshot = await this.read();
+      await this.pullRequests.refresh(branchTips(snapshot), true);
+      // A pull request opened a moment ago can be missing from that read, and the submit's own
+      // answer names it either way.
+      for (const outcome of outcomes) {
+        if (this.pullRequests.cached().get(outcome.branch)?.state !== "OPEN") {
+          this.rememberSubmitted(outcome);
+        }
+      }
+      const plan = this.planLink(snapshot, branch, this.pullRequests.cached());
+      if (typeof plan === "string") {
+        return null;
+      }
+      await runStackLink(this.git, plan);
+      return {
+        kind: plan.kind,
+        pullRequests: plan.pullRequests,
+        stack: plan.stack,
+      };
+    } catch (error: unknown) {
+      return { error: errorMessage(error) };
+    }
+  }
+
+  private planLink(
+    snapshot: RawData,
+    branch: string,
+    pullRequests: Map<string, PullRequestStatus>
+  ): StackLinkPlan | string {
+    const chain = stackChain(snapshot, branch);
+    return planStackLink(
+      chain.map(layer => ({
+        branch: layer,
+        pullRequest: pullRequests.get(layer) ?? null,
+      })),
+      chain.indexOf(branch) + 1
+    );
+  }
+
+  /**
+   * Dissolve the stack on GitHub that `branch`'s pull request is in, and return its number.
+   *
+   * The number comes from a fresh read, for the reason `linkStack` gives.
+   */
+  async unstack(branch: string): Promise<number> {
+    const snapshot = await this.read();
+    const statuses = await this.pullRequests.refresh(
+      branchTips(snapshot),
+      true
+    );
+    const stack = statuses.get(branch)?.stack?.number;
+    if (stack === undefined) {
+      throw new GitError(
+        `${branch}'s pull request is in no stack on GitHub.`,
+        "unstack"
+      );
+    }
+    await unstack(this.git, stack);
+    await this.pullRequests.refresh(branchTips(snapshot), true);
+    return stack;
   }
 
   /**

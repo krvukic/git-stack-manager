@@ -186,14 +186,35 @@ Every one of these is conflict-free and leaves your working copy alone, except w
   draft, stays a decision made on GitHub. The repository's git config stores the choice, as
   `branch.<name>.gsm-draft`, so `git branch -m` moves it with the branch and `git branch -D`
   removes it.
-- A branch whose pull request is in a [stack on
-  GitHub](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/managing-stacked-pull-requests)
-  carries its place on its pill, such as `2/3`. The place comes from GitHub, in the same request
-  that reads pull request status.
-- **Take GitHub's version**, in the right-click menu's `gh stack` section, points every branch
-  of a stack at the commit its remote branch has, after GitHub restacked the stack because a
-  lower pull request merged. It pushes nothing, and refuses a branch with local work that the
-  remote does not have.
+
+### How `gh stack` fits in
+
+Git does the history work: commits, amends, and rebases, whether you or an agent runs them.
+[`gh stack`](https://github.com/github/gh-stack) does one job here, which is to link a stack's
+pull requests on
+[GitHub](https://docs.github.com/en/pull-requests/how-tos/create-pull-requests/managing-stacked-pull-requests),
+so that GitHub shows them as one stack and restacks the rest when one merges. The extension keeps
+no record of a stack. The stack is the line of branches the tree draws, and the link is whatever
+GitHub answers.
+
+- A branch whose pull request GitHub links carries its place on its pill, such as `2/3`. The
+  place arrives in the same request that reads pull request status.
+- **Submit stack** pushes every branch up to the selected one, opens or updates each pull
+  request, and then links them.
+- **Link stack**, in the right-click menu's `gh stack` section, links the stack's open pull
+  requests in the tree's order and pushes no code. It then sets each pull request's title and
+  body from its commit message. Use it when the code is already on GitHub, such as after an
+  agent pushed it. It passes pull request numbers to `gh stack link`, because that command
+  pushes a branch it is given by name. GitHub only appends to a stack, so new pull requests on
+  top are added in place, and any other change dissolves the stack and links it again.
+  `gh stack link` also points each pull request's base at the branch below it.
+- **Unstack #*N*** dissolves the stack on GitHub. The pull requests stay open.
+- **Take GitHub's version** points every branch of a stack at the commit its remote branch has,
+  after GitHub restacked the stack because a lower pull request merged. It pushes nothing, and
+  refuses a branch with local work that the remote does not have.
+
+Every stack is based on trunk. For another base, or anything else `gh stack` offers, run it in a
+terminal.
 
 ## Opening it
 

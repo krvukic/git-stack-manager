@@ -389,6 +389,19 @@ async function editPullRequest(
 }
 
 /**
+ * Set `branch`'s pull request title and body from its commit message, pushing nothing.
+ *
+ * What Link stack runs for each pull request it links: the code on GitHub is whatever was last
+ * pushed, and the text is the half a link can bring up to date without a push.
+ */
+export async function syncPullRequestMessage(
+  git: GitRunner,
+  branch: string
+): Promise<void> {
+  await editPullRequest(git, branch, await readMessage(git, branch));
+}
+
+/**
  * Open a pull request for a branch that does not have one yet. The base is not
  * echoed back: the caller passed it in, and it is authoritative here in a way it
  * is not for a pull request that already existed.

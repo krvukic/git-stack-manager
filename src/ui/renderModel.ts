@@ -14,6 +14,8 @@ import {
   PullRequestRefreshState,
   PullRequestStatus,
 } from "#github/pullRequests";
+import { planStackLink } from "#github/stackLink";
+import { stackChain } from "#github/submit";
 import { commitBranchRefusal } from "#history/createBranch";
 import { deletionRefusal } from "#history/deleteBranch";
 import { MergedBranch, mergedBranches } from "#history/pruneMerged";
@@ -36,6 +38,12 @@ export type UIBranch = {
    */
   worktree: string | null;
   /**
+   * What Link stack would do from this branch, or null when the branch has no open pull
+   * request and the menu offers no `gh stack` section. Computed here for the same reason as
+   * `deletionRefusal`: the host owns the rule and its wording, and the menu only shows them.
+   */
+  stackLink: StackLinkPreview | null;
+  /**
    * The reader's stored choice for the pull request Submit opens for this branch: a draft, or
    * ready for review. Null while no choice is stored, where the Config setting answers.
    */
@@ -46,6 +54,13 @@ export type UIBranch = {
    * the menu only offers or withholds the entry.
    */
   deletionRefusal: string | null;
+};
+
+export type StackLinkPreview = {
+  /** Why Link stack cannot run from this branch, or null when it can. */
+  refusal: string | null;
+  /** How many pull requests the link would cover. Zero beside a refusal. */
+  count: number;
 };
 
 export type UICommit = {
@@ -158,6 +173,38 @@ function behindOnTrunkBranch(rawData: RawData): number {
   return sync.behind;
 }
 
+/**
+ * What Link stack would do from `branch`, worked out by the planner that the action itself
+ * runs, so the menu cannot offer a link that the action then refuses.
+ */
+function previewStackLink(
+  rawData: RawData,
+  pullRequests: Map<string, PullRequestStatus>,
+  branch: string
+): StackLinkPreview | null {
+  if (pullRequests.get(branch)?.state !== "OPEN") {
+    return null;
+  }
+  const chain = stackChain(rawData, branch);
+  const plan = planStackLink(
+    chain.map(layer => ({
+      branch: layer,
+      pullRequest: pullRequests.get(layer) ?? null,
+    })),
+    chain.indexOf(branch) + 1
+  );
+  if (typeof plan === "string") {
+    return { refusal: plan, count: 0 };
+  }
+  if (plan.kind === "current") {
+    return {
+      refusal: `GitHub already links these pull requests, as stack #${plan.stack}.`,
+      count: 0,
+    };
+  }
+  return { refusal: null, count: plan.pullRequests.length };
+}
+
 export function buildModel(
   rawData: RawData,
   pullRequests: Map<string, PullRequestStatus> = new Map(),
@@ -227,6 +274,7 @@ export function buildModel(
             sync.upstream === rawData.trunkRef &&
             name !== rawData.trunkBranch,
           worktree: rawData.heldBranches.get(name) ?? null,
+          stackLink: previewStackLink(rawData, pullRequests, name),
           draft: rawData.branchDrafts.get(name) ?? null,
           deletionRefusal: deletionRefusal(rawData, name),
         };

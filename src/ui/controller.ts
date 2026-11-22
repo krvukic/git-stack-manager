@@ -7,10 +7,9 @@
  * neighbour. Host-specific actions ("openFile", "openUrl") are handled by each host
  * before it reaches here.
  */
-import { Repository } from "#app/repository";
+import { branchTips, Repository } from "#app/repository";
 import { errorMessage, shortSha } from "#core/values";
 import { RawData } from "#git/snapshot";
-import { BranchTip } from "#github/pullRequests";
 import { RebaseDestination } from "#history/rebase";
 import {
   ActionPayload,
@@ -511,36 +510,63 @@ const ACTIONS: Record<string, ActionHandler> = {
     return { ok: true, data: await controller.model(), log };
   },
 
-  /** Submit every branch from the bottom of the stack up to `branch`, like `submit` per layer. */
+  /**
+   * Submit every branch from the bottom of the stack up to `branch`, like `submit` per layer,
+   * then link the stack's pull requests on GitHub.
+   */
   async submitStack(controller, payload) {
     const branch = requireString(payload, "branch");
     const { value, log } = await controller.logged(
       `Submit stack up to ${branch}`,
-      () =>
-        controller.repository.submitStack(branch, {
+      async () => {
+        const outcomes = await controller.repository.submitStack(branch, {
           draftByDefault: readFlag(payload, "draftByDefault"),
-        })
+        });
+        return {
+          outcomes,
+          link: await controller.repository.linkSubmittedStack(
+            branch,
+            outcomes
+          ),
+        };
+      }
     );
     return {
       ok: true,
-      data: { outcomes: value, model: await controller.model() },
+      data: { ...value, model: await controller.model() },
+      log,
+    };
+  },
+
+  /**
+   * The two `gh stack` entries. Neither is undoable: both change GitHub alone, and no local ref
+   * moves for Undo to restore.
+   */
+  async linkStack(controller, payload) {
+    const branch = requireString(payload, "branch");
+    const { value, log } = await controller.logged(
+      `Link stack at ${branch}`,
+      () => controller.repository.linkStack(branch)
+    );
+    return {
+      ok: true,
+      data: { link: value, model: await controller.model() },
+      log,
+    };
+  },
+
+  async unstack(controller, payload) {
+    const branch = requireString(payload, "branch");
+    const { value, log } = await controller.logged(`Unstack ${branch}`, () =>
+      controller.repository.unstack(branch)
+    );
+    return {
+      ok: true,
+      data: { stack: value, model: await controller.model() },
       log,
     };
   },
 };
-
-/**
- * Every local branch in the snapshot, with the commit it sits on.
- *
- * A branch with no upstream is included deliberately. Sapling and `gh stack` push
- * under a server-side name that differs from the local one, so "never pushed"
- * locally does not mean "has no pull request" — and the sha is what finds it.
- */
-function branchTips(snapshot: RawData): BranchTip[] {
-  return snapshot.commits.flatMap(commit =>
-    commit.branches.map(name => ({ name, sha: commit.sha }))
-  );
-}
 
 /**
  * Name the discarded path in the command log when there is one, since that is what the reader

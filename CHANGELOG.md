@@ -3,6 +3,26 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-11-22
+
+### Added
+
+- **Link stack** in the right-click menu's `gh stack` section. It makes GitHub link the stack's
+  open pull requests in the order the tree draws them, then sets each one's title and body from
+  its commit message. It pushes no code, so it suits a stack whose branches an agent already
+  pushed. New pull requests on top of a linked stack are appended; any other change dissolves the
+  stack first, because GitHub only appends. The entry stays dimmed, with the reason, while a
+  branch has no open pull request, or while GitHub already links the stack.
+- **Unstack #*N*** in the same section dissolves the stack on GitHub and leaves its pull requests
+  open.
+- **Submit stack** links the stack's pull requests after it submits them. A link that fails is
+  reported beside the submit, which has already reached GitHub by then.
+
+### Changed
+
+- The README explains in one place how `gh stack` fits in: Git does the history work, and
+  `gh stack` only links pull requests.
+
 ## [1.4.0] - 2026-11-22
 
 ### Changed
