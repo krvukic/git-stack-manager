@@ -9,6 +9,7 @@ import {
   toDataUri,
 } from "#core/media";
 import { CommitDiff, readCommitDiff, readWorkingCopyDiff } from "#git/diff";
+import { fullShas, LineCount, readLineCounts } from "#git/lineCounts";
 import { readRawData } from "#git/reader";
 import { GitError, GitRunner } from "#git/runner";
 import { FileChange, RawData } from "#git/snapshot";
@@ -141,6 +142,11 @@ export class Repository {
   readonly git: GitRunner;
   readonly pullRequests: PullRequestService;
   readonly undoHistory: UndoHistory;
+  /**
+   * Every commit counted so far. Never invalidated, because a sha names its content: a rewrite
+   * makes a new commit under a new sha and leaves the old entry correct.
+   */
+  private readonly lineCountsBySha = new Map<string, LineCount>();
 
   constructor(
     cwd: string,
@@ -177,6 +183,28 @@ export class Repository {
 
   read(): Promise<RawData> {
     return readRawData(this.git, this.trunkOverride);
+  }
+
+  /**
+   * Lines added and removed by each of `shas`, counting only the commits not counted before.
+   *
+   * A tree redrawn with the same commits therefore runs no git command at all, and one new
+   * commit costs a diff of that commit alone.
+   */
+  async lineCounts(shas: string[]): Promise<Record<string, LineCount>> {
+    const wanted = fullShas(shas);
+    const uncounted = wanted.filter(sha => !this.lineCountsBySha.has(sha));
+    for (const [sha, count] of await readLineCounts(this.git, uncounted)) {
+      this.lineCountsBySha.set(sha, count);
+    }
+    const counts: Record<string, LineCount> = {};
+    for (const sha of wanted) {
+      const count = this.lineCountsBySha.get(sha);
+      if (count) {
+        counts[sha] = count;
+      }
+    }
+    return counts;
   }
 
   async filesForCommit(sha: string): Promise<FileChange[]> {

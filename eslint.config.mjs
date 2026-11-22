@@ -278,6 +278,7 @@ export default typescriptEslint.config(
             "^goto-btn$",
             "^halo$",
             "^linecount$",
+            "^linecounts$",
             "^ln$",
             "^log-cmd$",
             "^log-entry$",

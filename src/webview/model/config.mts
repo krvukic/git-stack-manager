@@ -28,6 +28,8 @@ export type Config = {
   fileClick: FileClick;
   /** Print when each commit was made, beside its hash. `commitDate.mts` owns the wording. */
   showDate: boolean;
+  /** Print how many lines each commit added and removed, beside its hash. */
+  showLineCounts: boolean;
   /** Dim a commit whose author email differs from `git config user.email`. */
   dimOtherAuthors: boolean;
   /** Delete a local branch once its pull request merges at the branch's tip. */
@@ -45,6 +47,7 @@ export const CONFIG_DEFAULTS: Config = {
   wrapRows: false,
   fileClick: "file",
   showDate: false,
+  showLineCounts: false,
   dimOtherAuthors: false,
   deleteMergedBranches: false,
 };
@@ -82,6 +85,9 @@ export function parseConfig(stored: unknown): Config {
   }
   if (typeof fields.showDate === "boolean") {
     config.showDate = fields.showDate;
+  }
+  if (typeof fields.showLineCounts === "boolean") {
+    config.showLineCounts = fields.showLineCounts;
   }
   if (typeof fields.dimOtherAuthors === "boolean") {
     config.dimOtherAuthors = fields.dimOtherAuthors;

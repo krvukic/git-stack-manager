@@ -28,6 +28,7 @@ import {
   dragChangesEdge,
   dragGrip,
   dragHandle,
+  expectLogEntry,
   heightOf,
   selectCommit,
   sidebarWidth,
@@ -467,6 +468,60 @@ test("the other-authors setting dims exactly the commits somebody else wrote", a
   // Kept across a reload, as every other Config choice is.
   await reopen(smartlog);
   await expect(dimmed).toHaveCount(1);
+});
+
+/**
+ * Lines changed, which git counts by diffing each commit.
+ *
+ * The request count is half of what this protects. A count that arrived with every model would
+ * read the same on screen, and would run a diff of every commit on each file save.
+ */
+test("the lines-changed setting prints each commit's counts, from one request", async ({
+  demoRepository,
+  smartlog,
+}) => {
+  let requests = 0;
+  smartlog.on("request", request => {
+    if (request.url().endsWith("/api/lineCounts")) {
+      requests++;
+    }
+  });
+  const counts = smartlog.locator("#tree .linecounts");
+  await expect(counts).toHaveCount(0);
+  // Off by default, so opening the panel counted nothing.
+  expect(requests).toBe(0);
+
+  await smartlog.locator("#btn-config").click();
+  await smartlog
+    .locator('#seg-linecounts button[data-linecounts="on"]')
+    .click();
+  await smartlog.locator("#btn-config-close").click();
+
+  // One per commit row, and none on the trunk tip, the bases, or the hidden-commit rows.
+  await expect(counts).toHaveCount(
+    await smartlog.locator("#tree .row[data-sha]").count()
+  );
+  expect(requests).toBe(1);
+
+  // Against git's own summary of the same commit, so the pair cannot both be wrong.
+  const summary = await demoRepository.git([
+    "show",
+    "--shortstat",
+    "--format=",
+    "pad-utils",
+  ]);
+  const added = /(\d+) insertion/.exec(summary)?.[1] ?? "0";
+  const removed = /(\d+) deletion/.exec(summary)?.[1] ?? "0";
+  const row = smartlog.locator("#tree .row", {
+    hasText: "feat(pad): add padStart",
+  });
+  await expect(row.locator(".linecounts")).toHaveText(`+${added} −${removed}`);
+
+  // A refresh redraws the same commits, which the webview has already counted.
+  await smartlog.locator("#btn-refresh").click();
+  await expectLogEntry(smartlog, "Refresh");
+  await expect(counts.first()).toBeVisible();
+  expect(requests).toBe(1);
 });
 
 /**

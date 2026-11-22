@@ -47,6 +47,7 @@ import { commitMenuItems } from "./state/useCommitMenu";
 import { useConfig } from "./state/useConfig";
 import { useKeyboard } from "./state/useKeyboard";
 import { useLineChoices } from "./state/useLineChoices";
+import { useLineCounts } from "./state/useLineCounts";
 import { useMergedBranchDeletion } from "./state/useMergedBranchDeletion";
 import { useRepositoryActions } from "./state/useRepositoryActions";
 import { useSmartlog } from "./state/useSmartlog";
@@ -110,6 +111,7 @@ export function App({ settings }: { settings: HostSettings }) {
   const repository = useRepositoryActions(smartlog);
   const commitActions = useCommitActions(smartlog);
   const commitFiles = useCommitFiles(smartlog);
+  const lineCounts = useLineCounts(model, config.showLineCounts);
   // A file reset while its diff is on screen is read again, so the overlay stops showing the
   // lines the reset just dropped.
   const lineChoices = useLineChoices(
@@ -332,6 +334,7 @@ export function App({ settings }: { settings: HostSettings }) {
               selectedSha={selectedSha}
               dimForeign={config.dimOtherAuthors}
               showDate={config.showDate}
+              lineCounts={config.showLineCounts ? lineCounts : null}
               readAt={smartlog.modelReadAt}
               onSelect={commit => setSelectedSha(commit.sha)}
               onContextMenu={(event, commit) => {

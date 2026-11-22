@@ -220,6 +220,24 @@ export function ConfigDrawer({
         </Hint>
       </Group>
       <Group>
+        <GroupLabel>Lines changed</GroupLabel>
+        <Segmented
+          id="seg-linecounts"
+          attribute="linecounts"
+          value={config.showLineCounts ? "on" : "off"}
+          options={[
+            { value: "off", label: "Hide" },
+            { value: "on", label: "Show beside the hash" },
+          ]}
+          onChange={choice => onChange({ showLineCounts: choice === "on" })}
+        />
+        <Hint>
+          The lines each commit added and removed, such as +12 −3. Git counts
+          them by diffing the commit, so nothing is counted while this is
+          hidden, and each commit is counted once.
+        </Hint>
+      </Group>
+      <Group>
         <GroupLabel>Other authors&apos; commits</GroupLabel>
         <Segmented
           id="seg-dimothers"

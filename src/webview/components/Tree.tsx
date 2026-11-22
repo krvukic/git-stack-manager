@@ -5,6 +5,7 @@
  * replaces the model every five seconds, so without this the whole graph would be laid out
  * again on each one even when nothing moved.
  */
+import type { LineCount } from "#git/lineCounts";
 import type { RenderModel, UICommit } from "#ui/renderModel";
 import { useLayoutEffect, useMemo } from "react";
 import { layoutGraph } from "../graph/layout.mjs";
@@ -19,6 +20,7 @@ export function Tree({
   selectedSha,
   dimForeign,
   showDate,
+  lineCounts,
   readAt,
   onSelect,
   onContextMenu,
@@ -33,6 +35,8 @@ export function Tree({
   dimForeign: boolean;
   /** Print when each commit was made, beside its hash. */
   showDate: boolean;
+  /** Each commit's line counts by sha, or null while the Config setting hides them. */
+  lineCounts: ReadonlyMap<string, LineCount> | null;
   /**
    * When the model on screen was read, which every commit's age is measured against.
    * `useSmartlog` records it, and says why it is not read here.
@@ -87,6 +91,7 @@ export function Tree({
               dateLabel={
                 showDate ? commitDateLabel(row.commit.date, readAt) : ""
               }
+              lineCount={lineCounts?.get(row.commit.sha) ?? null}
               onSelect={onSelect}
               onContextMenu={onContextMenu}
               onGoto={onGoto}

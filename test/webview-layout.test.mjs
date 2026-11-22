@@ -54,6 +54,7 @@ test("a stored config is adopted field by field", () => {
     pillFont: 14,
     pillMaxChars: 20,
     showDate: true,
+    showLineCounts: true,
     dimOtherAuthors: true,
     deleteMergedBranches: true,
   });
@@ -65,6 +66,7 @@ test("a stored config is adopted field by field", () => {
     pillFont: 14,
     pillMaxChars: 20,
     showDate: true,
+    showLineCounts: true,
     dimOtherAuthors: true,
     deleteMergedBranches: true,
   });

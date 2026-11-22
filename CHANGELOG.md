@@ -3,6 +3,15 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-11-22
+
+### Added
+
+- **Lines changed** in **Config** prints the lines each commit added and removed beside its hash,
+  such as `+12 −3`, in the colours a diff gives the two. Off by default. Git counts the lines by
+  diffing each commit, so nothing is counted while the setting is off. One `git show` counts every
+  commit on screen, and a commit counted once is never counted again.
+
 ## [1.0.0] - 2026-11-22
 
 The major number marks two VS Code settings and one command that stop working, as the next two

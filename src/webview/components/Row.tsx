@@ -9,6 +9,7 @@
  * in the stylesheet does the moving — swapping the elements here would leave two orderings
  * to keep in step.
  */
+import type { LineCount } from "#git/lineCounts";
 import type { Row as ModelRow, UICommit } from "#ui/renderModel";
 import { memo } from "react";
 import { classes } from "../classes";
@@ -46,6 +47,22 @@ function CommitDate({ label }: { label: string }) {
   return (
     <span className="commitdate flex-none font-[monospace] text-sha leading-none text-muted">
       {label}
+    </span>
+  );
+}
+
+/**
+ * How many lines the commit added and removed, beside its hash, while the Config setting asks
+ * for it. In the hash's own type, and in the colours a diff gives the two kinds of line.
+ */
+function LineCounts({ count }: { count: LineCount }) {
+  return (
+    <span
+      className="linecounts flex-none font-[monospace] text-sha leading-none whitespace-nowrap"
+      title={`${count.added} ${count.added === 1 ? "line" : "lines"} added, ${count.removed} removed`}
+    >
+      <span className="text-add">{`+${count.added}`}</span>{" "}
+      <span className="text-del">{`−${count.removed}`}</span>
     </span>
   );
 }
@@ -139,6 +156,8 @@ type CommitRowProps = {
   dimForeign: boolean;
   /** When the commit was made, or empty while the Config setting hides it. */
   dateLabel: string;
+  /** The commit's line counts, or null while the setting hides them or the read is pending. */
+  lineCount: LineCount | null;
   onSelect: (commit: UICommit) => void;
   onContextMenu: (event: React.MouseEvent, commit: UICommit) => void;
   onGoto: (commit: UICommit) => void;
@@ -161,6 +180,7 @@ export const CommitRow = memo(function CommitRow({
   isSelected,
   dimForeign,
   dateLabel,
+  lineCount,
   onSelect,
   onContextMenu,
   onGoto,
@@ -221,6 +241,7 @@ export const CommitRow = memo(function CommitRow({
         {commit.subject}
       </span>
       <Sha value={commit.shortSha} />
+      {lineCount ? <LineCounts count={lineCount} /> : null}
       {dateLabel ? <CommitDate label={dateLabel} /> : null}
       {commit.isHead ? <YouAreHere /> : null}
     </RowShell>

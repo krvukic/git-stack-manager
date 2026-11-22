@@ -148,6 +148,19 @@ const ACTIONS: Record<string, ActionHandler> = {
     return { ok: true, data: files };
   },
 
+  /**
+   * Asked for only while the Config drawer's *Lines changed* is on, and only for commits the
+   * webview has no count for yet.
+   */
+  async lineCounts(controller, payload) {
+    return {
+      ok: true,
+      data: await controller.repository.lineCounts(
+        readStringList(payload, "shas")
+      ),
+    };
+  },
+
   /** A dry run, so the placement can be inspected before anything is rewritten. */
   async absorbPlan(controller, payload) {
     const snapshot = await controller.repository.read();

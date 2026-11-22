@@ -57,6 +57,9 @@ Run `just init-repo` once, then pick a host:
   the last day reads as an age — *20 seconds ago*, *5 minutes ago*, *2 hours ago* — and anything
   older as its date, `2026-10-04`, because a count of months is a number nobody can turn back into
   a day. Only commit rows carry a date; the trunk and base rows are drawn for position.
+- **Lines changed**, also in **Config**, prints the lines each commit added and removed beside its
+  hash, such as `+12 −3`. Git counts them by diffing the commit, so the host counts nothing while
+  the setting is off, counts each commit once, and asks about all of them in one `git show`.
 - **Other authors' commits**, also in **Config**, dims a commit whose author email differs from
   `git config user.email`, and adds the author's name to its tooltip. It is off by default, so a
   shared branch does not look broken.

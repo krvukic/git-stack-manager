@@ -267,9 +267,10 @@
     flex: 0 1 auto;
     min-width: 0;
   }
-  /* The date takes the sha's own order, and document order then places it second.
-     Without one it would default to 0 and jump ahead of the subject. */
+  /* The line counts and the date take the sha's own order, and document order then places
+     them after it. Without one they would default to 0 and jump ahead of the subject. */
   body.pills-right .row .content .sha,
+  body.pills-right .row .content .linecounts,
   body.pills-right .row .content .commitdate {
     order: 2;
   }
