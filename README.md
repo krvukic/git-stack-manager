@@ -291,7 +291,7 @@ Every preference is in the **Config** drawer instead, where both hosts can set i
   flag: the unit suite imports the webview's `.mts` modules as source, and 24 is the oldest line
   where every release handles that. `.nvmrc` carries the version and `just init-repo` installs it.
   Only the web server and the suites use your Node; the extension runs on the one VS Code bundles.
-- **VS Code 1.106+**, for the extension host API. Web mode does not need it.
+- **VS Code 1.146+**, for the extension host API. Web mode does not need it.
 - **`gh`**, any version, optional. It supplies the pull request badges and the `gh stack` actions.
 
 ## Known limits

@@ -36,7 +36,7 @@ export function Drawer({
     <div
       id={name}
       className={classes(
-        "drawer max-h-[66%] flex-none overflow-y-auto border-b border-b-edge bg-card px-4 py-3",
+        "max-h-[66%] flex-none overflow-y-auto border-b border-b-edge bg-card px-4 py-3",
         isOpen ? "open block" : "hidden"
       )}
     >

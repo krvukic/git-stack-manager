@@ -8,11 +8,12 @@
  */
 import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  // No React plugin. Vite compiles JSX itself, from `jsx: react-jsx` in the webview's
+  // tsconfig. The plugin adds hot reload to a dev server, and this project only ever builds.
+  plugins: [tailwindcss()],
   /**
    * No alias for the `#git/*` specifiers, deliberately.
    *

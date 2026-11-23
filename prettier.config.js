@@ -25,6 +25,9 @@ module.exports = {
    */
   tailwindStylesheet: "./src/webview/styles.css",
   importOrder: ["<THIRD_PARTY_MODULES>", "^[./]"],
+  // A feature gate, not a pin: the sorter turns on each newer import syntax once this reaches
+  // the TypeScript release that introduced it, and its highest gate is 5.0.0. It needs raising
+  // only when the plugin adds a gate above that.
   importOrderTypeScriptVersion: "5.0.2",
   importOrderParserPlugins: ["typescript", "jsx", "decorators-legacy"],
 };

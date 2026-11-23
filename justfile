@@ -117,14 +117,6 @@ lint:
 lint-fix:
     bun run lint:fix
 
-# `just canonical-classes --fix` rewrites every class that has a shorter spelling. Separate
-# from `lint` because the ESLint plugin's version of this rule calls Tailwind without a root
-# font size, so it never sees that `min-h-[110px]` is `min-h-27.5`. The editor's Tailwind
-# extension does report it, and this recipe is that check on the command line.
-[doc("Report Tailwind classes that have a shorter spelling")]
-canonical-classes *args:
-    node scripts/canonical-classes.mjs {{args}}
-
 # Format with Prettier, which also orders imports
 format:
     bun run format
@@ -156,10 +148,10 @@ test-e2e-report:
     bunx playwright show-report
 
 # Everything a change has to pass: formatting, types, lint, both suites
-check: format-check typecheck lint canonical-classes test test-e2e
+check: format-check typecheck lint test test-e2e
 
 # `check` without comparing snapshot pictures, as CI runs it
-check-ci: format-check typecheck lint canonical-classes test (test-e2e "--ignore-snapshots")
+check-ci: format-check typecheck lint test (test-e2e "--ignore-snapshots")
 
 # Re-record the README screenshot from the demo repository
 screenshot: build

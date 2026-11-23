@@ -218,19 +218,26 @@ export default typescriptEslint.config(
     /**
      * Tailwind class checks, resolved against this project's own theme.
      *
-     * Six rules of the plugin's fifteen. The rest are either noise here or belong to
-     * `scripts/canonical-classes.mjs`, which catches what this cannot:
+     * Six rules of the plugin's fifteen. The rest are noise here: `enforce-logical-properties`
+     * suggests `ms-`/`me-` over `ml-`/`mr-`, which is 112 findings for a UI that never flips
+     * direction.
      *
-     * - `enforce-logical-properties` suggests `ms-`/`me-` over `ml-`/`mr-`, which is 112
-     *   findings for a UI that never flips direction.
-     * - `enforce-canonical-classes` stays on for the two `text-(length:…)` forms it does
-     *   find, but it calls Tailwind without a root font size, so every pixel-to-spacing
-     *   suggestion is invisible to it. That is what the script covers.
+     * `callees` names `classes()`, the helper every conditional class list goes through. The
+     * plugin reads class strings in a `className` attribute and in the helpers it knows by
+     * name, and `classes` is not one of those, so without this every rule below skips the
+     * class lists most likely to hold a mistake.
+     *
+     * `enforce-canonical-classes` takes the root font size, which is what lets it see that
+     * `min-h-[110px]` is `min-h-27.5`. Without one it compares no pixel value with the spacing
+     * scale.
      */
     files: ["src/webview/**/*.tsx"],
     plugins: { "better-tailwindcss": betterTailwind },
     settings: {
-      "better-tailwindcss": { entryPoint: "src/webview/styles.css" },
+      "better-tailwindcss": {
+        entryPoint: "src/webview/styles.css",
+        callees: ["classes"],
+      },
     },
     rules: {
       /**
@@ -241,16 +248,18 @@ export default typescriptEslint.config(
        * allowlist had to come first. Three kinds, and the kind determines whether removing
        * one is safe:
        *
-       * - Selected by the end-to-end suite (`chip`, `chooselines`, `dffile`, `dfimage`,
-       *   `excluded`, `linecount`, `ln`, `log-cmd`, `log-entry`, `log-title`, `open`, `pick`,
-       *   `pickfile`, `pickhunk`, `pickline`, `review`, `seg`, `whole`). Deleting one breaks a
-       *   test rather than the appearance.
-       * - Targeted by a descendant selector from a parent's class string (`code`, `mark`,
-       *   `st`, and the `graph.css` set). `[&>.mark]:text-add` in `ChangesOverlay` is the
-       *   shape — the parent names the child, so nothing here is dead.
+       * - Selected by the end-to-end suite (`chip`, `chooselines`, `ci`, `dffile`, `dfimage`,
+       *   `dfline`, `excluded`, `fp`, `hunk`, `hunk-head`, `iconbtn`, `item`, `linecount`,
+       *   `ln`, `log-cmd`, `log-entry`, `log-title`, `open`, `pick`, `pickfile`, `pickhunk`,
+       *   `pickline`, `prbadge`, `review`, `seg`, `whole`). Deleting one breaks a test rather
+       *   than the appearance.
+       * - Targeted by a descendant selector from a parent's class string (`btnrow`, `code`,
+       *   `mark`, `st`, and the `graph.css` set). `[&>.mark]:text-add` in `ChangesOverlay` is
+       *   the shape — the parent names the child, so nothing here is dead.
        * - Styled by `graph.css`, which is hand-written CSS Tailwind never emitted
-       *   (`basehint`, `content`, `ellipsis-label`, `ellipsis-row`, `foreign`, `goto-btn`,
-       *   `halo`, `node`, `pillgroup`, `rail`, `railfill`, `row`, `sha`, `subject`).
+       *   (`badge`, `basehint`, `clickable`, `content`, `ellipsis-label`, `ellipsis-row`,
+       *   `foreign`, `goto-btn`, `halo`, `node`, `pill`, `pillgroup`, `rail`, `railfill`,
+       *   `row`, `sha`, `subject`, `youarehere`).
        *
        * Anchored patterns, not bare names: the option takes regular expressions, so
        * `row` unanchored would also excuse a misspelled `rowhead`.
@@ -259,24 +268,34 @@ export default typescriptEslint.config(
         "error",
         {
           ignore: [
+            "^badge$",
             "^basehint$",
             "^branchrow$",
+            "^btnrow$",
             "^chip$",
             "^chooselines$",
+            "^ci$",
+            "^clickable$",
             "^code$",
             "^commitdate$",
             "^content$",
             "^dffile$",
             "^dfhunk$",
             "^dfimage$",
+            "^dfline$",
             "^discard$",
             "^ellipsis-label$",
             "^ellipsis-row$",
             "^excluded$",
             "^files$",
             "^foreign$",
+            "^fp$",
             "^goto-btn$",
             "^halo$",
+            "^hunk$",
+            "^hunk-head$",
+            "^iconbtn$",
+            "^item$",
             "^linecount$",
             "^linecounts$",
             "^ln$",
@@ -290,7 +309,9 @@ export default typescriptEslint.config(
             "^pickfile$",
             "^pickhunk$",
             "^pickline$",
+            "^pill$",
             "^pillgroup$",
+            "^prbadge$",
             "^rail$",
             "^railfill$",
             "^review$",
@@ -301,6 +322,7 @@ export default typescriptEslint.config(
             "^subject$",
             "^trailing$",
             "^whole$",
+            "^youarehere$",
           ],
         },
       ],
@@ -308,7 +330,10 @@ export default typescriptEslint.config(
       "better-tailwindcss/no-duplicate-classes": "error",
       "better-tailwindcss/no-deprecated-classes": "error",
       "better-tailwindcss/enforce-consistent-important-position": "error",
-      "better-tailwindcss/enforce-canonical-classes": "error",
+      "better-tailwindcss/enforce-canonical-classes": [
+        "error",
+        { rootFontSize: 16 },
+      ],
       /**
        * `il0`–`il8` are hand-written in `graph.css`, not generated, so building the name
        * by interpolation cannot purge a class Tailwind never emitted. The rule is right

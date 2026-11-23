@@ -3,6 +3,26 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-11-22
+
+### Changed
+
+- The extension needs VS Code 1.146 or newer, up from 1.106. `@types/vscode` follows it, so the
+  two stay level at the latest release.
+- `just package` runs the `@vscode/vsce` that the lock file pins. It fetched the newest release
+  on every run before.
+- The Tailwind lint rules read the class lists passed through `classes()`, which is where every
+  conditional class is. They skipped them before, so an unknown or conflicting class there went
+  unreported.
+
+### Removed
+
+- `@vitejs/plugin-react`. The webview bundle is byte for byte the same without it: Vite compiles
+  JSX itself, and the plugin adds hot reload to a dev server this project never runs.
+- `scripts/canonical-classes.mjs` and `just canonical-classes`. The lint rule reports the same
+  classes once it is given the root font size, which the updated plugin accepts.
+- The `drawer` class on the Config and Help drawers, which nothing selected.
+
 ## [1.6.1] - 2026-11-22
 
 ### Changed

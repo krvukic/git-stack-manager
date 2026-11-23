@@ -109,10 +109,15 @@ repository. It is not part of `just check`, so re-record it when a change alters
 
 ## Held-back dependencies
 
-`bun outdated` lists these two on purpose:
+`bun outdated` lists this one on purpose:
 
-- **`@types/vscode` 1.106**, against 1.146 released. The types *are* the floor in `engines.vscode`.
-  Raising them lets code call APIs that VS Code 1.106 does not have, and nothing fails until a user
-  on 1.106 runs it.
 - **`typescript` 6.0**, against 7.0 released. `typescript-eslint` 8 peers on `typescript <6.1`, and
   no release supports 7 yet. Upgrading silently drops every type-aware lint rule.
+
+`@types/vscode` and `engines.vscode` move together, and both follow the latest VS Code release.
+The types are the floor: with the types ahead of `engines.vscode`, code can call an API that an
+older VS Code does not have, and nothing fails until someone on that version runs it.
+
+`@vscode/vsce` is a dependency so that the lock file pins it. `just package` used to fetch
+whichever release was newest at the time. Its one install script stays blocked, since packaging
+does not need it.
