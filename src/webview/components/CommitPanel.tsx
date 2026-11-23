@@ -25,6 +25,8 @@ import {
   gotoTarget,
   splitMessage,
   stackBranchesUpTo,
+  stackStop,
+  submitMode,
   submitTarget,
 } from "../model/commits.mjs";
 import type { FileClick } from "../model/config.mjs";
@@ -175,9 +177,10 @@ export function CommitPanel({
   const openable = files.state === "ready" ? files.files.length : 0;
   const unchanged = subject === original.subject && body === original.body;
   const target = submitTarget(commit);
-  const existing = target?.pullRequest;
+  const mode = target ? submitMode(target) : null;
   const draft = target ? draftToggle(target, draftByDefault) : null;
   const layers = stackBranchesUpTo(model, commit);
+  const stop = stackStop(model, layers);
   const goto = gotoTarget(commit);
 
   return (
@@ -314,36 +317,41 @@ export function CommitPanel({
               <Button
                 id="btn-submit"
                 variant="primary"
-                // Pushing mid-rebase would publish a half-replayed stack.
-                disabled={conflicted || submitting}
+                // Pushing mid-rebase would publish a half-replayed stack. A closed pull request
+                // stays closed, and the note below says what to do instead.
+                disabled={conflicted || submitting || mode?.kind === "closed"}
                 title={
-                  existing
-                    ? `Push ${target.name} and update pull request #${existing.number} so its title and body match this message.`
+                  mode?.kind === "update"
+                    ? `Push ${target.name} and update pull request #${mode.number} so its title and body match this message.`
                     : `Push ${target.name} and open a pull request whose title and body come from this message.`
                 }
                 onClick={onSubmit}
               >
                 {submitting
                   ? "Submitting…"
-                  : existing
-                    ? `Submit → #${existing.number}`
+                  : mode?.kind === "update"
+                    ? `Submit → #${mode.number}`
                     : "Submit as pull request"}
               </Button>
               {layers.length > 1 ? (
                 <Button
                   id="btn-submit-stack"
                   variant="primary"
-                  disabled={conflicted || submitting}
-                  title={`Submit ${layers.join(", ")} in that order, so every pull request has its base on GitHub.`}
+                  disabled={conflicted || submitting || stop?.index === 0}
+                  title={`Submit ${layers.join(", ")} in that order, so every pull request has its base on GitHub.${stop ? ` Stops at ${stop.branch}, whose pull request #${stop.number} is closed.` : ""}`}
                   onClick={onSubmitStack}
                 >
                   Submit stack ({layers.length})
                 </Button>
               ) : null}
             </ButtonRow>
-            <div className="font-[monospace] text-meta text-muted">
-              Submitting always carries the message across — a force push alone
-              leaves the pull request text stale.
+            <div
+              className="font-[monospace] text-meta text-muted"
+              id="submit-note"
+            >
+              {mode?.kind === "closed"
+                ? `#${mode.number} is closed, and Submit leaves it closed. Reopen it on GitHub, or right-click this commit and choose Submit as new pull request.`
+                : "Submitting always carries the message across — a force push alone leaves the pull request text stale."}
             </div>
           </>
         ) : (

@@ -66,7 +66,10 @@ export function planStackLink(
       continue;
     }
     if (index < mustHave) {
-      return `${layer.branch} has no open pull request. Submit the stack first.`;
+      // Submit stack stops at a closed pull request, so "Submit the stack first" would not help.
+      return layer.pullRequest?.state === "CLOSED"
+        ? `${layer.branch}'s pull request #${layer.pullRequest.number} is closed. Reopen it on GitHub, or right-click ${layer.branch}'s commit and choose Submit as new pull request.`
+        : `${layer.branch} has no open pull request. Submit the stack first.`;
     }
     break;
   }

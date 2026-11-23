@@ -3,6 +3,29 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-11-22
+
+### Added
+
+- **Submit as new pull request**, in a commit's right-click menu, opens a new pull request beside
+  the branch's closed one. The menu offers it only while the branch's newest pull request is
+  closed.
+
+### Changed
+
+- Submit leaves a closed pull request closed. It refuses a branch whose newest pull request is
+  closed, and pushes nothing, until you reopen the pull request on GitHub or choose
+  **Submit as new pull request**. Submit force-pushed the branch and opened a second pull request
+  before. **Submit stack** submits the branches below such a branch and stops there.
+- The stack status reads *pull request closed* while a pull request in the stack is closed, and
+  **Link stack** names that pull request. Before, both sent you to Submit stack, which stops at
+  that pull request.
+
+### Fixed
+
+- Submit names a pull request in its label only while that pull request is open. A branch whose
+  pull request had merged read `Submit → #142`, and Submit opened a new pull request instead.
+
 ## [1.7.0] - 2026-11-22
 
 ### Changed

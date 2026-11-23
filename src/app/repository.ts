@@ -27,6 +27,7 @@ import {
   unstack,
 } from "#github/stackLink";
 import {
+  ClosedPullRequestError,
   stackChain,
   submitBranch,
   SubmitOptions,
@@ -642,14 +643,22 @@ export class Repository {
     branch: string,
     options: SubmitOptions = {}
   ): Promise<SubmitOutcome[]> {
-    const outcomes = await submitStack(
-      this.git,
-      await this.read(),
-      branch,
-      options
-    );
-    outcomes.forEach(outcome => this.rememberSubmitted(outcome));
-    return outcomes;
+    try {
+      const outcomes = await submitStack(
+        this.git,
+        await this.read(),
+        branch,
+        options
+      );
+      outcomes.forEach(outcome => this.rememberSubmitted(outcome));
+      return outcomes;
+    } catch (error: unknown) {
+      // Submit stack has already opened the pull requests below the closed one it stopped at.
+      if (error instanceof ClosedPullRequestError) {
+        error.submitted.forEach(outcome => this.rememberSubmitted(outcome));
+      }
+      throw error;
+    }
   }
 
   /**

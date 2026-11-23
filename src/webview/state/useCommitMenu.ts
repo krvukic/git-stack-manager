@@ -15,6 +15,8 @@ import {
   rebaseRefusal,
   stackBaseSha,
   stackBranchesUpTo,
+  stackStop,
+  submitMode,
   submitTarget,
   truncate,
   type RebaseRefusal,
@@ -29,6 +31,8 @@ export type CommitMenuActions = {
   onAdoptRemote: (branch: string) => void;
   onDeleteBranch: (branch: string) => void;
   onSubmit: (commit: UICommit) => void;
+  /** Submit as new pull request, beside the branch's closed one. */
+  onSubmitBesideClosed: (commit: UICommit) => void;
   onSubmitStack: (commit: UICommit) => void;
   onSplit: (commit: UICommit) => void;
   onFold: (commit: UICommit) => void;
@@ -217,26 +221,39 @@ export function commitMenuItems(
 
   const submittable = submitTarget(commit);
   if (submittable) {
-    const existing = submittable.pullRequest;
+    const mode = submitMode(submittable);
     items.push(
       { separator: true },
-      {
-        label: existing
-          ? `Submit ${submittable.name} → #${existing.number}`
-          : `Submit ${submittable.name} as pull request`,
-        description:
-          "Push the branch and set the pull request title and body from this commit message",
-        run: () => actions.onSubmit(commit),
-      }
+      mode.kind === "closed"
+        ? {
+            label: `Submit ${submittable.name} as new pull request`,
+            description: `#${mode.number} is closed, and Submit leaves it closed. Push the branch and open a new pull request beside it, from this commit message. Reopen #${mode.number} on GitHub instead to keep using it`,
+            run: () => actions.onSubmitBesideClosed(commit),
+          }
+        : {
+            label:
+              mode.kind === "update"
+                ? `Submit ${submittable.name} → #${mode.number}`
+                : `Submit ${submittable.name} as pull request`,
+            description:
+              "Push the branch and set the pull request title and body from this commit message",
+            run: () => actions.onSubmit(commit),
+          }
     );
     const layers = stackBranchesUpTo(model, commit);
+    const stop = stackStop(model, layers);
     if (layers.length > 1) {
-      items.push({
-        label: `Submit stack — ${layers.length} branches up to ${submittable.name}`,
-        description:
-          "Submit each branch from the bottom up, so every pull request has its base on GitHub, then link the pull requests as a stack",
-        run: () => actions.onSubmitStack(commit),
-      });
+      items.push(
+        stop?.index === 0
+          ? {
+              label: `Submit stack — ${stop.branch}'s pull request #${stop.number} is closed`,
+            }
+          : {
+              label: `Submit stack — ${layers.length} branches up to ${submittable.name}`,
+              description: `Submit each branch from the bottom up, so every pull request has its base on GitHub, then link the pull requests as a stack${stop ? `. Stops at ${stop.branch}, whose pull request #${stop.number} is closed` : ""}`,
+              run: () => actions.onSubmitStack(commit),
+            }
+      );
     }
   }
 

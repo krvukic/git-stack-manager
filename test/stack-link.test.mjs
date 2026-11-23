@@ -144,10 +144,12 @@ test("a layer up to the clicked one with no open pull request refuses the link b
     planStackLink([layer(16), layer(null), layer(18)], 3),
     "branch-unsubmitted has no open pull request. Submit the stack first."
   );
-  // A closed pull request is not one to link either.
-  assert.match(
-    String(planStackLink([layer(16), layer(17, { state: "CLOSED" })], 2)),
-    /^branch-17 has no open pull request/
+});
+
+test("Link stack refuses a closed pull request and says what to do instead, since Submit stack stops at it", () => {
+  assert.equal(
+    planStackLink([layer(16), layer(17, { state: "CLOSED" })], 2),
+    "branch-17's pull request #17 is closed. Reopen it on GitHub, or right-click branch-17's commit and choose Submit as new pull request."
   );
 });
 

@@ -353,6 +353,8 @@ export function App({ settings }: { settings: HostSettings }) {
                     onDeleteBranch: branch =>
                       void commitActions.deleteBranch(branch),
                     onSubmit: c => void commitActions.submitCommit(c),
+                    onSubmitBesideClosed: c =>
+                      void commitActions.submitCommit(c, true),
                     onSubmitStack: c => void commitActions.submitStack(c),
                     onSplit: c => void commitActions.openSplit(c),
                     onFold: c => void commitActions.foldCommit(c),

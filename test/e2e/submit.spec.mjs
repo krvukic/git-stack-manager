@@ -272,3 +272,83 @@ test("a branch with an open pull request offers no Draft toggle, and Submit leav
       .filter(args => args[1] === "ready")
   ).toEqual([]);
 });
+
+/**
+ * A pull request someone closed on GitHub. local-experiment's #173 is closed, and its base,
+ * pad-utils, is pushed, so only the closed pull request makes Submit refuse.
+ */
+const CLOSED_SUBJECT = "experiment(pad): add repeat helper (local only)";
+
+test("Submit is off beside a closed pull request, and Submit as new pull request opens one beside it", async ({
+  smartlog,
+  fakeGitHub,
+  demoRepository,
+}) => {
+  await selectCommit(smartlog, CLOSED_SUBJECT);
+  await expect(smartlog.locator("#btn-submit")).toBeDisabled();
+  await expect(smartlog.locator("#submit-note")).toHaveText(
+    "#173 is closed, and Submit leaves it closed. Reopen it on GitHub, or right-click this commit and choose Submit as new pull request."
+  );
+  // `stackStatus` reports the stop too, since Submit stack would otherwise look like the fix.
+  await expect(smartlog.locator("#stack-status")).toHaveText(
+    "local-experiment's pull request #173 is closed, so Submit stack stops there. Reopen it on GitHub, or right-click local-experiment's commit and choose Submit as new pull request."
+  );
+  expect(
+    await demoRepository.git([
+      "branch",
+      "-r",
+      "--list",
+      "origin/local-experiment",
+    ])
+  ).toBe("");
+
+  await smartlog.getByText(CLOSED_SUBJECT).click({ button: "right" });
+  await smartlog
+    .locator("#menu .item", {
+      hasText: "Submit local-experiment as new pull request",
+    })
+    .click();
+  await expectToast(smartlog, "Opened #101 onto pad-utils");
+
+  const creates = fakeGitHub
+    .calls()
+    .filter(call => call.args[1] === "create")
+    .map(call => call.args.slice(2, 6));
+  expect(creates).toEqual([
+    ["--head", "local-experiment", "--base", "pad-utils"],
+  ]);
+  expect(
+    await demoRepository.git(["rev-parse", "origin/local-experiment"])
+  ).toBe(await demoRepository.git(["rev-parse", "local-experiment"]));
+});
+
+test("submit stack updates the branches below a closed pull request and stops there", async ({
+  smartlog,
+  fakeGitHub,
+  demoRepository,
+}) => {
+  await selectCommit(smartlog, CLOSED_SUBJECT);
+  await smartlog.locator("#btn-submit-stack").click();
+  await expectToast(
+    smartlog,
+    "Pull request #173 for local-experiment is closed, so Submit stack submitted only case-utils and pad-utils."
+  );
+
+  const prCommands = fakeGitHub
+    .calls()
+    .map(call => call.args)
+    .filter(args => args[1] === "edit" || args[1] === "create")
+    .map(args => args.slice(1, 3));
+  expect(prCommands).toEqual([
+    ["edit", "case-utils"],
+    ["edit", "pad-utils"],
+  ]);
+  expect(
+    await demoRepository.git([
+      "branch",
+      "-r",
+      "--list",
+      "origin/local-experiment",
+    ])
+  ).toBe("");
+});

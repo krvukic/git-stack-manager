@@ -156,3 +156,14 @@ moves it with the branch, and `git branch -D` removes it. Submit stack needs the
 which is why it is stored at all. The read costs no extra process, because `#git/branchDraft` asks
 for the choices and `user.email` in one `git config --get-regexp`, where the repository read used
 to ask for the email alone.
+
+Submit leaves a **closed pull request** closed. Closing one is a decision about its branch.
+`gh pr create` checks only for an open pull request, so a submit that looked for open ones alone
+would force-push the branch and open a second pull request beside the closed one. Submit's one
+`gh pr list` therefore reads every state, and Submit refuses a branch whose newest pull request is
+closed before it pushes anything. A merged one does not count, because a submit after a merge is a
+new round of work. **Submit as new pull request** is the override, and it needs no record of its
+own: the pull request it opens becomes the newest, so the closed one stops counting. The
+alternative, an unlink stored in git config like the draft choice, would add state that exists
+only in this checkout. Submit stack stops at a branch whose pull request is closed, because the
+branches above it target that branch.

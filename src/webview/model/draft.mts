@@ -4,7 +4,7 @@
  * The toggle sets the state a pull request opens in, and nothing else: Submit never changes the
  * state of a pull request that is already open. So the toggle applies only while Submit would
  * open one, which is while the branch has no open pull request. Submit opens a new pull request
- * beside a merged or closed one, so those count as none.
+ * beside a merged one, and Submit as new pull request beside a closed one, so both count as none.
  */
 import type { UIBranch } from "#ui/renderModel";
 

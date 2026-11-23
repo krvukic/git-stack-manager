@@ -15,6 +15,7 @@
  * commit message the single source of truth: edit it in the sidebar, submit, and
  * the pull request says the same thing.
  */
+import { asArray, asRecord } from "#core/values";
 import { GitError, GitRunner } from "#git/runner";
 import { RawCommit, RawData } from "#git/snapshot";
 import { runGh } from "#github/ghRunner";
@@ -63,7 +64,35 @@ export type SubmitOptions = {
    * Config drawer's *New pull requests*.
    */
   draftByDefault?: boolean;
+  /**
+   * Whether a branch whose newest pull request is closed gets a new pull request beside it:
+   * **Submit as new pull request**. Without it, `ClosedPullRequestError` refuses the branch.
+   */
+  besideClosed?: boolean;
 };
+
+/**
+ * Submit's refusal of a branch whose newest pull request someone closed on GitHub.
+ *
+ * Closing a pull request is a decision about its branch. Without this refusal, Submit would find
+ * no open pull request, force-push the branch, and open a second pull request beside the closed
+ * one, because `gh pr create` checks only for an open one. So the refusal comes before the push,
+ * and it names what to do instead: reopen the pull request, or ask for a new one.
+ */
+export class ClosedPullRequestError extends GitError {
+  constructor(
+    readonly branch: string,
+    readonly number: number,
+    /** What a Submit stack submitted below `branch` before it stopped, bottom first. */
+    readonly submitted: SubmitOutcome[],
+    consequence: string
+  ) {
+    super(
+      `Pull request #${number} for ${branch} is closed, so ${consequence}. Reopen it on GitHub, or right-click ${branch}'s commit and choose Submit as new pull request.`,
+      "submit"
+    );
+  }
+}
 
 /** The commit message, split into the title and body a pull request takes. */
 type Message = {
@@ -89,7 +118,15 @@ export async function submitBranch(
   const message = await readMessage(git, branch);
 
   // Looked up before the push, so a refusal below leaves nothing half-submitted.
-  const existing = await findPullRequest(git, branch);
+  const { open: existing, closed } = await findPullRequests(git, branch);
+  if (closed !== null && !options.besideClosed) {
+    throw new ClosedPullRequestError(
+      branch,
+      closed,
+      [],
+      "Submit pushed nothing"
+    );
+  }
   if (!existing) {
     await requirePublishedBase(git, snapshot, remote, branch, base);
   }
@@ -144,7 +181,11 @@ export async function submitBranch(
  * The order is the point. A pull request can only target a branch GitHub already has, so
  * submitting the top of an unsubmitted stack on its own failed with GitHub's "Base ref must
  * be a branch", and the stack had to be submitted one layer at a time from the bottom. A
- * failure stops the walk: the layers above would target the one that just failed.
+ * failure stops the walk: the layers above would target the one that just failed. So does a
+ * layer whose pull request is closed, because the layers above it target that branch.
+ *
+ * `besideClosed` never reaches a layer. It is a choice about one branch, which
+ * **Submit as new pull request** makes.
  */
 export async function submitStack(
   git: GitRunner,
@@ -152,11 +193,33 @@ export async function submitStack(
   branch: string,
   options: SubmitOptions = {}
 ): Promise<SubmitOutcome[]> {
+  const layerOptions = { ...options, besideClosed: false };
   const outcomes: SubmitOutcome[] = [];
   for (const layer of stackBranchesUpTo(snapshot, branch)) {
-    outcomes.push(await submitBranch(git, snapshot, layer, options));
+    try {
+      outcomes.push(await submitBranch(git, snapshot, layer, layerOptions));
+    } catch (error: unknown) {
+      if (!(error instanceof ClosedPullRequestError)) {
+        throw error;
+      }
+      throw new ClosedPullRequestError(
+        layer,
+        error.number,
+        outcomes,
+        outcomes.length
+          ? `Submit stack submitted only ${joinNames(outcomes.map(outcome => outcome.branch))}`
+          : "Submit stack pushed nothing"
+      );
+    }
   }
   return outcomes;
+}
+
+/** "a", "a and b", or "a, b and c". */
+function joinNames(names: string[]): string {
+  return names.length < 2
+    ? names.join("")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
 /** The branches `submitStack` submits, bottom first, ending with `branch`. */
@@ -333,37 +396,56 @@ type ExistingPullRequest = {
 };
 
 /**
- * Find the open pull request for `branch`, if any.
+ * The pull requests named after `branch`, as the two facts Submit acts on.
  *
- * Only open ones count. An edit must not reopen a merged or closed pull request: a submit of a
- * branch whose pull request merged is a new round of work, and it belongs in a new pull request,
- * which is also what `gh pr create` does on its own.
+ * `open` is the pull request Submit updates. `closed` is the number of the newest pull request
+ * when no open one exists and the newest was closed without merging, which Submit refuses to
+ * replace on its own. A merged newest one leaves both null: a submit of a branch whose pull
+ * request merged is a new round of work, and it belongs in a new pull request.
+ *
+ * One `gh pr list` of every state answers both, so the closed check adds no request.
  */
-async function findPullRequest(
+async function findPullRequests(
   git: GitRunner,
   branch: string
-): Promise<ExistingPullRequest | null> {
+): Promise<{ open: ExistingPullRequest | null; closed: number | null }> {
   const output = await runGh(git, [
     "pr",
     "list",
     "--head",
     branch,
     "--state",
-    "open",
+    "all",
     "--json",
-    "number,url,isDraft,baseRefName",
+    "number,url,isDraft,baseRefName,state",
   ]);
-  const entries: unknown = JSON.parse(output || "[]");
-  if (!Array.isArray(entries) || !entries.length) {
-    return null;
+  const entries = asArray(JSON.parse(output || "[]")).flatMap(entry => {
+    const record = asRecord(entry);
+    return record ? [record] : [];
+  });
+  const numberOf = (entry: Record<string, unknown>) =>
+    typeof entry.number === "number" ? entry.number : 0;
+  const open = entries.find(entry => entry.state === "OPEN");
+  if (open) {
+    return {
+      open: {
+        number: numberOf(open),
+        url: typeof open.url === "string" ? open.url : null,
+        isDraft: open.isDraft === true,
+        baseRefName:
+          typeof open.baseRefName === "string" ? open.baseRefName : null,
+      },
+      closed: null,
+    };
   }
-  const first = entries[0] as Record<string, unknown>;
+  // The highest number is the newest, whatever order `gh` lists them in.
+  const newest = entries.reduce<Record<string, unknown> | null>(
+    (best, entry) => (best && numberOf(best) >= numberOf(entry) ? best : entry),
+    null
+  );
   return {
-    number: typeof first.number === "number" ? first.number : 0,
-    url: typeof first.url === "string" ? first.url : null,
-    isDraft: first.isDraft === true,
-    baseRefName:
-      typeof first.baseRefName === "string" ? first.baseRefName : null,
+    open: null,
+    closed: newest?.state === "CLOSED" ? numberOf(newest) : null,
   };
 }
 

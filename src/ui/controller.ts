@@ -484,6 +484,7 @@ const ACTIONS: Record<string, ActionHandler> = {
     const { value, log } = await controller.logged(`Submit ${branch}`, () =>
       controller.repository.submit(branch, {
         draftByDefault: readFlag(payload, "draftByDefault"),
+        besideClosed: readFlag(payload, "besideClosed"),
       })
     );
     // The push changes what the branch's sync badge should say, so the caller gets

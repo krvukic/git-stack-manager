@@ -239,7 +239,7 @@ export function pullRequestBadge(
  *
  * Painted with the sync badges' own colours, since it stands where one of them would: green
  * for in sync, amber for something to push, blue for a pending link, red where GitHub has
- * commits that this checkout does not.
+ * commits that this checkout does not. A closed pull request is red too, as its own badge is.
  */
 export function stackStatusBadge(
   status: UIStackStatus | null
@@ -254,6 +254,7 @@ export function stackStatusBadge(
     unlinked: "ahead",
     remote: "diverged",
     both: "diverged",
+    closed: "diverged",
   };
   return {
     variant: variants[status.state],

@@ -154,9 +154,9 @@ test("submitting a branch with no pull request opens one from the commit message
     "--head",
     "feature-a",
     "--state",
-    "open",
+    "all",
     "--json",
-    "number,url,isDraft,baseRefName",
+    "number,url,isDraft,baseRefName,state",
   ]);
   const create = calls[1].args;
   assert.equal(create[1], "create");
@@ -180,7 +180,7 @@ test("a message-only amend still reaches the pull request", async t => {
   // branch but leaves the pull request's title and body stale, so submit must write them.
   const { repo, logPath, repository } = scratchRepository(t, {
     prListOutput:
-      '[{"number":42,"url":"https://github.com/example/example/pull/42","baseRefName":"main"}]',
+      '[{"number":42,"url":"https://github.com/example/example/pull/42","baseRefName":"main","state":"OPEN"}]',
   });
 
   await repository.submit("feature-a");
@@ -355,9 +355,9 @@ test("a base that is current but rewritten out from under the branch still warns
   const { repo, repository } = scratchRepository(t, {
     prListOutput: {
       "feature-a":
-        '[{"number":1,"url":"https://example.com/1","baseRefName":"main"}]',
+        '[{"number":1,"url":"https://example.com/1","baseRefName":"main","state":"OPEN"}]',
       "feature-b":
-        '[{"number":2,"url":"https://example.com/2","baseRefName":"feature-a"}]',
+        '[{"number":2,"url":"https://example.com/2","baseRefName":"feature-a","state":"OPEN"}]',
     },
   });
   await repository.submit("feature-a");
@@ -448,7 +448,7 @@ test("the push refuses to clobber a commit this checkout has never seen", async 
 test("a commit with no body clears the pull request body rather than leaving it stale", async t => {
   const { repo, logPath, repository } = scratchRepository(t, {
     prListOutput:
-      '[{"number":9,"url":"https://github.com/example/example/pull/9","baseRefName":"main"}]',
+      '[{"number":9,"url":"https://github.com/example/example/pull/9","baseRefName":"main","state":"OPEN"}]',
   });
   run(repo, "git", ["switch", "-q", "feature-a"]);
   run(repo, "git", [
@@ -579,6 +579,7 @@ function openPullRequest(isDraft) {
       url: "https://github.com/example/example/pull/42",
       isDraft,
       baseRefName: "main",
+      state: "OPEN",
     },
   ]);
 }
@@ -672,6 +673,133 @@ test("submitting a stack applies each branch's own choice", async t => {
     createCalls(logPath).map(args => args.includes("--draft")),
     [true, false]
   );
+});
+
+/**
+ * A pull request someone closed on GitHub, which Submit leaves closed.
+ *
+ * `gh pr create` checks only for an open pull request on the branch, so without the refusal a
+ * submit would force-push the branch and open a second pull request beside the closed one.
+ */
+
+/**
+ * `gh pr list --state all` output, one entry per `[number, state]`.
+ *
+ * @param {Array<[number, string]>} pullRequests
+ */
+function pullRequestsInStates(pullRequests) {
+  return JSON.stringify(
+    pullRequests.map(([number, state]) => ({
+      number,
+      url: `https://github.com/example/example/pull/${number}`,
+      isDraft: false,
+      baseRefName: "main",
+      state,
+    }))
+  );
+}
+
+test("a branch whose newest pull request is closed is refused before the push", async t => {
+  const { origin, logPath, repository } = scratchRepository(t, {
+    prListOutput: pullRequestsInStates([[12, "CLOSED"]]),
+  });
+  await assert.rejects(
+    repository.submit("feature-a"),
+    /Pull request #12 for feature-a is closed, so Submit pushed nothing\. Reopen it on GitHub, or right-click feature-a's commit and choose Submit as new pull request\.$/
+  );
+  assert.equal(
+    run(origin, "git", ["branch", "--list", "feature-a"]),
+    "",
+    "nothing was pushed, which keeps the branch on GitHub as it was when it closed"
+  );
+  assert.deepEqual(
+    ghCalls(logPath).map(call => call.args.slice(0, 2)),
+    [["pr", "list"]],
+    "no pull request was opened or edited"
+  );
+});
+
+test("Submit as new pull request opens one beside the closed one", async t => {
+  const { repo, logPath, repository } = scratchRepository(t, {
+    prListOutput: pullRequestsInStates([[12, "CLOSED"]]),
+  });
+  const outcome = await repository.submit("feature-a", { besideClosed: true });
+  assert.equal(outcome.created, true);
+  assert.equal(outcome.number, 7);
+  assert.equal(shaOf(repo, "origin/feature-a"), shaOf(repo, "feature-a"));
+  assert.equal(createCalls(logPath).length, 1);
+});
+
+test("only the newest pull request counts: an open one is updated, and a merged one is replaced", async t => {
+  // An open pull request is the one to update, however many closed ones carry the name.
+  const beside = scratchRepository(t, {
+    prListOutput: pullRequestsInStates([
+      [15, "CLOSED"],
+      [10, "OPEN"],
+    ]),
+  });
+  const updated = await beside.repository.submit("feature-a");
+  assert.equal(updated.created, false);
+  assert.equal(updated.number, 10);
+
+  // A merge after the close is a new round of work, which gets a new pull request.
+  const merged = scratchRepository(t, {
+    prListOutput: pullRequestsInStates([
+      [12, "CLOSED"],
+      [20, "MERGED"],
+    ]),
+  });
+  const opened = await merged.repository.submit("feature-a");
+  assert.equal(opened.created, true);
+  assert.equal(createCalls(merged.logPath).length, 1);
+});
+
+test("Submit stack submits the branches below a closed pull request and stops there", async t => {
+  const { repo, origin, logPath, repository } = scratchRepository(t, {
+    prListOutput: {
+      "feature-a": "[]",
+      "feature-b": pullRequestsInStates([[12, "CLOSED"]]),
+    },
+  });
+  const controller = new Controller(repository);
+  const result = await controller.handle("submitStack", {
+    branch: "feature-b",
+    // A choice about one branch, which no layer of a stack inherits.
+    besideClosed: true,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(
+    result.error,
+    "Pull request #12 for feature-b is closed, so Submit stack submitted only feature-a. Reopen it on GitHub, or right-click feature-b's commit and choose Submit as new pull request."
+  );
+  assert.equal(shaOf(repo, "origin/feature-a"), shaOf(repo, "feature-a"));
+  assert.equal(run(origin, "git", ["branch", "--list", "feature-b"]), "");
+  assert.deepEqual(
+    createCalls(logPath).map(args => args[3]),
+    ["feature-a"]
+  );
+
+  // feature-a's pull request opened a moment ago, so the search index does not list it yet.
+  // Submit stack still hands the pull request it opened to the badges.
+  const refreshed = await controller.handle("pullRequests", { force: true });
+  assert.equal(refreshed.ok, true);
+  assert.equal(
+    pullRequestOn(/** @type {RenderModel} */ (refreshed.data), "feature-a")
+      .number,
+    7
+  );
+});
+
+test("Submit stack pushes nothing when its bottom pull request is closed", async t => {
+  const { origin, logPath, repository } = scratchRepository(t, {
+    prListOutput: { "feature-a": pullRequestsInStates([[12, "CLOSED"]]) },
+  });
+  await assert.rejects(
+    repository.submitStack("feature-b"),
+    /Pull request #12 for feature-a is closed, so Submit stack pushed nothing\./
+  );
+  assert.equal(run(origin, "git", ["branch", "--list", "feature-*"]), "");
+  assert.deepEqual(createCalls(logPath), []);
 });
 
 test("base resolution walks past a commit that carries no branch", () => {

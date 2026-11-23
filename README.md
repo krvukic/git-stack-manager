@@ -178,8 +178,13 @@ Every one of these is conflict-free and leaves your working copy alone, except w
   Where the base would widen the diff anyway, the toast reports whether to submit the base too or
   rebase onto it. Submit refuses a new pull request onto a base that was never pushed, and pushes
   nothing, because GitHub has no branch to base it on.
+- **A closed pull request stays closed.** Submit refuses a branch whose newest pull request is
+  closed, and pushes nothing. Reopen the pull request on GitHub to keep using it, or choose
+  **Submit as new pull request** in the commit's right-click menu to open a new one beside it. A
+  merged pull request needs neither, because Submit opens a new one for the next round of work.
 - **Submit stack** submits every branch from the bottom of the stack up to the selected one, bottom
-  first, so each pull request has its base on GitHub by the time it opens.
+  first, so each pull request has its base on GitHub by the time it opens. It stops at a branch
+  whose pull request is closed, after submitting the branches below it.
 - **Draft pull request**, the toggle above Submit, sets whether Submit opens the branch's pull
   request as a draft. A branch with no choice of its own takes **New pull requests** in
   **Config**. The toggle is there only while the branch has no open pull request: Submit never
@@ -200,14 +205,14 @@ GitHub answers.
 
 - A branch whose pull request GitHub links carries its place on its pill, such as `2/3`. The
   place arrives in the same request that reads pull request status.
-- A stack of two branches or more carries one status for the whole stack, as a badge on its top
-  row and as a sentence above Submit in the commit panel. The branches in it show no sync badge
-  of their own. The status says which side moved and what to click: *in sync*, *not on GitHub*,
-  *to submit*, *GitHub is newer*, *both changed*, or *not linked*. A count of commits cannot tell
-  those apart, since a rebased branch is ahead and behind exactly as a branch that a teammate
-  pushed to is. The status compares three commits per branch instead: the local tip, the commit
-  the last fetch left on the remote-tracking ref, and the pull request's head on GitHub. It needs
-  no fetch.
+- A stack of two branches or more carries one status for the whole stack, as a badge on its top row
+  and as a sentence above Submit in the commit panel. The branches in it show no sync badge of their
+  own. The status says which side moved and what to click: *in sync*, *not on GitHub*, *to submit*,
+  *GitHub is newer*, *both changed*, *not linked*, or *pull request closed*. A count of commits
+  cannot tell those apart, since a rebased branch is ahead and behind exactly as a branch that a
+  teammate pushed to is. The status compares three commits per branch instead: the local tip, the
+  commit the last fetch left on the remote-tracking ref, and the pull request's head on GitHub. It
+  needs no fetch.
 - **Submit stack** pushes every branch up to the selected one, opens or updates each pull
   request, and then links them.
 - **Link stack**, in the right-click menu's `gh stack` section, links the stack's open pull
@@ -313,7 +318,7 @@ Every preference is in the **Config** drawer instead, where both hosts can set i
   and nothing else does.
 - Submit handles one branch per click and touches no other. Where the base branch is what widens the
   diff, Submit says so and leaves the fix to you. **Submit stack** covers the branches below, and
-  stops at the first one that fails.
+  stops at the first one that fails or has a closed pull request.
 
 ## Contributing
 

@@ -30,7 +30,7 @@ export type StackStatusLayer = {
 };
 
 export type StackState =
-  "in-sync" | "unpushed" | "local" | "remote" | "both" | "unlinked";
+  "in-sync" | "unpushed" | "local" | "remote" | "both" | "unlinked" | "closed";
 
 export type StackStatus = {
   state: StackState;
@@ -40,7 +40,7 @@ export type StackStatus = {
   sentence: string;
 };
 
-type LayerState = Exclude<StackState, "unlinked">;
+type LayerState = Exclude<StackState, "unlinked" | "closed">;
 
 function layerState(layer: StackStatusLayer): LayerState {
   const head =
@@ -94,13 +94,23 @@ function nameList(branches: string[]): string {
  * matters once every branch is in sync: a stack with changes to push gets linked by the
  * Submit stack that pushes them.
  *
- * When several states apply, the first of these is reported: nothing pushed, local changes,
- * GitHub newer, both changed. Local changes come first because Submit stack resolves the most.
+ * When several states apply, the first of these is reported: a closed pull request, nothing
+ * pushed, local changes, GitHub newer, both changed. A closed pull request comes first because
+ * Submit stack stops at it, which makes every later sentence's advice wrong for the branches
+ * above it. Local changes come next because Submit stack resolves the most.
  */
 export function stackStatus(
   layers: StackStatusLayer[],
   linked: boolean
 ): StackStatus {
+  const closed = layers.find(layer => layer.pullRequest?.state === "CLOSED");
+  if (closed?.pullRequest) {
+    return {
+      state: "closed",
+      label: "pull request closed",
+      sentence: `${closed.branch}'s pull request #${closed.pullRequest.number} is closed, so Submit stack stops there. Reopen it on GitHub, or right-click ${closed.branch}'s commit and choose Submit as new pull request.`,
+    };
+  }
   const states = layers.map(layer => ({
     branch: layer.branch,
     state: layerState(layer),

@@ -279,9 +279,12 @@ export function useCommitActions(
    * The branch is picked here rather than passed in, so the menu entry and the panel button
    * cannot disagree about which pill Submit acts on. A commit with no branch is not
    * submittable and neither of them offers it, so there is nothing to report.
+   *
+   * `besideClosed` is Submit as new pull request, which opens one beside a closed pull request
+   * that Submit otherwise refuses to replace.
    */
   const submitCommit = useCallback(
-    async (commit: UICommit) => {
+    async (commit: UICommit, besideClosed = false) => {
       const branch = submitTarget(commit)?.name;
       if (!branch) {
         return;
@@ -296,7 +299,7 @@ export function useCommitActions(
           model: RenderModel;
         }>(
           "submit",
-          { branch, draftByDefault },
+          { branch, draftByDefault, besideClosed },
           {
             modelFrom: data => data.model,
             onSuccess: data => {

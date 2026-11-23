@@ -18,6 +18,8 @@ import {
   splitMessage,
   stackBaseSha,
   stackBranchesUpTo,
+  stackStop,
+  submitMode,
   submitTarget,
   truncate,
 } from "../src/webview/model/commits.mts";
@@ -337,5 +339,75 @@ test("submit stack lists the branches below, bottom first, past a branchless com
     stackBranchesUpTo(model, low),
     ["lower"],
     "a bottom layer has nothing below it, so the menu offers no stack submit"
+  );
+});
+
+/**
+ * @param {string | null} state
+ * @returns {UIBranch}
+ */
+function branchWithPullRequest(state) {
+  return /** @type {UIBranch} */ ({
+    name: "feature",
+    sync: null,
+    pullRequest: state === null ? null : { number: 12, state },
+  });
+}
+
+test("Submit updates an open pull request, refuses a closed one, and opens one beside a merged one", () => {
+  assert.deepEqual(submitMode(branchWithPullRequest("OPEN")), {
+    kind: "update",
+    number: 12,
+  });
+  assert.deepEqual(submitMode(branchWithPullRequest("CLOSED")), {
+    kind: "closed",
+    number: 12,
+  });
+  assert.deepEqual(submitMode(branchWithPullRequest("MERGED")), {
+    kind: "create",
+  });
+  assert.deepEqual(submitMode(branchWithPullRequest(null)), {
+    kind: "create",
+  });
+});
+
+test("Submit stack stops at the lowest layer whose pull request is closed", () => {
+  const rows = [
+    commitRow("top", ["mid"], ["upper"]),
+    commitRow("mid", ["low"], ["middle"]),
+    commitRow("low", ["tt"], ["lower"]),
+  ];
+  const model = /** @type {RenderModel} */ ({
+    rows: [...rows, { type: "trunk-tip", sha: "tt" }],
+  });
+  /**
+   * @param {number} index
+   * @param {number} number
+   */
+  const close = (index, number) => {
+    const detail = present(
+      rows[index]?.commit.branchDetails?.[0],
+      "the row's branch"
+    );
+    detail.pullRequest = /** @type {UIBranch["pullRequest"]} */ ({
+      number,
+      state: "CLOSED",
+    });
+  };
+  const layers = ["lower", "middle", "upper"];
+  assert.equal(stackStop(model, layers), null);
+
+  close(1, 12);
+  assert.deepEqual(stackStop(model, layers), {
+    branch: "middle",
+    number: 12,
+    index: 1,
+  });
+
+  close(2, 9);
+  assert.deepEqual(
+    stackStop(model, layers),
+    { branch: "lower", number: 9, index: 0 },
+    "the walk goes bottom first, so the lowest closed layer is where it stops"
   );
 });

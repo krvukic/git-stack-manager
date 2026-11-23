@@ -168,6 +168,65 @@ export function submitTarget(commit: UICommit): UIBranch | null {
 }
 
 /**
+ * What Submit does for `branch`: update its open pull request, open one, or refuse because the
+ * newest one is closed.
+ *
+ * A merged pull request counts as none, since a new round of work gets a new pull request. A
+ * closed one stays closed until someone reopens it on GitHub or chooses Submit as new pull
+ * request, which `ClosedPullRequestError` in `#github/submit` explains.
+ */
+export type SubmitMode =
+  | { kind: "create" }
+  | { kind: "update"; number: number }
+  | { kind: "closed"; number: number };
+
+export function submitMode(branch: UIBranch): SubmitMode {
+  const pullRequest = branch.pullRequest;
+  if (pullRequest?.state === "OPEN") {
+    return { kind: "update", number: pullRequest.number };
+  }
+  if (pullRequest?.state === "CLOSED") {
+    return { kind: "closed", number: pullRequest.number };
+  }
+  return { kind: "create" };
+}
+
+/** Where Submit stack stops: a layer whose pull request is closed. */
+export type StackStop = {
+  branch: string;
+  number: number;
+  /** How many layers below it Submit stack submits first. */
+  index: number;
+};
+
+/**
+ * The first of `layers` whose pull request is closed, or null when Submit stack reaches the top.
+ */
+export function stackStop(
+  model: RenderModel,
+  layers: string[]
+): StackStop | null {
+  const closed = new Map<string, number>();
+  for (const row of model.rows) {
+    if (row.type !== "commit") {
+      continue;
+    }
+    for (const detail of row.commit.branchDetails ?? []) {
+      const mode = submitMode(detail);
+      if (mode.kind === "closed") {
+        closed.set(detail.name, mode.number);
+      }
+    }
+  }
+  const index = layers.findIndex(name => closed.has(name));
+  const branch = layers[index];
+  const number = branch === undefined ? undefined : closed.get(branch);
+  return branch === undefined || number === undefined
+    ? null
+    : { branch, number, index };
+}
+
+/**
  * The branches Submit stack pushes for `commit`, bottom first and ending with its own; a
  * single entry means nothing sits below it. Mirrors `baseBranchFor` on the host: walk first
  * parents through the local commits, and take the first branch on each commit that has one.

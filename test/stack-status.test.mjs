@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { stackStatus } from "#github/stackStatus";
+import { present } from "./present.mjs";
 
 /** @typedef {import("#github/stackStatus").StackStatusLayer} StackStatusLayer */
 
@@ -182,4 +183,26 @@ test("without a pull request, the counts from the last fetch are all there is", 
   const base = layer("a", { local: "a1", fetched: "a1" });
   assert.equal(stackStatus([base, ahead], false).state, "local");
   assert.equal(stackStatus([base, diverged], false).state, "both");
+});
+
+test("a closed pull request is reported before the rest, because Submit stack stops at it", () => {
+  // b moved here too, which on its own makes the status read "Submit stack pushes them".
+  // Submit stack refuses b, so that sentence would send the reader to a button that does nothing
+  // for it.
+  const moved = layer("b", { local: "b2", fetched: "b1", ahead: 1 });
+  const closed = {
+    ...moved,
+    pullRequest: {
+      ...present(layer("x", IN_SYNC).pullRequest, "a pull request"),
+      number: 12,
+      state: "CLOSED",
+    },
+  };
+  const status = stackStatus([layer("a", IN_SYNC), closed], false);
+  assert.deepEqual(status, {
+    state: "closed",
+    label: "pull request closed",
+    sentence:
+      "b's pull request #12 is closed, so Submit stack stops there. Reopen it on GitHub, or right-click b's commit and choose Submit as new pull request.",
+  });
 });
