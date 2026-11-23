@@ -27,8 +27,12 @@
      * TypeScript checks the whole file even when only a type is used from it — so
      * without the Node types this reports errors in code the bundle never contains.
      * Nothing follows into the build: every such import is `import type`, which erases.
+     *
+     * `vite/client` declares the stylesheet that `main.tsx` imports for its side effect.
+     * TypeScript 6 checks that such an import resolves, and a `.css` file has no types of its
+     * own for it to find.
      */
-    "types": ["react", "react-dom", "node"],
+    "types": ["react", "react-dom", "node", "vite/client"],
     /**
      * The shared `#git/*` specifiers, pointed at sources rather than at `out/`.
      *

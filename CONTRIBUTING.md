@@ -111,8 +111,8 @@ repository. It is not part of `just check`, so re-record it when a change alters
 
 `bun outdated` lists these two on purpose:
 
-- **`@types/vscode` 1.106**, against 1.125 released. The types *are* the floor in `engines.vscode`.
+- **`@types/vscode` 1.106**, against 1.146 released. The types *are* the floor in `engines.vscode`.
   Raising them lets code call APIs that VS Code 1.106 does not have, and nothing fails until a user
   on 1.106 runs it.
-- **`typescript` 5.9**, against 7.0 released. `typescript-eslint` 8 peers on `typescript <6.1`, and
+- **`typescript` 6.0**, against 7.0 released. `typescript-eslint` 8 peers on `typescript <6.1`, and
   no release supports 7 yet. Upgrading silently drops every type-aware lint rule.

@@ -3,6 +3,17 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-11-22
+
+### Changed
+
+- Every dependency is at its latest release, and `bun.lock` is regenerated from scratch. Two
+  stay behind on purpose: `@types/vscode`, which is the VS Code floor, and TypeScript, which
+  moves to 6.0 because `typescript-eslint` supports nothing newer. TypeScript 6 checks that a
+  side-effect import resolves, so the webview takes its stylesheet's types from `vite/client`.
+- Thirteen snapshots are re-recorded for the newer Chromium, which draws a text box's resize
+  grip ten pixels differently.
+
 ## [1.6.0] - 2026-11-22
 
 ### Added
