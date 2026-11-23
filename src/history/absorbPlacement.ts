@@ -410,3 +410,61 @@ export function applyFixups(
   }
   return contents;
 }
+
+/**
+ * Carry the change from `before` to `after` into `descendant`, a later commit's copy of the same
+ * file. Returns null when the change and the later commit edit the same lines.
+ *
+ * This is a line-level three-way merge with `before` as the base. Absorb rewrites a commit and
+ * rebuilds everything above it; a commit whose content is not recomputed keeps its old copy of
+ * the file, and so undoes the absorbed change one commit up.
+ *
+ * The merge declines less than git's own, which also refuses edits that merely sit next to each
+ * other. Neighbouring edits have one order, the one their positions give: a line that a later
+ * commit adds under the absorbed one stays under the fixed line. Only overlapping edits, and two
+ * insertions at the same place, leave no way to know what the result should be.
+ */
+export function carryChange(
+  before: string[],
+  after: string[],
+  descendant: string[],
+  diffLines: (before: string[], after: string[]) => Hunk[]
+): string[] | null {
+  const absorbed = diffLines(before, after);
+  const later = diffLines(before, descendant);
+  if (absorbed.some(hunk => later.some(other => clash(hunk, other)))) {
+    return null;
+  }
+  // An insertion sorts before a replacement that starts at the same line, since the inserted lines
+  // go above the replaced ones.
+  const hunks = [...absorbed, ...later].sort(
+    (first, second) =>
+      first.oldStart - second.oldStart ||
+      first.oldEnd - first.oldStart - (second.oldEnd - second.oldStart)
+  );
+  const lines: string[] = [];
+  let position = 0;
+  for (const hunk of hunks) {
+    lines.push(...before.slice(position, hunk.oldStart), ...hunk.newLines);
+    position = hunk.oldEnd;
+  }
+  lines.push(...before.slice(position));
+  return lines;
+}
+
+/** Whether two hunks against the same base edit a common line, or insert at the same place. */
+function clash(first: Hunk, second: Hunk): boolean {
+  const firstInserts = first.oldStart === first.oldEnd;
+  const secondInserts = second.oldStart === second.oldEnd;
+  if (firstInserts && secondInserts) {
+    return first.oldStart === second.oldStart;
+  }
+  // An insertion clashes only strictly inside the other range; at either end it has one order.
+  if (firstInserts || secondInserts) {
+    const [insertion, range] = firstInserts ? [first, second] : [second, first];
+    return (
+      range.oldStart < insertion.oldStart && insertion.oldStart < range.oldEnd
+    );
+  }
+  return first.oldStart < second.oldEnd && second.oldStart < first.oldEnd;
+}

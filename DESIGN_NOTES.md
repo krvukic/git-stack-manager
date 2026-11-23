@@ -21,6 +21,14 @@ never places an added, deleted, or renamed file, a binary, or a symbolic link, b
 has line ownership in a usable form. Absorb walks down from HEAD, so a stack branch has to be
 checked out.
 
+Absorb carries each change through **every commit above** the one it lands in, up to the top of the
+stack, including commits above HEAD and on branches that fork off the stack. The rebuild recreates
+those commits on their rewritten parents, and one that kept its old tree would put the absorbed
+lines back, undoing the change one commit up. Their new copies come from a line-level three-way
+merge (`carryChange`). Absorb stays free of conflicts all the same: it declines a file whose change
+overlaps a later commit's edit before it writes anything, and leaves that change in the working
+copy with the reason.
+
 **Commit and amend-into** (`src/history/commit.ts`) take an explicit path list, because the tree's
 checkboxes exist to choose what goes in. Two of git's behaviours shape it. A pathspec commit ignores
 whatever else is staged and leaves it staged, which lets the commit run against a dirty index

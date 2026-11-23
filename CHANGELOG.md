@@ -3,6 +3,15 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2026-11-23
+
+### Fixed
+
+- Absorb carries a change through every commit above the one it lands in, including commits above
+  the checked-out one and on branches that fork off the stack. Those commits kept their old copy
+  of the file before, so the next commit up undid the absorbed change. A change that a later
+  commit also edits stays in the working copy, and the preview says which commit.
+
 ## [1.8.1] - 2026-11-23
 
 ### Changed

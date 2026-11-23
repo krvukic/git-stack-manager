@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { run } from "../scripts/git-fixture.mjs";
+import { present } from "./present.mjs";
 import { fileAt, shaOf, statusOf, trunkRepository } from "./repoFixture.mjs";
 
 /**
@@ -171,4 +172,75 @@ test("planning reports the placement without changing anything", async t => {
   );
   assert.equal(shaOf(repo, "layer-b"), before, "a plan is a dry run");
   assert.match(statusOf(repo), /f\.txt/);
+});
+
+/**
+ * A third branch on the stack, so that a commit sits above the checked-out one.
+ *
+ * @param {import("node:test").TestContext} t
+ */
+function buildThreeLayers(t) {
+  const fixture = buildFixture(t);
+  const { repo, write } = fixture;
+  run(repo, "git", ["switch", "-qc", "layer-c"]);
+  write("base\nA\nB\nC\n");
+  run(repo, "git", ["commit", "-qam", "add C"]);
+  return fixture;
+}
+
+test("Absorb carries a change through every commit above the checked-out one", async t => {
+  // Checked out mid-stack, so layer-c sits above HEAD. Recreated with its old tree, it would put
+  // "A" back and undo the fix one commit up.
+  const { repo, write, repository } = buildThreeLayers(t);
+  run(repo, "git", ["switch", "-q", "layer-b"]);
+  write("base\nA-fixed\nB\n");
+
+  const result = await repository.absorb();
+  assert.equal(result.appliedHunks, 1);
+  assert.equal(contentAt(repo, "layer-a"), "base\nA-fixed");
+  assert.equal(contentAt(repo, "layer-b"), "base\nA-fixed\nB");
+  assert.equal(contentAt(repo, "layer-c"), "base\nA-fixed\nB\nC");
+  // Still one stack: each branch sits on the rewritten one below it.
+  assert.equal(shaOf(repo, "layer-c^"), shaOf(repo, "layer-b"));
+  assert.equal(shaOf(repo, "layer-b^"), shaOf(repo, "layer-a"));
+  assert.equal(statusOf(repo), "");
+});
+
+test("a branch that forks off the stack below HEAD gets the absorbed change too", async t => {
+  const { repo, write, repository } = buildFixture(t);
+  // side forks off layer-a and adds a line right under the one absorb fixes.
+  run(repo, "git", ["switch", "-qc", "side", "layer-a"]);
+  write("base\nA\nS\n");
+  run(repo, "git", ["commit", "-qam", "add S"]);
+  run(repo, "git", ["switch", "-q", "layer-b"]);
+  write("base\nA-fixed\nB\n");
+
+  await repository.absorb();
+  assert.equal(contentAt(repo, "side"), "base\nA-fixed\nS");
+  assert.equal(shaOf(repo, "side^"), shaOf(repo, "layer-a"));
+  assert.equal(contentAt(repo, "layer-b"), "base\nA-fixed\nB");
+});
+
+test("a change that a commit above HEAD also edits stays in the working copy", async t => {
+  const { repo, write, repository } = buildFixture(t);
+  run(repo, "git", ["switch", "-qc", "layer-c"]);
+  write("base\nA-from-c\nB\n");
+  run(repo, "git", ["commit", "-qam", "rework A"]);
+  run(repo, "git", ["switch", "-q", "layer-b"]);
+  const before = ["layer-a", "layer-b", "layer-c"].map(ref => shaOf(repo, ref));
+  write("base\nA-fixed\nB\n");
+
+  const result = await repository.absorb();
+  assert.equal(result.appliedHunks, 0);
+  assert.equal(result.skippedHunks, 1);
+  assert.match(
+    present(result.outcomes[0]?.skipped[0], "the skipped hunk").reason,
+    /^"rework A", further up the stack, changes the same lines/
+  );
+  assert.deepEqual(
+    ["layer-a", "layer-b", "layer-c"].map(ref => shaOf(repo, ref)),
+    before,
+    "no commit was rewritten"
+  );
+  assert.equal(readFileSync(join(repo, "f.txt"), "utf8"), "base\nA-fixed\nB\n");
 });

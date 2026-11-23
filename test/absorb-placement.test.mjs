@@ -19,7 +19,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { diffLines } from "#git/lineDiff";
-import { analyse, applyFixups, buildOwnerMap } from "#history/absorbPlacement";
+import {
+  analyse,
+  applyFixups,
+  buildOwnerMap,
+  carryChange,
+} from "#history/absorbPlacement";
 import { present } from "./present.mjs";
 
 /** "abc" -> ["a","b","c"]: one character per line, as the Python table does. */
@@ -202,4 +207,37 @@ test("declined hunks are reported with a reason rather than applied silently", (
     present(rejected[0], "the rejected hunk").reason,
     /deleted lines inside this range/
   );
+});
+
+/**
+ * Carrying an absorbed change into a commit above the stack, which holds its own copy of the file.
+ * Each character is a line: `before` and `after` are the fork commit's copy either side of the
+ * absorb, and the third argument is the later commit's copy.
+ *
+ * @param {string} before
+ * @param {string} after
+ * @param {string} later
+ */
+function carry(before, after, later) {
+  const merged = carryChange(
+    lines(before),
+    lines(after),
+    lines(later),
+    diffLines
+  );
+  return merged === null ? null : text(merged);
+}
+
+test("the merge keeps the later commit's own edits, even right beside the carried change", () => {
+  // The later commit added Z at the end, then W directly under the line that absorb fixes.
+  assert.equal(carry("aXb", "aYb", "aXbZ"), "aYbZ");
+  assert.equal(carry("aXb", "aYb", "aXWb"), "aYWb");
+  // An insertion directly above the fixed line stays above it.
+  assert.equal(carry("aXb", "aYb", "aWXb"), "aWYb");
+});
+
+test("the merge declines a change to a line that a later commit also edits", () => {
+  assert.equal(carry("aXb", "aYb", "aQb"), null);
+  // Two insertions at one place have no order.
+  assert.equal(carry("ab", "aYb", "aQb"), null);
 });

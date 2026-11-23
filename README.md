@@ -149,7 +149,9 @@ Every one of these is conflict-free and leaves your working copy alone, except w
 - **Amend** a commit's message from the sidebar, at any depth in the stack.
 - **Amend working changes** into HEAD (`git add -A && git commit --amend --no-edit`).
 - **Absorb** folds each uncommitted change into the commit whose lines it touches, previewing the
-  placement first. Anything it cannot place confidently stays put.
+  placement first. It carries the change through every commit above that one, so no later commit
+  undoes it. Anything it cannot place confidently stays put, and so does a change that a later
+  commit also edits.
 - **Discard** throws one file's uncommitted change away, from the ✕ on its row — the control
   Source Control puts in the same place. A tracked file goes back to the version in the commit you
   are on, and a file no commit holds yet is deleted; the card names which of the two will happen.

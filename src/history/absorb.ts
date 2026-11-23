@@ -6,7 +6,8 @@
  *
  *   1. Read each changed file's content at every stack commit, in one
  *      `cat-file --batch` rather than a `git show` per revision.
- *   2. Run the attribution, then materialise each commit's new content.
+ *   2. Run the attribution, then materialise each commit's new content, including
+ *      every commit above the stack that the rebuild moves.
  *   3. Rebuild the stack with `commit-tree` and move the refs atomically.
  *
  * Step 3 cannot conflict, which is the whole point. Because the new content is
@@ -14,7 +15,9 @@
  * pure object-graph operation — no checkout, no merge, no rebase. Ports that emit
  * `fixup!` commits and defer to `rebase --autosquash` give this up: a
  * misattributed hunk becomes a rebase conflict instead of a wrong-but-clean
- * result the user can inspect and undo.
+ * result the user can inspect and undo. The one merge absorb does, carrying a
+ * change up through commits above the stack, runs in step 2, so absorb declines
+ * a file it cannot carry cleanly before it writes anything.
  *
  * Nothing writes the working copy. Hunks that absorb could not place stay exactly
  * where they are, and the tally reports them, so a re-run is safe.
@@ -26,8 +29,8 @@ import {
   analyse,
   applyFixups,
   buildOwnerMap,
+  carryChange,
   Fixup,
-  OwnerMap,
 } from "#history/absorbPlacement";
 import {
   fileMode,
@@ -103,9 +106,10 @@ export async function planAbsorb(
   const contentByCommit = new Map<string, Map<string, string>>();
   const outcomes: FileOutcome[] = [];
   const hunksPerCommit = new Map<string, number>();
+  const above = commitsAbove(snapshot, stack);
 
   for (const path of paths) {
-    const file = await readFileHistory(git, stack, path);
+    const file = await readFileHistory(git, stack, above, path);
     if (!file) {
       continue;
     } // untouched by the stack, or binary
@@ -118,16 +122,41 @@ export async function planAbsorb(
 
     const hunks = diffLines(file.revisions.at(-1)!, working);
     const { fixups, rejected } = analyse(map, hunks);
-    outcomes.push({
-      path,
-      applied: fixups.length,
-      skipped: rejected.map(entry => ({ reason: entry.reason })),
-    });
+    const skipped = rejected.map(entry => ({ reason: entry.reason }));
     if (!fixups.length) {
+      outcomes.push({ path, applied: 0, skipped });
       continue;
     }
 
-    recordContents(contentByCommit, hunksPerCommit, file, map, fixups, path);
+    const contents = applyFixups(map, fixups, file.revisions.length - 1);
+    const carried = carryAbove(file, contents, above);
+    if (!(carried instanceof Map)) {
+      // Every placed hunk stays in the working copy with the reason, as an unplaced one does.
+      const placed = hunks.length - rejected.length;
+      outcomes.push({
+        path,
+        applied: 0,
+        skipped: [
+          ...skipped,
+          ...Array.from({ length: placed }, () => ({ reason: carried.reason })),
+        ],
+      });
+      continue;
+    }
+    outcomes.push({ path, applied: fixups.length, skipped });
+    recordContents(
+      contentByCommit,
+      hunksPerCommit,
+      file,
+      contents,
+      fixups,
+      path
+    );
+    for (const [sha, content] of carried) {
+      const perPath = contentByCommit.get(sha) ?? new Map<string, string>();
+      perPath.set(path, content);
+      contentByCommit.set(sha, perPath);
+    }
   }
 
   const affected = stack
@@ -145,11 +174,10 @@ function recordContents(
   contentByCommit: Map<string, Map<string, string>>,
   hunksPerCommit: Map<string, number>,
   file: FileHistory,
-  map: OwnerMap,
+  contents: string[][],
   fixups: Fixup[],
   path: string
 ): void {
-  const contents = applyFixups(map, fixups, file.revisions.length - 1);
   // Index 0 is the immutable base; only stack commits are rewritten.
   file.owners.forEach((sha, index) => {
     const owner = index + 1;
@@ -173,6 +201,100 @@ function recordContents(
       contentByCommit.set(descendant, perPath);
     }
   });
+}
+
+/** A commit above the stack, and the stack commit its first parents lead down to. */
+type CommitAbove = {
+  commit: RawCommit;
+  fork: string;
+};
+
+/**
+ * Every local commit outside the stack that `rebuildStack` moves when it rewrites the stack: the
+ * commits above HEAD, and those on branches that fork off the stack.
+ *
+ * `rebuildStack` recreates each of them on its rewritten parent, and keeps its old tree unless
+ * absorb hands it a new one. A kept old tree would put the absorbed lines back as they were, so the
+ * change would reach the commit it was absorbed into and be undone one commit up.
+ */
+function commitsAbove(snapshot: RawData, stack: RawCommit[]): CommitAbove[] {
+  const onStack = new Set(stack.map(commit => commit.sha));
+  const bySha = new Map(snapshot.commits.map(commit => [commit.sha, commit]));
+  // Memoised, so each commit's first parents are walked once however many branches share them.
+  const forkOf = new Map<string, string | null>();
+  const findFork = (start: RawCommit): string | null => {
+    const walked: string[] = [];
+    let fork: string | null = null;
+    for (let current: RawCommit | undefined = start; current;) {
+      if (onStack.has(current.sha)) {
+        fork = current.sha;
+        break;
+      }
+      const known = forkOf.get(current.sha);
+      if (known !== undefined) {
+        fork = known;
+        break;
+      }
+      walked.push(current.sha);
+      const parent: string | undefined = current.parents[0];
+      current = parent === undefined ? undefined : bySha.get(parent);
+    }
+    walked.forEach(sha => forkOf.set(sha, fork));
+    return fork;
+  };
+  return snapshot.commits.flatMap(commit => {
+    if (onStack.has(commit.sha)) {
+      return [];
+    }
+    const fork = findFork(commit);
+    return fork === null ? [] : [{ commit, fork }];
+  });
+}
+
+/**
+ * The new copy of one file for each commit above the stack, or why the absorbed change cannot
+ * reach one of them.
+ *
+ * `carryChange` merges the change made to each commit's fork commit into that commit's own copy of
+ * the file. A commit whose fork commit did not change gets no new copy.
+ */
+function carryAbove(
+  file: FileHistory,
+  contents: string[][],
+  above: CommitAbove[]
+): Map<string, string> | { reason: string } {
+  // Revision 0 is the base, so a stack commit's revision sits one past its position.
+  const revisionOf = new Map(file.owners.map((sha, index) => [sha, index + 1]));
+  const carried = new Map<string, string>();
+  for (const { commit, fork } of above) {
+    const revision = revisionOf.get(fork) ?? 0;
+    const before = file.revisions[revision] ?? [];
+    const after = contents[revision] ?? before;
+    if (sameLines(before, after)) {
+      continue;
+    }
+    const descendant = file.copiesAbove.get(commit.sha) ?? null;
+    if (descendant === null) {
+      return {
+        reason: `"${commit.subject}", further up the stack, deletes this file or makes it binary, so the change cannot carry through it`,
+      };
+    }
+    const merged = carryChange(before, after, descendant, diffLines);
+    if (!merged) {
+      return {
+        reason: `"${commit.subject}", further up the stack, changes the same lines, so the change cannot carry through it`,
+      };
+    }
+    carried.set(commit.sha, join(merged));
+  }
+  return carried;
+}
+
+function sameLines(first: string[], second: string[]): boolean {
+  return (
+    first.length === second.length &&
+    first.every((line, index) => line === second[index])
+  );
 }
 
 /** Apply a plan: rebuild the affected commits and move the refs. */
@@ -266,6 +388,8 @@ type FileHistory = {
   revisions: string[][];
   /** Stack commit shas, aligned with `revisions[1..]`. */
   owners: string[];
+  /** The file at each commit above the stack, by sha; null where it is absent or binary. */
+  copiesAbove: Map<string, string[] | null>;
 };
 
 /**
@@ -277,24 +401,41 @@ type FileHistory = {
 async function readFileHistory(
   git: GitRunner,
   stack: RawCommit[],
+  above: CommitAbove[],
   path: string
 ): Promise<FileHistory | null> {
   // The caller returns early on an empty stack, and the bottom commit's first parent
   // is the base the stack forked from. An empty spec resolves to nothing, so a root
   // commit yields a null blob and the file drops out rather than throwing.
   const baseSha = stack[0]?.parents[0] ?? "";
-  const specs = [baseSha, ...stack.map(commit => commit.sha)].map(
-    sha => `${sha}:${path}`
-  );
+  const specs = [
+    baseSha,
+    ...stack.map(commit => commit.sha),
+    ...above.map(({ commit }) => commit.sha),
+  ].map(sha => `${sha}:${path}`);
   const blobs = (await readObjects(git, specs)).map(
     blob => blob?.toString("utf8") ?? null
   );
-  if (blobs.some(blob => blob !== null && isBinary(blob))) {
+  const history = blobs.slice(0, stack.length + 1);
+  if (history.some(blob => blob !== null && isBinary(blob))) {
     return null;
   }
 
-  const revisions = blobs.map(blob => splitLines(blob ?? ""));
-  return { revisions, owners: stack.map(commit => commit.sha) };
+  const revisions = history.map(blob => splitLines(blob ?? ""));
+  const copiesAbove = new Map(
+    above.map(({ commit }, index) => {
+      const blob = blobs[stack.length + 1 + index] ?? null;
+      return [
+        commit.sha,
+        blob === null || isBinary(blob) ? null : splitLines(blob),
+      ];
+    })
+  );
+  return {
+    revisions,
+    owners: stack.map(commit => commit.sha),
+    copiesAbove,
+  };
 }
 
 /** The file as it is on disk — absorb folds in what the user actually has. */
