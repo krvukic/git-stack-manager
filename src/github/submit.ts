@@ -113,12 +113,26 @@ export async function submitBranch(
   branch: string,
   options: SubmitOptions = {}
 ): Promise<SubmitOutcome> {
+  const found = await findPullRequests(git, [branch]);
+  return submitAfterLookup(git, snapshot, branch, found.get(branch), options);
+}
+
+/**
+ * `submitBranch` after `findPullRequests` has answered for `branch`. The answer has to come
+ * before the push, so that a refusal leaves nothing half-submitted.
+ */
+async function submitAfterLookup(
+  git: GitRunner,
+  snapshot: RawData,
+  branch: string,
+  found: NamedPullRequests | undefined,
+  options: SubmitOptions
+): Promise<SubmitOutcome> {
   const { remote } = trunkParts(snapshot);
   const base = baseBranchFor(snapshot, branch);
   const message = await readMessage(git, branch);
-
-  // Looked up before the push, so a refusal below leaves nothing half-submitted.
-  const { open: existing, closed } = await findPullRequests(git, branch);
+  const existing = found?.open ?? null;
+  const closed = found?.closed ?? null;
   if (closed !== null && !options.besideClosed) {
     throw new ClosedPullRequestError(
       branch,
@@ -186,6 +200,10 @@ export async function submitBranch(
  *
  * `besideClosed` never reaches a layer. It is a choice about one branch, which
  * **Submit as new pull request** makes.
+ *
+ * `findPullRequests` looks up every layer in one query before the first push. Each answer holds
+ * when its layer's turn comes: what the walk pushes and opens below a layer changes nothing that
+ * GitHub holds under that layer's name.
  */
 export async function submitStack(
   git: GitRunner,
@@ -194,10 +212,20 @@ export async function submitStack(
   options: SubmitOptions = {}
 ): Promise<SubmitOutcome[]> {
   const layerOptions = { ...options, besideClosed: false };
+  const layers = stackBranchesUpTo(snapshot, branch);
+  const found = await findPullRequests(git, layers);
   const outcomes: SubmitOutcome[] = [];
-  for (const layer of stackBranchesUpTo(snapshot, branch)) {
+  for (const layer of layers) {
     try {
-      outcomes.push(await submitBranch(git, snapshot, layer, layerOptions));
+      outcomes.push(
+        await submitAfterLookup(
+          git,
+          snapshot,
+          layer,
+          found.get(layer),
+          layerOptions
+        )
+      );
     } catch (error: unknown) {
       if (!(error instanceof ClosedPullRequestError)) {
         throw error;
@@ -395,32 +423,85 @@ type ExistingPullRequest = {
   baseRefName: string | null;
 };
 
+/** What GitHub holds under one branch's name, as the two facts Submit acts on. */
+type NamedPullRequests = {
+  /** The pull request Submit updates. */
+  open: ExistingPullRequest | null;
+  /**
+   * The newest pull request's number while no open one exists and the newest was closed without
+   * merging, which Submit refuses to replace on its own. A merged newest one leaves this null: a
+   * submit of a branch whose pull request merged is a new round of work, and it belongs in a new
+   * pull request.
+   */
+  closed: number | null;
+};
+
 /**
- * The pull requests named after `branch`, as the two facts Submit acts on.
+ * Pull requests read per branch name, newest first: as many as `gh pr list` reads by default. An
+ * open pull request older than that many others under the same name goes unseen.
+ */
+const PULL_REQUESTS_PER_NAME = 30;
+
+/**
+ * The pull requests named after each of `branches`, in one GraphQL query however many there are.
  *
- * `open` is the pull request Submit updates. `closed` is the number of the newest pull request
- * when no open one exists and the newest was closed without merging, which Submit refuses to
- * replace on its own. A merged newest one leaves both null: a submit of a branch whose pull
- * request merged is a new round of work, and it belongs in a new pull request.
- *
- * One `gh pr list` of every state answers both, so the closed check adds no request.
+ * `gh pr list --head` asks GitHub the same `pullRequests(headRefName:)` question, but for one
+ * branch per process. Asked that way, Submit stack pays a round trip of about half a second per
+ * layer, one after another, measured against a live repository; one query pays a single round
+ * trip. `{owner}` and `{repo}` are `gh api` placeholders that `gh` fills in from the remote, so the
+ * query needs no `gh repo view` first.
  */
 async function findPullRequests(
   git: GitRunner,
-  branch: string
-): Promise<{ open: ExistingPullRequest | null; closed: number | null }> {
-  const output = await runGh(git, [
-    "pr",
-    "list",
-    "--head",
-    branch,
-    "--state",
-    "all",
-    "--json",
-    "number,url,isDraft,baseRefName,state",
-  ]);
-  const entries = asArray(JSON.parse(output || "[]")).flatMap(entry => {
-    const record = asRecord(entry);
+  branches: string[]
+): Promise<Map<string, NamedPullRequests>> {
+  const output = await runGh(
+    git,
+    [
+      "api",
+      "graphql",
+      "-F",
+      "owner={owner}",
+      "-F",
+      "repo={repo}",
+      "-F",
+      "query=@-",
+    ],
+    lookupQuery(branches)
+  );
+  const repository = asRecord(
+    asRecord(asRecord(JSON.parse(output || "{}"))?.data)?.repository
+  );
+  // Read as "no pull request", a missing answer would make Submit open a second one.
+  if (!repository) {
+    throw new GitError(
+      "GitHub answered the pull request lookup without a repository, so Submit pushed nothing. Check that `gh repo view` shows this repository, then submit again.",
+      "submit"
+    );
+  }
+  return new Map(
+    branches.map((branch, index) => [
+      branch,
+      namedPullRequests(asArray(asRecord(repository[`l${index}`])?.nodes)),
+    ])
+  );
+}
+
+/** One alias per branch, `l{index}`, in the order `branches` lists them. */
+function lookupQuery(branches: string[]): string {
+  const aliases = branches
+    .map(
+      (branch, index) =>
+        `  l${index}: pullRequests(headRefName: ${JSON.stringify(branch)}, states: [OPEN, CLOSED, MERGED], orderBy: { field: CREATED_AT, direction: DESC }, first: ${PULL_REQUESTS_PER_NAME}) { nodes { number url isDraft baseRefName state } }`
+    )
+    .join("\n");
+  return `query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) {\n${aliases}\n} }`;
+}
+
+/** Read one alias's nodes into the two facts Submit acts on. */
+function namedPullRequests(nodes: unknown[]): NamedPullRequests {
+  const entries = nodes.flatMap(node => {
+    const record = asRecord(node);
     return record ? [record] : [];
   });
   const numberOf = (entry: Record<string, unknown>) =>
@@ -438,7 +519,7 @@ async function findPullRequests(
       closed: null,
     };
   }
-  // The highest number is the newest, whatever order `gh` lists them in.
+  // The highest number is the newest, whatever order the answer lists them in.
   const newest = entries.reduce<Record<string, unknown> | null>(
     (best, entry) => (best && numberOf(best) >= numberOf(entry) ? best : entry),
     null

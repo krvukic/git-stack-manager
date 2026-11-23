@@ -61,7 +61,7 @@ test("submitting a never-pushed branch opens a pull request from the commit mess
 test("the button names the pull request it just opened, before GitHub indexes it", async ({
   smartlog,
 }) => {
-  // The stand-in `gh` answers `pr list` from a fixed set that never mentions escape-html,
+  // The stand-in `gh` answers every lookup from a fixed set that never mentions escape-html,
   // which is also what GitHub does for a pull request opened a second ago: `pr create`
   // reports #101 while the search index the badges come from still finds nothing. So the
   // label has to come from the submit's own answer. Observed against a live repository

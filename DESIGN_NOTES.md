@@ -160,10 +160,17 @@ to ask for the email alone.
 Submit leaves a **closed pull request** closed. Closing one is a decision about its branch.
 `gh pr create` checks only for an open pull request, so a submit that looked for open ones alone
 would force-push the branch and open a second pull request beside the closed one. Submit's one
-`gh pr list` therefore reads every state, and Submit refuses a branch whose newest pull request is
-closed before it pushes anything. A merged one does not count, because a submit after a merge is a
-new round of work. **Submit as new pull request** is the override, and it needs no record of its
-own: the pull request it opens becomes the newest, so the closed one stops counting. The
-alternative, an unlink stored in git config like the draft choice, would add state that exists
-only in this checkout. Submit stack stops at a branch whose pull request is closed, because the
-branches above it target that branch.
+lookup therefore reads every state, and Submit refuses a branch whose newest pull request is closed
+before it pushes anything. A merged one does not count, because a submit after a merge is a new
+round of work. **Submit as new pull request** is the override, and it needs no record of its own:
+the pull request it opens becomes the newest, so the closed one stops counting. The alternative, an
+unlink stored in git config like the draft choice, would add state that exists only in this
+checkout. Submit stack stops at a branch whose pull request is closed, because the branches above
+it target that branch.
+
+That lookup is one GraphQL query for every branch it is given, with one `pullRequests(headRefName:)`
+alias per branch, and Submit stack gives it every branch before the first push. Asked through
+`gh pr list --head`, one branch per process, the same question costs a round trip of about half a
+second per branch, one after another. Each answer still holds when its branch's turn comes, because
+nothing that Submit stack pushes or opens below a branch changes what GitHub holds under that
+branch's name.

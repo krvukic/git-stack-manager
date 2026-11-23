@@ -3,6 +3,14 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the version
 numbers follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-11-23
+
+### Changed
+
+- Submit stack looks up every branch's pull requests in one request before its first push. It
+  asked once per branch before, one after another, at about half a second each: on a live
+  repository, the lookups for a stack of six took 2.4 to 3.9 seconds, and now take under 0.6.
+
 ## [1.8.0] - 2026-11-22
 
 ### Added

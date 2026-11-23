@@ -519,12 +519,12 @@ const CANNED_PULL_REQUESTS = [
  * production code — nothing in `src/` refers to a stand-in, and a shim that only a
  * recipe's own process can see cannot reach a real repository.
  *
- * Three different questions each need their own answer. Submit passes `--head` to
- * `gh pr list` to find one branch's open pull request. The badge fetch resolves the
- * owner and name through `gh repo view`, then asks `gh api graphql` for every branch
+ * Two lookups reach `gh api graphql`, each with its own aliases. Submit asks for every
+ * layer's pull requests by name, aliased `l{index}`, in one query. The badge fetch
+ * resolves the owner and name through `gh repo view` first, then asks for every branch
  * twice over — by name and by tip commit, aliased `n{index}`/`c{index}` — in one query
- * per batch. `#github/pullRequests` builds and parses that query, so this reads the
- * same one back with a regex rather than a GraphQL parser.
+ * per batch. `#github/submit` and `#github/pullRequests` build and parse those queries,
+ * so this reads them back with a regex rather than a GraphQL parser.
  *
  * Every canned record's `headRefOid` is resolved here, against the demo repository's
  * actual local branch tips, rather than hardcoded: a literal sha would drift the moment
@@ -572,9 +572,6 @@ function answer() {
   if (args[0] === "pr" && args[1] === "create") {
     return "https://github.com/example/example/pull/101\\n";
   }
-  if (args[0] === "pr" && args[1] === "list") {
-    return JSON.stringify(listPullRequests());
-  }
   if (args[0] === "repo" && args[1] === "view") {
     return JSON.stringify({ owner: { login: "example" }, name: "strkit" });
   }
@@ -596,32 +593,6 @@ function tipOf(ref) {
   }
 }
 
-function option(name) {
-  const index = args.indexOf(name);
-  return index === -1 ? null : args[index + 1];
-}
-
-function listPullRequests() {
-  const head = option("--head");
-  // gh defaults to open when --state is absent, and treats a draft as open.
-  const state = (option("--state") || "open").toUpperCase();
-  const limit = Number(option("--limit") || 30);
-  const fields = (option("--json") || "").split(",").filter(Boolean);
-  const matching = PULL_REQUESTS.filter(
-    (pullRequest) =>
-      (!head || pullRequest.headRefName === head) &&
-      (state === "ALL" || pullRequest.state === state),
-  ).slice(0, limit);
-  if (!fields.length) {
-    return matching;
-  }
-  // gh emits only the fields --json names, so a reader depending on an unrequested
-  // one fails against this the way it would against the real CLI.
-  return matching.map((pullRequest) =>
-    Object.fromEntries(fields.map((field) => [field, pullRequest[field]])),
-  );
-}
-
 function nodeFrom(pullRequest) {
   return {
     number: pullRequest.number,
@@ -629,6 +600,7 @@ function nodeFrom(pullRequest) {
     isDraft: pullRequest.isDraft,
     title: pullRequest.title,
     url: pullRequest.url,
+    baseRefName: pullRequest.baseRefName,
     headRefName: pullRequest.headRefName,
     headRefOid: pullRequest.headRefOid,
     reviewDecision: pullRequest.reviewDecision,
@@ -652,14 +624,15 @@ function nodeFrom(pullRequest) {
 
 function answerGraphql() {
   const repository = {};
-  const namePattern = /n(\\d+): pullRequests\\(headRefName: "([^"]*)"/g;
+  // Every state, newest first, which is what both lookups ask for.
+  const namePattern = /([nl]\\d+): pullRequests\\(headRefName: "([^"]*)"/g;
   let nameMatch;
   while ((nameMatch = namePattern.exec(stdin))) {
-    const [, index, name] = nameMatch;
+    const [, alias, name] = nameMatch;
     const matching = PULL_REQUESTS.filter(
       (pullRequest) => pullRequest.headRefName === name,
     );
-    repository["n" + index] = { nodes: matching.map(nodeFrom) };
+    repository[alias] = { nodes: matching.map(nodeFrom) };
   }
   const commitPattern = /c(\\d+): object\\(oid: "([0-9a-f]{40})"\\)/g;
   let commitMatch;

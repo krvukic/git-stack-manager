@@ -33,17 +33,24 @@ import {
 /**
  * Put a fake `gh` ahead of the real one on PATH, recording one JSON line per invocation.
  *
- * Which command submit makes next depends on `gh pr list`, so that is the only output a
- * test needs to vary. Pass an object to answer per branch, the way real GitHub does — a
- * stacked branch's recorded base is the point of several of these tests, and one shared
- * answer cannot express it.
+ * Which command submit makes next depends on the pull requests GitHub holds under each branch's
+ * name, so that is the only answer a test needs to vary. The fake answers Submit's lookup, the
+ * `l{index}` aliases that `#github/submit` builds, by reading the branch names back out of the
+ * query. Pass an object to answer per branch, the way real GitHub does — a stacked branch's
+ * recorded base is the point of several of these tests, and one shared answer cannot express it.
+ *
+ * Any other query, such as the badge fetch, gets no answer, which is what GitHub's search index
+ * gives for a pull request opened a moment ago.
  *
  * @param {import("node:test").TestContext} t
  * @param {string} root
- * @param {string | Record<string, string>} prListOutput
+ * @param {string | Record<string, string>} pullRequestsByName A JSON array of pull requests
  */
-function installFakeGh(t, root, prListOutput) {
-  const prListByBranch = typeof prListOutput === "string" ? null : prListOutput;
+function installFakeGh(t, root, pullRequestsByName) {
+  const byBranch =
+    typeof pullRequestsByName === "string" ? null : pullRequestsByName;
+  const shared =
+    typeof pullRequestsByName === "string" ? pullRequestsByName : "[]";
   const binDirectory = join(root, "fakebin");
   const logPath = join(root, "gh-calls.jsonl");
   mkdirSync(binDirectory, { recursive: true });
@@ -56,14 +63,16 @@ let stdin = "";
 process.stdin.on("data", (chunk) => (stdin += chunk));
 process.stdin.on("end", () => {
   fs.appendFileSync(${JSON.stringify(logPath)}, JSON.stringify({ args, stdin }) + "\\n");
-  if (args[0] === "pr" && args[1] === "list") {
-    const byBranch = ${JSON.stringify(prListByBranch)};
-    if (byBranch) {
-      const branch = args[args.indexOf("--head") + 1];
-      process.stdout.write(byBranch[branch] || "[]");
-    } else {
-      process.stdout.write(${JSON.stringify(typeof prListOutput === "string" ? prListOutput : "[]")});
+  const aliases = [...stdin.matchAll(/(l\\d+): pullRequests\\(headRefName: "([^"]*)"/g)];
+  if (args[0] === "api" && args[1] === "graphql" && aliases.length) {
+    const byBranch = ${JSON.stringify(byBranch)};
+    const repository = {};
+    for (const [, alias, branch] of aliases) {
+      repository[alias] = {
+        nodes: JSON.parse(byBranch ? byBranch[branch] || "[]" : ${JSON.stringify(shared)}),
+      };
     }
+    process.stdout.write(JSON.stringify({ data: { repository } }));
   } else if (args[0] === "pr" && args[1] === "create") {
     process.stdout.write("https://github.com/example/example/pull/7\\n");
   }
@@ -84,9 +93,9 @@ process.stdin.on("end", () => {
  * A two-branch stack on a pushed trunk, plus the fake `gh`.
  *
  * @param {import("node:test").TestContext} t
- * @param {{ prListOutput?: string | Record<string, string> }} [options]
+ * @param {{ pullRequestsByName?: string | Record<string, string> }} [options]
  */
-function scratchRepository(t, { prListOutput = "[]" } = {}) {
+function scratchRepository(t, { pullRequestsByName = "[]" } = {}) {
   const fixture = trunkRepository(t, "gsm-submit-", {
     file: "README.md",
     content: "hello\n",
@@ -106,7 +115,7 @@ function scratchRepository(t, { prListOutput = "[]" } = {}) {
       content: "B\n",
     },
   ]);
-  return { ...fixture, ...installFakeGh(t, fixture.root, prListOutput) };
+  return { ...fixture, ...installFakeGh(t, fixture.root, pullRequestsByName) };
 }
 
 /**
@@ -149,15 +158,19 @@ test("submitting a branch with no pull request opens one from the commit message
 
   const calls = ghCalls(logPath);
   assert.deepEqual(calls[0].args, [
-    "pr",
-    "list",
-    "--head",
-    "feature-a",
-    "--state",
-    "all",
-    "--json",
-    "number,url,isDraft,baseRefName,state",
+    "api",
+    "graphql",
+    "-F",
+    "owner={owner}",
+    "-F",
+    "repo={repo}",
+    "-F",
+    "query=@-",
   ]);
+  assert.match(
+    calls[0].stdin,
+    /l0: pullRequests\(headRefName: "feature-a", states: \[OPEN, CLOSED, MERGED\]/
+  );
   const create = calls[1].args;
   assert.equal(create[1], "create");
   // The subject becomes the title; the body arrives on stdin so a message with
@@ -179,7 +192,7 @@ test("a message-only amend still reaches the pull request", async t => {
   // The whole point of the feature. Force-pushing an amended commit updates the
   // branch but leaves the pull request's title and body stale, so submit must write them.
   const { repo, logPath, repository } = scratchRepository(t, {
-    prListOutput:
+    pullRequestsByName:
       '[{"number":42,"url":"https://github.com/example/example/pull/42","baseRefName":"main","state":"OPEN"}]',
   });
 
@@ -282,7 +295,7 @@ test("opening a pull request onto a base that was never pushed is refused before
   );
   assert.deepEqual(
     ghCalls(logPath).map(call => call.args.slice(0, 2)),
-    [["pr", "list"]],
+    [["api", "graphql"]],
     "no pull request was opened"
   );
 });
@@ -308,6 +321,35 @@ test("submitting the stack pushes and opens every layer from the bottom up", asy
     run(origin, "git", ["rev-parse", "feature-b"]),
     run(repo, "git", ["rev-parse", "feature-b"]),
     "the top layer reached the remote"
+  );
+});
+
+test("Submit stack looks every layer up in one query, before it opens anything", async t => {
+  // One lookup per layer would cost a round trip of about half a second each, one after another.
+  const { logPath, repository } = scratchRepository(t, {
+    pullRequestsByName: { "feature-b": pullRequestsInStates([[42, "OPEN"]]) },
+  });
+  const outcomes = await repository.submitStack("feature-b");
+  assert.deepEqual(
+    outcomes.map(outcome => [outcome.branch, outcome.created]),
+    [
+      ["feature-a", true],
+      ["feature-b", false],
+    ],
+    "each layer acted on its own answer from the shared query"
+  );
+  const calls = ghCalls(logPath);
+  assert.deepEqual(
+    calls.map(call => call.args.slice(0, 2)),
+    [
+      ["api", "graphql"],
+      ["pr", "create"],
+      ["pr", "edit"],
+    ]
+  );
+  assert.match(
+    present(calls[0], "the lookup").stdin,
+    /l0: pullRequests\(headRefName: "feature-a".*\n.*l1: pullRequests\(headRefName: "feature-b"/
   );
 });
 
@@ -353,7 +395,7 @@ test("a base that is current but rewritten out from under the branch still warns
   // check has to consult: once feature-a is rewritten alone, local shape no longer
   // shows it as feature-b's parent at all.
   const { repo, repository } = scratchRepository(t, {
-    prListOutput: {
+    pullRequestsByName: {
       "feature-a":
         '[{"number":1,"url":"https://example.com/1","baseRefName":"main","state":"OPEN"}]',
       "feature-b":
@@ -447,7 +489,7 @@ test("the push refuses to clobber a commit this checkout has never seen", async 
 
 test("a commit with no body clears the pull request body rather than leaving it stale", async t => {
   const { repo, logPath, repository } = scratchRepository(t, {
-    prListOutput:
+    pullRequestsByName:
       '[{"number":9,"url":"https://github.com/example/example/pull/9","baseRefName":"main","state":"OPEN"}]',
   });
   run(repo, "git", ["switch", "-q", "feature-a"]);
@@ -487,7 +529,7 @@ function pullRequestOn(model, branch) {
 }
 
 test("a submitted branch carries its pull request before the search index reports one", async t => {
-  // The fake `gh` answers every `pr list` with nothing, which is what GitHub's search
+  // The fake `gh` answers the badge fetch with nothing, which is what GitHub's search
   // index does for a pull request opened a second ago — so the badge can only come from
   // what the submit itself read. Without it the button goes on saying "Submit as pull
   // request" about a pull request that already exists.
@@ -568,7 +610,7 @@ process.stdin.on("end", () => {
  */
 
 /**
- * `gh pr list` output for one open pull request on `feature-a`.
+ * The pull requests under `feature-a`'s name: one open pull request.
  *
  * @param {boolean} isDraft
  */
@@ -639,7 +681,7 @@ test("a pull request that is already open keeps its state, whatever the choice",
     [true, false],
   ]) {
     const { logPath, repository } = scratchRepository(t, {
-      prListOutput: openPullRequest(onGitHub),
+      pullRequestsByName: openPullRequest(onGitHub),
     });
     await repository.setBranchDraft("feature-a", chosen);
 
@@ -683,7 +725,7 @@ test("submitting a stack applies each branch's own choice", async t => {
  */
 
 /**
- * `gh pr list --state all` output, one entry per `[number, state]`.
+ * The pull requests under one branch's name, one entry per `[number, state]`.
  *
  * @param {Array<[number, string]>} pullRequests
  */
@@ -701,7 +743,7 @@ function pullRequestsInStates(pullRequests) {
 
 test("a branch whose newest pull request is closed is refused before the push", async t => {
   const { origin, logPath, repository } = scratchRepository(t, {
-    prListOutput: pullRequestsInStates([[12, "CLOSED"]]),
+    pullRequestsByName: pullRequestsInStates([[12, "CLOSED"]]),
   });
   await assert.rejects(
     repository.submit("feature-a"),
@@ -714,14 +756,14 @@ test("a branch whose newest pull request is closed is refused before the push", 
   );
   assert.deepEqual(
     ghCalls(logPath).map(call => call.args.slice(0, 2)),
-    [["pr", "list"]],
+    [["api", "graphql"]],
     "no pull request was opened or edited"
   );
 });
 
 test("Submit as new pull request opens one beside the closed one", async t => {
   const { repo, logPath, repository } = scratchRepository(t, {
-    prListOutput: pullRequestsInStates([[12, "CLOSED"]]),
+    pullRequestsByName: pullRequestsInStates([[12, "CLOSED"]]),
   });
   const outcome = await repository.submit("feature-a", { besideClosed: true });
   assert.equal(outcome.created, true);
@@ -733,7 +775,7 @@ test("Submit as new pull request opens one beside the closed one", async t => {
 test("only the newest pull request counts: an open one is updated, and a merged one is replaced", async t => {
   // An open pull request is the one to update, however many closed ones carry the name.
   const beside = scratchRepository(t, {
-    prListOutput: pullRequestsInStates([
+    pullRequestsByName: pullRequestsInStates([
       [15, "CLOSED"],
       [10, "OPEN"],
     ]),
@@ -744,7 +786,7 @@ test("only the newest pull request counts: an open one is updated, and a merged 
 
   // A merge after the close is a new round of work, which gets a new pull request.
   const merged = scratchRepository(t, {
-    prListOutput: pullRequestsInStates([
+    pullRequestsByName: pullRequestsInStates([
       [12, "CLOSED"],
       [20, "MERGED"],
     ]),
@@ -756,7 +798,7 @@ test("only the newest pull request counts: an open one is updated, and a merged 
 
 test("Submit stack submits the branches below a closed pull request and stops there", async t => {
   const { repo, origin, logPath, repository } = scratchRepository(t, {
-    prListOutput: {
+    pullRequestsByName: {
       "feature-a": "[]",
       "feature-b": pullRequestsInStates([[12, "CLOSED"]]),
     },
@@ -792,7 +834,7 @@ test("Submit stack submits the branches below a closed pull request and stops th
 
 test("Submit stack pushes nothing when its bottom pull request is closed", async t => {
   const { origin, logPath, repository } = scratchRepository(t, {
-    prListOutput: { "feature-a": pullRequestsInStates([[12, "CLOSED"]]) },
+    pullRequestsByName: { "feature-a": pullRequestsInStates([[12, "CLOSED"]]) },
   });
   await assert.rejects(
     repository.submitStack("feature-b"),
